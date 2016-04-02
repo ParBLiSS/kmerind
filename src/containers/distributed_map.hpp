@@ -367,7 +367,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
           // do for each src proc one at a time.
 
           BL_BENCH_START(find);
-          results.reserve(keys.size() * this->get_multiplicity());                   // TODO:  should estimate coverage.
+          results.reserve(keys.size());                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
           BL_BENCH_END(find, "reserve", results.capacity());
 
@@ -599,34 +599,25 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
 
       /**
        * @brief find elements with the specified keys in the distributed unordered_multimap.
-       *
-       * why this version that uses isend and irecv?  because all2all version requires all result data to be in memory.
-       * this one can do it one source process at a time.
-       *
        * @param first
        * @param last
        */
       template <class LocalFind, typename Predicate = TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_irecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+      ::std::vector<::std::pair<Key, T> > find_est(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
         BL_BENCH_INIT(find);
 
         ::std::vector<::std::pair<Key, T> > results;
 
+
         if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find", this->comm);
-            return results;
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_a2a", this->comm);
+          return results;
         }
 
 
         BL_BENCH_START(find);
         ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-
-        std::vector<::std::vector<::std::pair<Key, T> > > local_results(2);  // allocate 2, one foreground, 1 background.
-        std::vector<::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > > local_emplace_iters {
-          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > >(local_results[0]),
-              ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > >(local_results[1])
-        };
         this->transform_input(keys);
         BL_BENCH_END(find, "begin", keys.size());
 
@@ -635,121 +626,46 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
             // distribute (communication part)
             std::vector<size_t> recv_counts(
             		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-				 	 	 	 typename Base::StoreTransformedFarmHash(),
-				 	 	 	 typename Base::StoreTransformedEqual()));
+								 	 	 	 typename Base::StoreTransformedFarmHash(),
+								 	 	 	 typename Base::StoreTransformedEqual()));
+
             BL_BENCH_END(find, "dist_query", keys.size());
 
+          // local find. memory utilization a potential problem.
+          // do for each src proc one at a time.
 
-          // local count to determine amount of memory to allocate at destination.
           BL_BENCH_START(find);
-          ::std::vector<::std::pair<Key, size_t> > count_results;
-          size_t max_key_count = *(::std::max_element(recv_counts.begin(), recv_counts.end()));
-          count_results.reserve(max_key_count);
-          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+          results.reserve(keys.size() * this->get_multiplicity());                   // TODO:  should estimate coverage.
+          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+          BL_BENCH_END(find, "reserve", results.capacity());
 
+          BL_BENCH_START(find);
           std::vector<size_t> send_counts(this->comm.size(), 0);
 
           auto start = keys.begin();
           auto end = start;
-          size_t total = 0;
           for (int i = 0; i < this->comm.size(); ++i) {
             ::std::advance(end, recv_counts[i]);
 
-            // count results for process i
-            count_results.clear();
-            QueryProcessor::process(c, start, end, count_emplace_iter, count_element, sorted_input, pred);
-            send_counts[i] =
-                ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
-                                  [](size_t v, ::std::pair<Key, size_t> const & x) {
-              return v + x.second;
-            });
-//            for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-//              send_counts[i] += it->second;
-//            }
-            total += send_counts[i];
-            start = end;
-            //printf("Rank %d local count for src rank %d:  recv %d send %d\n", this->comm.rank(), i, recv_counts[i], send_counts[i]);
-          }
-          ::std::vector<::std::pair<Key, size_t> >().swap(count_results);
-          BL_BENCH_END(find, "local_count", total);
-
-
-          BL_BENCH_COLLECTIVE_START(find, "a2a_count", this->comm);
-          std::vector<size_t> resp_counts = mxx::all2all(send_counts, this->comm);  // compute counts of response to receive
-          BL_BENCH_END(find, "a2a_count", keys.size());
-
-          //==== reserve
-          BL_BENCH_START(find);
-          auto resp_displs = mxx::impl::get_displacements(resp_counts);  // compute response displacements.
-
-          auto resp_total = resp_displs[this->comm.size() - 1] + resp_counts[this->comm.size() - 1];
-          auto max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
-          results.resize(resp_total);   // allocate, not just reserve
-          local_results[0].resize(max_send_count);
-          local_results[1].resize(max_send_count);
-          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
-          BL_BENCH_END(find, "reserve", resp_total);
-
-          BL_BENCH_START(find);
-          auto recv_displs = mxx::impl::get_displacements(recv_counts);  // compute response displacements.
-          int recv_from, send_to;
-          size_t found;
-          total = 0;
-          std::vector<MPI_Request> reqs(this->comm.size());
-
-          mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T> >();
-          for (int i = 0; i < this->comm.size(); ++i) {
-            recv_from = (this->comm.rank() + (this->comm.size() - i)) % this->comm.size(); // rank to recv data from
-
-            // set up receive.
-            MPI_Irecv(&(results[resp_displs[recv_from]]), resp_counts[recv_from], dt.type(),
-                      recv_from, i, this->comm, &(reqs[i]));
-          }
-          BL_BENCH_END(find, "recv_request", this->comm.size());
-
-          BL_BENCH_START(find);
-          MPI_Request send_req = MPI_REQUEST_NULL;
-
-          for (int i = 0; i < this->comm.size(); ++i) {
-            send_to = (this->comm.rank() + i) % this->comm.size();    // rank to send data to
-
-            //== get data for the dest rank
-            start = keys.begin();                                   // keys for the query for the dest rank
-            ::std::advance(start, recv_displs[send_to]);
-            end = start;
-            ::std::advance(end, recv_counts[send_to]);
-
-            local_results[i%2].clear();
-            auto oiter = local_results[i%2].begin();
             // work on query from process i.
-            found = QueryProcessor::process(c, start, end,
-                                            oiter, // local_emplace_iters[i%2],
-                                            find_element, sorted_input, pred);
+            send_counts[i] = QueryProcessor::process(c, start, end, emplace_iter, find_element, sorted_input, pred);
            // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
-            total += found;
-            //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
 
-            // wait for previous to finish
-            if (send_req != MPI_REQUEST_NULL) MPI_Wait(&send_req, MPI_STATUS_IGNORE);
+            if (i == std::ceil(static_cast<double>(this->comm.size()) * 0.05)) {
+          	  // count so far
+          	  size_t new_est = std::ceil((static_cast<double>(results.size()) / static_cast<double>(std::distance(keys.begin(), end))) * static_cast<double>(keys.size()) * 1.1f);
+          	  if (this->comm.rank() == 0) printf("rank %d nkeys %lu nresuts %lu est result size %lu original estimate %lu\n", this->comm.rank(), keys.size(), results.size(), new_est, results.capacity());
+          	  results.reserve(new_est);
+            }
 
-            // then send current.
-            MPI_Isend(&(local_results[i%2][0]), found, dt.type(), send_to,
-                      i, this->comm, &send_req);
-            // verify correct? done by comparing to previous code.
+            start = end;
           }
-          // wait for last send to finish
-          if (send_req != MPI_REQUEST_NULL) MPI_Wait(&send_req, MPI_STATUS_IGNORE);
-          BL_BENCH_END(find, "sent", total);
+          BL_BENCH_END(find, "local_find", results.size());
 
-
-          // wait for all recv requests to complete.
-          BL_BENCH_START(find);
-          // wait for both requests to complete.
-          MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE);
-
-
-          //printf("Rank %d total find %lu\n", this->comm.rank(), total);
-          BL_BENCH_END(find, "recved", results.size());
+          BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
+          // send back using the constructed recv count
+          results = mxx::all2allv(results, send_counts, this->comm);
+          BL_BENCH_END(find, "a2a2", results.size());
 
         } else {
 
@@ -760,38 +676,405 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
 		 	 	 	 typename Base::StoreTransformedEqual());
           BL_BENCH_END(find, "uniq1", keys.size());
 
-
           BL_BENCH_START(find);
-          ::std::vector<::std::pair<Key, size_t> > count_results;
-          count_results.reserve(keys.size());
-          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
-
-          // count now.
-          QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, sorted_input, pred);
-          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
-                                            [](size_t v, ::std::pair<Key, size_t> const & x) {
-                        return v + x.second;
-                      });
-//          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-//            count += it->second;
-//          }
-          BL_BENCH_END(find, "local_count", count);
-
-          BL_BENCH_START(find);
-          results.reserve(count);                   // TODO:  should estimate coverage.
+          results.reserve(keys.size());                   // TODO:  should estimate coverage.
           //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
-          BL_BENCH_END(find, "reserve", count);
+          BL_BENCH_END(find, "reserve", results.capacity() );
+
+          size_t estimating = std::ceil(static_cast<double>(keys.size()) * 0.05);
+
+
 
           BL_BENCH_START(find);
-          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, sorted_input, pred);
+          QueryProcessor::process(c, keys.begin(), keys.begin() + estimating, emplace_iter, find_element, sorted_input, pred);
+          BL_BENCH_END(find, "local_find_0.1", estimating);
+
+          BL_BENCH_START(find);
+          size_t est = std::ceil((static_cast<double>(results.size()) / static_cast<double>(estimating)) * static_cast<double>(keys.size()) * 1.1f);
+          results.reserve(est);
+          BL_BENCH_END(find, "reserve_est", results.capacity());
+
+          BL_BENCH_START(find);
+          QueryProcessor::process(c, keys.begin() + estimating, keys.end(), emplace_iter, find_element, sorted_input, pred);
           BL_BENCH_END(find, "local_find", results.size());
+
         }
 
-        BL_BENCH_REPORT_MPI_NAMED(find, "base_map:find_isend", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(find, "base_map:find_est", this->comm);
 
         return results;
 
       }
+
+
+
+      /**
+       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       *
+       * why this version that uses isend and irecv?  because all2all version requires all result data to be in memory.
+       * this one can do it one source process at a time.
+       *
+       * @param keys    content will be changed and reordered.
+       * @param last
+       */
+      template <class LocalFind, typename Predicate = TruePredicate>
+      ::std::vector<::std::pair<Key, T> > find_irecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+          BL_BENCH_INIT(find);
+
+          ::std::vector<::std::pair<Key, T> > results;
+
+          if (this->empty()) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_irecv", this->comm);
+            return results;
+          }
+
+
+          BL_BENCH_START(find);
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+
+          ::std::vector<::std::pair<Key, T> > local_results;
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > local_emplace_iter(local_results);
+          this->transform_input(keys);
+          BL_BENCH_END(find, "transform_input", keys.size());
+
+          BL_BENCH_START(find);
+          ::fsc::unique(keys, sorted_input,
+            				typename Base::StoreTransformedFarmHash(),
+            				typename Base::StoreTransformedEqual());
+          size_t num_orig_keys = keys.size();
+          BL_BENCH_END(find, "unique", keys.size());
+
+
+          if (this->comm.size() > 1) {
+
+            BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
+            // distribute (communication part)
+            std::vector<size_t> recv_counts(
+            		::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
+            BL_BENCH_END(find, "dist_query", keys.size());
+
+            //==== reserve
+            BL_BENCH_START(find);
+            local_results.reserve(keys.size());
+            BL_BENCH_END(find, "reserve_local", keys.size());
+
+            //=== process queries and send results.  O(p) iterations
+            BL_BENCH_START(find);
+            auto recv_displs = mxx::impl::get_displacements(recv_counts);  // compute response displacements.
+            int recv_from, send_to;
+            size_t found[2], recved[2];
+            size_t found_total = 0, recv_total = 0, reqs_total = 0, est_total = 0;
+            std::vector<MPI_Request> reqs(2 * this->comm.size());
+            auto start = keys.begin();
+            auto end = start;
+
+            mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T> >();
+            mxx::datatype size_dt = mxx::get_datatype<size_t >();
+
+            for (int i = 0; i < this->comm.size(); ++i) {
+            	// wait for previous pair of requests to complete
+            	if (i > 0) {
+                    MPI_Waitall(2, &reqs[2 * (i - 1)], MPI_STATUSES_IGNORE);
+            	}
+
+
+              send_to = (this->comm.rank() + i) % this->comm.size();    // rank to send data to
+
+              //== get data for the dest rank
+              start = keys.begin();                                   // keys for the query for the dest rank
+              ::std::advance(start, recv_displs[send_to]);
+              end = start;
+              ::std::advance(end, recv_counts[send_to]);
+
+              local_results.clear();
+              // work on query from process i.
+              found[0] = recv_counts[send_to];
+              found[1] = QueryProcessor::process(c, start, end, local_emplace_iter, find_element, sorted_input, pred);
+              // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+              found_total += found[1];
+              //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
+
+              // === recv from this rank
+              recv_from = (this->comm.rank() + (this->comm.size() - i)) % this->comm.size(); // rank to recv data from
+
+
+              // shift the size found around.
+              MPI_Sendrecv(found, 2, size_dt.type(), send_to, i, recved, 2, size_dt.type(), recv_from, i, this->comm, MPI_STATUS_IGNORE);
+
+              // once we have the size, now we estimate the size based on the first few iterations
+              reqs_total += recved[0];
+
+              // resize if we need to
+              if (results.size() < (recv_total + recved[1])) {
+            	  est_total = std::ceil((static_cast<double>(recv_total + recved[1]) / static_cast<double>(reqs_total)) * static_cast<double>(num_orig_keys) * 1.1f);
+            	  if (this->comm.rank() == 0)
+            		  printf("rank %d resizing results: iter %d req %lu res %lu, req_total %lu, recv_total %lu. curr result size %lu, capacity %lu.  est total %lu\n",
+            				  this->comm.rank(), i, recved[0], recved[1], reqs_total, recv_total + recved[1], results.size(), results.capacity(), est_total);
+            	  results.resize(est_total);
+              }
+
+              // set up receive.
+              MPI_Irecv(&(results[recv_total]), recved[1], dt.type(),
+                        recv_from, i + this->comm.size(), this->comm, &reqs[2 * i]);
+              recv_total += recved[1];
+
+
+
+              MPI_Isend(&(local_results[0]), found[1], dt.type(),
+            		  send_to, i + this->comm.size(), this->comm, &reqs[2 * i + 1]);
+
+            }
+
+            // wait for last pair of requests to complete.
+            MPI_Waitall(2, &reqs[2 * (this->comm.size() - 1)], MPI_STATUSES_IGNORE);
+
+
+            // now the estimate may be too large, so resize it back.
+            results.resize(recv_total);
+
+
+            //printf("Rank %d total find %lu\n", this->comm.rank(), total);
+            BL_BENCH_END(find, "find_send", results.size());
+
+          } else {
+
+            BL_BENCH_START(find);
+            // keep unique keys
+            ::fsc::unique(keys, sorted_input,
+    				typename Base::StoreTransformedFarmHash(),
+    				typename Base::StoreTransformedEqual());
+            BL_BENCH_END(find, "uniq1", keys.size());
+
+            // memory is constrained.  find EXACT count.
+            BL_BENCH_START(find);
+            ::std::vector<::std::pair<Key, size_t> > count_results;
+            count_results.reserve(keys.size());
+            ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+
+            // count now.
+            QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, sorted_input, pred);
+            size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
+                                             [](size_t v, ::std::pair<Key, size_t> const & x) {
+              return v + x.second;
+            });
+            //          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+            //            count += it->second;
+            //          }
+            BL_BENCH_END(find, "local_count", count);
+
+            BL_BENCH_START(find);
+            results.reserve(count);                   // TODO:  should estimate coverage.
+            //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+            BL_BENCH_END(find, "reserve", results.capacity());
+
+            BL_BENCH_START(find);
+            QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, sorted_input, pred);
+            BL_BENCH_END(find, "local_find", results.size());
+          }
+
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find_irecv", this->comm);
+
+          return results;
+
+      }
+
+
+//      /**
+//       * @brief find elements with the specified keys in the distributed unordered_multimap.
+//       *
+//       * why this version that uses isend and irecv?  because all2all version requires all result data to be in memory.
+//       * this one can do it one source process at a time.
+//       *
+//       * @param first
+//       * @param last
+//       */
+//      template <class LocalFind, typename Predicate = TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_irecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+//        BL_BENCH_INIT(find);
+//
+//        ::std::vector<::std::pair<Key, T> > results;
+//
+//        if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_ordered_map:find", this->comm);
+//            return results;
+//        }
+//
+//
+//        BL_BENCH_START(find);
+//        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+//        // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+//
+//        std::vector<::std::vector<::std::pair<Key, T> > > local_results(2);  // allocate 2, one foreground, 1 background.
+//        std::vector<::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > > local_emplace_iters {
+//          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > >(local_results[0]),
+//              ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > >(local_results[1])
+//        };
+//        this->transform_input(keys);
+//        BL_BENCH_END(find, "begin", keys.size());
+//
+//        if (this->comm.size() > 1) {
+//            BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
+//            // distribute (communication part)
+//            std::vector<size_t> recv_counts(
+//            		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+//				 	 	 	 typename Base::StoreTransformedFarmHash(),
+//				 	 	 	 typename Base::StoreTransformedEqual()));
+//            BL_BENCH_END(find, "dist_query", keys.size());
+//
+//
+//          // local count to determine amount of memory to allocate at destination.
+//          BL_BENCH_START(find);
+//          ::std::vector<::std::pair<Key, size_t> > count_results;
+//          size_t max_key_count = *(::std::max_element(recv_counts.begin(), recv_counts.end()));
+//          count_results.reserve(max_key_count);
+//          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+//
+//          std::vector<size_t> send_counts(this->comm.size(), 0);
+//
+//          auto start = keys.begin();
+//          auto end = start;
+//          size_t total = 0;
+//          for (int i = 0; i < this->comm.size(); ++i) {
+//            ::std::advance(end, recv_counts[i]);
+//
+//            // count results for process i
+//            count_results.clear();
+//            QueryProcessor::process(c, start, end, count_emplace_iter, count_element, sorted_input, pred);
+//            send_counts[i] =
+//                ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
+//                                  [](size_t v, ::std::pair<Key, size_t> const & x) {
+//              return v + x.second;
+//            });
+////            for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+////              send_counts[i] += it->second;
+////            }
+//            total += send_counts[i];
+//            start = end;
+//            //printf("Rank %d local count for src rank %d:  recv %d send %d\n", this->comm.rank(), i, recv_counts[i], send_counts[i]);
+//          }
+//          ::std::vector<::std::pair<Key, size_t> >().swap(count_results);
+//          BL_BENCH_END(find, "local_count", total);
+//
+//
+//          BL_BENCH_COLLECTIVE_START(find, "a2a_count", this->comm);
+//          std::vector<size_t> resp_counts = mxx::all2all(send_counts, this->comm);  // compute counts of response to receive
+//          BL_BENCH_END(find, "a2a_count", keys.size());
+//
+//          //==== reserve
+//          BL_BENCH_START(find);
+//          auto resp_displs = mxx::impl::get_displacements(resp_counts);  // compute response displacements.
+//
+//          auto resp_total = resp_displs[this->comm.size() - 1] + resp_counts[this->comm.size() - 1];
+//          auto max_send_count = *(::std::max_element(send_counts.begin(), send_counts.end()));
+//          results.resize(resp_total);   // allocate, not just reserve
+//          local_results[0].resize(max_send_count);
+//          local_results[1].resize(max_send_count);
+//          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+//          BL_BENCH_END(find, "reserve", resp_total);
+//
+//          BL_BENCH_START(find);
+//          auto recv_displs = mxx::impl::get_displacements(recv_counts);  // compute response displacements.
+//          int recv_from, send_to;
+//          size_t found;
+//          total = 0;
+//          std::vector<MPI_Request> reqs(this->comm.size());
+//
+//          mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T> >();
+//          for (int i = 0; i < this->comm.size(); ++i) {
+//            recv_from = (this->comm.rank() + (this->comm.size() - i)) % this->comm.size(); // rank to recv data from
+//
+//            // set up receive.
+//            MPI_Irecv(&(results[resp_displs[recv_from]]), resp_counts[recv_from], dt.type(),
+//                      recv_from, i, this->comm, &(reqs[i]));
+//          }
+//          BL_BENCH_END(find, "recv_request", this->comm.size());
+//
+//          BL_BENCH_START(find);
+//          MPI_Request send_req = MPI_REQUEST_NULL;
+//
+//          for (int i = 0; i < this->comm.size(); ++i) {
+//            send_to = (this->comm.rank() + i) % this->comm.size();    // rank to send data to
+//
+//            //== get data for the dest rank
+//            start = keys.begin();                                   // keys for the query for the dest rank
+//            ::std::advance(start, recv_displs[send_to]);
+//            end = start;
+//            ::std::advance(end, recv_counts[send_to]);
+//
+//            local_results[i%2].clear();
+//            auto oiter = local_results[i%2].begin();
+//            // work on query from process i.
+//            found = QueryProcessor::process(c, start, end,
+//                                            oiter, // local_emplace_iters[i%2],
+//                                            find_element, sorted_input, pred);
+//           // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+//            total += found;
+//            //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
+//
+//            // wait for previous to finish
+//            if (send_req != MPI_REQUEST_NULL) MPI_Wait(&send_req, MPI_STATUS_IGNORE);
+//
+//            // then send current.
+//            MPI_Isend(&(local_results[i%2][0]), found, dt.type(), send_to,
+//                      i, this->comm, &send_req);
+//            // verify correct? done by comparing to previous code.
+//          }
+//          // wait for last send to finish
+//          if (send_req != MPI_REQUEST_NULL) MPI_Wait(&send_req, MPI_STATUS_IGNORE);
+//          BL_BENCH_END(find, "sent", total);
+//
+//
+//          // wait for all recv requests to complete.
+//          BL_BENCH_START(find);
+//          // wait for both requests to complete.
+//          MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE);
+//
+//
+//          //printf("Rank %d total find %lu\n", this->comm.rank(), total);
+//          BL_BENCH_END(find, "recved", results.size());
+//
+//        } else {
+//
+//          BL_BENCH_START(find);
+//          // keep unique keys
+//          ::fsc::unique(keys, sorted_input,
+//		 	 	 	 typename Base::StoreTransformedFarmHash(),
+//		 	 	 	 typename Base::StoreTransformedEqual());
+//          BL_BENCH_END(find, "uniq1", keys.size());
+//
+//
+//          BL_BENCH_START(find);
+//          ::std::vector<::std::pair<Key, size_t> > count_results;
+//          count_results.reserve(keys.size());
+//          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+//
+//          // count now.
+//          QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, sorted_input, pred);
+//          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
+//                                            [](size_t v, ::std::pair<Key, size_t> const & x) {
+//                        return v + x.second;
+//                      });
+////          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
+////            count += it->second;
+////          }
+//          BL_BENCH_END(find, "local_count", count);
+//
+//          BL_BENCH_START(find);
+//          results.reserve(count);                   // TODO:  should estimate coverage.
+//          //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+//          BL_BENCH_END(find, "reserve", count);
+//
+//          BL_BENCH_START(find);
+//          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, sorted_input, pred);
+//          BL_BENCH_END(find, "local_find", results.size());
+//        }
+//
+//        BL_BENCH_REPORT_MPI_NAMED(find, "base_map:find_isend", this->comm);
+//
+//        return results;
+//
+//      }
 
       template <class LocalFind, typename Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, Predicate const& pred = Predicate()) const {
@@ -1194,6 +1477,11 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
           return Base::find(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
+      ::std::vector<::std::pair<Key, T> > find_est(::std::vector<Key>& keys, bool sorted_input = false,
+                                                          Predicate const& pred = Predicate()) const {
+          return Base::find_est(find_element, keys, sorted_input, pred);
+      }
+      template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
@@ -1368,6 +1656,11 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
+      }
+      template <class Predicate = TruePredicate>
+      ::std::vector<::std::pair<Key, T> > find_est(::std::vector<Key>& keys, bool sorted_input = false,
+                                                          Predicate const& pred = Predicate()) const {
+          return Base::find_est(find_element, keys, sorted_input, pred);
       }
       template <class Predicate = TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
