@@ -176,45 +176,48 @@ foreach(hash IDEN STD MURMUR)
 endforeach(hash)  
 
 
-#================== 2 targets,  pos only (need the data volume)  - potentially slow hence their own separate tests.
+#================== 6 targets,  pos only (need the data volume)  - potentially slow hence their own separate tests.
 # collective find tests.  want high collision (imbalance) to see how all2all handles.
+# no count.  no VEC - very similar to compactvec. fix a, k.  don't worry about xor.  compare BIMOLE vs SINGLE.
 
-add_executable(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM-COLLECTIVE BenchmarkKmerIndex.cpp)
-SET_TARGET_PROPERTIES(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM-COLLECTIVE
-   PROPERTIES COMPILE_FLAGS 
-   "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=BIMOLECULE -DpMAP=COMPACTVEC -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCollective")
-target_link_libraries(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM-COLLECTIVE
- ${EXTRA_LIBS})
+foreach(store BIMOLECULE SINGLE)
 
-#add_executable(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-VEC-POS-dtIDEN-dhFARM-shFARM-COLLECTIVE BenchmarkKmerIndex.cpp)
-#SET_TARGET_PROPERTIES(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-VEC-POS-dtIDEN-dhFARM-shFARM-COLLECTIVE
-#   PROPERTIES COMPILE_FLAGS 
-#   "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=BIMOLECULE -DpMAP=VEC -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCollective")
-#target_link_libraries(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-VEC-POS-dtIDEN-dhFARM-shFARM-COLLECTIVE
-# ${EXTRA_LIBS})
+  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM
+     PROPERTIES COMPILE_FLAGS 
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=COMPACTVEC -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCompare")
+  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM
+   ${EXTRA_LIBS})
+  
+  #add_executable(testKmerIndex-COMPQ-a4-k31-${store}-VEC-POS-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
+  #SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-VEC-POS-dtIDEN-dhFARM-shFARM
+  #   PROPERTIES COMPILE_FLAGS 
+  #   "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=VEC -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCompare")
+  #target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-VEC-POS-dtIDEN-dhFARM-shFARM
+  # ${EXTRA_LIBS})
+  
+  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-POS-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-POS-dtIDEN-dhFARM-shFARM
+     PROPERTIES COMPILE_FLAGS 
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=UNORDERED -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCompare")
+  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-POS-dtIDEN-dhFARM-shFARM
+   ${EXTRA_LIBS})
+  
+  #add_executable(testKmerIndex-COMPQ-a4-k31-${store}-ORDERED-POS-dtIDEN-dhFARM-shZZZZ BenchmarkKmerIndex.cpp)
+  #SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-ORDERED-POS-dtIDEN-dhFARM-shZZZZ
+  #   PROPERTIES COMPILE_FLAGS 
+  #   "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=ORDERED -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpCompare")
+  #target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-ORDERED-POS-dtIDEN-dhFARM-shZZZZ
+  # ${EXTRA_LIBS})
+  
+  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtXXXX-dhYYYY-shZZZZ
+     PROPERTIES COMPILE_FLAGS 
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=SORTED -DpINDEX=POS -DpCompare")
+  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtXXXX-dhYYYY-shZZZZ
+   ${EXTRA_LIBS})
  
-#add_executable(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-UNORDERED-POS-dtIDEN-dhFARM-shFARM-COLLECTIVE BenchmarkKmerIndex.cpp)
-#SET_TARGET_PROPERTIES(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-UNORDERED-POS-dtIDEN-dhFARM-shFARM-COLLECTIVE
-#   PROPERTIES COMPILE_FLAGS 
-#   "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=BIMOLECULE -DpMAP=UNORDERED -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCollective")
-#target_link_libraries(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-UNORDERED-POS-dtIDEN-dhFARM-shFARM-COLLECTIVE
-# ${EXTRA_LIBS})
-#
-#add_executable(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-ORDERED-POS-dtIDEN-dhFARM-shZZZZ-COLLECTIVE BenchmarkKmerIndex.cpp)
-#SET_TARGET_PROPERTIES(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-ORDERED-POS-dtIDEN-dhFARM-shZZZZ-COLLECTIVE
-#   PROPERTIES COMPILE_FLAGS 
-#   "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=BIMOLECULE -DpMAP=ORDERED -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpCollective")
-#target_link_libraries(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-ORDERED-POS-dtIDEN-dhFARM-shZZZZ-COLLECTIVE
-# ${EXTRA_LIBS})
-
-add_executable(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-SORTED-POS-dtXXXX-dhYYYY-shZZZZ-COLLECTIVE BenchmarkKmerIndex.cpp)
-SET_TARGET_PROPERTIES(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-SORTED-POS-dtXXXX-dhYYYY-shZZZZ-COLLECTIVE
-   PROPERTIES COMPILE_FLAGS 
-   "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=BIMOLECULE -DpMAP=SORTED -DpINDEX=POS -DpCollective")
-target_link_libraries(testKmerIndex-FASTQ-a4-k31-BIMOLECULE-SORTED-POS-dtXXXX-dhYYYY-shZZZZ-COLLECTIVE
- ${EXTRA_LIBS})
-
-
+endforeach(store)
 
 #==================
 
