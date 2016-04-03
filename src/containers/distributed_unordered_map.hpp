@@ -2630,8 +2630,22 @@ namespace dsc  // distributed std container
 //              static_cast<float>(this->size()) /
 //              static_cast<float>(unique_count);
 //        }
-          if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity max %lu\n", this->comm.rank(), this->c.get_max_multiplicity());
-          if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity mean %f\n", this->comm.rank(), this->c.get_mean_multiplicity());
+//          if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity max %lu\n", this->comm.rank(), this->c.get_max_multiplicity());
+//          if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity mean %f\n", this->comm.rank(), this->c.get_mean_multiplicity());
+
+          BL_BENCH_INIT(multiplicity);
+
+          BL_BENCH_START(multiplicity);
+          BL_BENCH_END(multiplicity, "container", this->c.size());
+          BL_BENCH_START(multiplicity);
+          BL_BENCH_END(multiplicity, "unique", this->c.unique_size());
+          BL_BENCH_START(multiplicity);
+          BL_BENCH_END(multiplicity, "max_multi", this->c.get_max_multiplicity());
+          BL_BENCH_START(multiplicity);
+          BL_BENCH_END(multiplicity, "mean_multi", this->c.get_mean_multiplicity());
+
+          BL_BENCH_REPORT_MPI_NAMED(multiplicity, "compact_vecmap:multiplicity", this->comm);
+
 
         return this->c.get_mean_multiplicity();
 //    	  return 1.0f;
@@ -2966,11 +2980,24 @@ namespace dsc  // distributed std container
 
       /// update the multiplicity.  only multimap needs to do this.
       virtual float get_multiplicity() const {
-//        if (this->comm.rank() == 0) printf("rank %d compactvec get_multiplicity called\n", this->comm.rank());
+          BL_BENCH_INIT(multiplicity);
+
+          BL_BENCH_START(multiplicity);
+          BL_BENCH_END(multiplicity, "container", this->c.size());
+          BL_BENCH_START(multiplicity);
+          BL_BENCH_END(multiplicity, "unique", this->c.unique_size());
+          BL_BENCH_START(multiplicity);
+          BL_BENCH_END(multiplicity, "max_multi", this->c.get_max_multiplicity());
+          BL_BENCH_START(multiplicity);
+          BL_BENCH_END(multiplicity, "mean_multi", this->c.get_mean_multiplicity());
+
+          BL_BENCH_REPORT_MPI_NAMED(multiplicity, "compact_vecmap:multiplicity", this->comm);
+
+    	  //        if (this->comm.rank() == 0) printf("rank %d compactvec get_multiplicity called\n", this->comm.rank());
 //
 //        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity min %lu\n", this->comm.rank(), this->c.get_min_multiplicity());
-        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity max %lu\n", this->comm.rank(), this->c.get_max_multiplicity());
-        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity mean %f\n", this->comm.rank(), this->c.get_mean_multiplicity());
+//        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity max %lu\n", this->comm.rank(), this->c.get_max_multiplicity());
+//        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity mean %f\n", this->comm.rank(), this->c.get_mean_multiplicity());
 //        if (this->comm.rank() == 0) printf("rank %d compactvec local multiplicity stdev %f\n", this->comm.rank(), this->c.get_stdev_multiplicity());
 
 
@@ -2995,7 +3022,6 @@ namespace dsc  // distributed std container
 //              static_cast<float>(total) /
 //              static_cast<float>(unique_count);
 //        }
-
 
 
         return this->c.get_mean_multiplicity();

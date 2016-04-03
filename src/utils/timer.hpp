@@ -200,7 +200,7 @@ class Timer {
           std::copy(dur_stdevs.begin(), dur_stdevs.end(), dit);
           output << "]" << std::endl;
 
-          output.precision(0);
+          output.precision(2);
           output << "[TIME] " << title << "\tcnt_min\t[,";
           std::transform(cnt_mins.begin(), cnt_mins.end(), dit, get_first);
           output << "]" << std::endl;
@@ -337,7 +337,7 @@ class Timer {
           output << "]" << std::endl;
 
 
-          output.precision(0);
+          output.precision(2);
           output << "[TIME] " << title << "\tcnt_min\t[,";
           std::copy(cnt_mins.begin(), cnt_mins.end(), dit);
           output << "]" << std::endl;
