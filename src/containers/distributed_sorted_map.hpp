@@ -50,13 +50,14 @@
 #include <functional> 		// for std::function and std::hash
 #include <algorithm> 		// for sort, stable_sort, unique, is_sorted
 #include <iterator>  // advance, distance
-
+#include <random>
 #include <cstdint>  // for uint8, etc.
 
 
 #include <mxx/collective.hpp>
 #include <mxx/reduction.hpp>
 #include <mxx/sort.hpp>
+
 #include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
 #include "containers/distributed_map_base.hpp"
@@ -1996,9 +1997,487 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 				  typename Base::StoreTransformedEqual());
       }
 
+      // ============= local reduction override.
+      virtual iterator local_reduction(iterator & first, iterator & last, iterator & output,
+    		  bool sorted_input = false) {
+
+		if (first == last) return output;
+		if (!sorted_input) ::std::sort(first, last, typename Base::StoreTransformedFunc());
+		// then just get the unique stuff and remove rest.
+		if (first == output)
+			return ::std::unique(first, last, typename Base::StoreTransformedEqual());
+		else
+			return ::std::unique_copy(first, last, output, typename Base::StoreTransformedEqual());
+      }
+
       using Base::redistribute;
 
-      // default is for map
+      /**
+       * @brief  redistribute data in sorted order, and keep track of splitters.
+       * @details:  local reduce before a2a.
+       *
+       * 			implement as following:
+       * 				1. local sort and local reduction  (for map, reduction_map, and count_map)  (full, no splitters yet)
+       * 					local reduction helps splitting do a better job - reduce total comm volume AND imbalance.
+       * 				2. sample, storing keys only
+       * 				3. all gather
+       * 				4. unique samples,  and select splitters
+       *
+       * 				OPTIONAL - attempts to balance a2a comm volume.  some entries may see p->1 reduction after step 11.
+       * 				5. compute bucket sizes.  allreduce.
+       * 				6. assume middle splitter within each bucket has average size within bucket, and 2 end samples
+       * 					have average size as well, linearly interpolate sizes for each sample.
+       * 				7. prefix sum  the samples
+       * 				8. select new splitter by searching for closest to "zero crossing" starting from middle and split the 2 sides.
+       *
+       * 				9. bucket
+       * 				10. a2a data
+       *				11. local sort and local reduce   // uneven again, up to n/(p*p)
+       *				12. stable block decomp  (each entry is unique, we can reset the splitters)
+       *					we could have nodes that need to send/recv from mulitple and far away.  all to all is simpler.  also, sort time will dominate.
+       *				13. record splitter
+       *
+       *				compare to using mxx::sort (sort, sample gather, sort sample, broadcast splitters, bucket and a2a, sort, redistribute a2a)
+       *					and then boundary reduce, split, a2a
+       *				should be 1 fewer a2a.
+       *
+       * 				prefer local reduction first.  with it, we have at most p duplciates. without it, full frequency duplicates
+       * 					(compare to multimap impl) so there may be larger load imbalance.
+       * 					also should reduce average comm volume
+	   *
+	   *
+	   *			2 alternative to reduce number of sorts. - necessary?  moving 50M from each takes about 7s.
+	   *				1. step 1, use hash set - sort 50M takes about 11s.  hash 50M takes about 21s using std::plus for reduction and hashmap
+	   *					NO
+	   *				2. no sort before sampling.  use random sampling - reduction during sample sorting.
+	   *					number of samples to choose splitters from will be fewer
+	   *					then bucket, and sort and reduce each bucket. - may be faster?
+	   *
+	   *					basically sort of 1 got moved to 9.  question is whether sorting the n list (11s) is faster than sorting p n/p lists?
+	   *						log(n/p) becomes significantly smaller when p is large.
+	   *			p^2 splitters may become too many.
+	   *				need at least 2p because of nyquist.
+	   *				random sampling my be better, perhaps incremental?
+	   *
+	   *			DO: random local sample. repeat until total is > 2 to 4 p unique.  goal is to even the buckets.
+	   *				choose splitters.
+	   *				bucket-unique (bucket sort and reduce)
+	   *				distribute
+	   *				sort and reduce
+	   *				stable block decomp
+	   *				get splitters.
+	   *
+	   *
+       *
+       */
+#if 0
+#if 0
+      virtual void redistribute() {
+
+        BL_BENCH_INIT(rehash);
+
+        typename Base::Base::StoreTransformedFunc store_comp;
+        typename Base::Base::StoreTransformedEqual store_equal;
+
+        bool balanced = this->is_balanced();
+        bool gsorted = this->is_globally_sorted();
+
+        if (balanced && gsorted) // already balanced and globally_sorted.
+        {
+          // so the splitters are correct as well.
+
+          // ensure locally sorted.
+          BL_BENCH_START(rehash);
+          this->local_reduction(this->c, this->sorted);
+          BL_BENCH_END(rehash, "local_sort", this->c.size());
+
+          // then return.
+          BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_map:rehash", this->comm);
+          return;
+        }
+
+
+        // stop if there are no data to rehash on any of the nodes.
+        if (this->empty()) {
+          this->key_to_rank.map.clear();
+          BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_map:rehash", this->comm);
+
+          this->sorted = true;
+          this->set_balanced(true);
+          this->set_globally_sorted(true);
+
+          return;
+        }
+
+
+        if (this->comm.size() > 1) {
+
+// ===============
+// direct local sort and reduction is slow and does not reduce 5 to 1 because the data is still scattered.
+//		  // ensure locally sorted.
+//		  BL_BENCH_START(rehash);
+//		  this->local_reduction(this->c, this->sorted);
+//		  BL_BENCH_END(rehash, "local_sort", this->c.size());
+//      	if (this->comm.rank() == 0) printf("local_sort\n");   fflush(stdout);
+// ===============
+
+
+//===================
+// doing a blocked sort/reduce does not signficantly reduce data size - the average multiplicity is too low
+//        	// 1. do blocked sort/reduce.
+//        	BL_BENCH_START(rehash);
+//        	std::vector<size_t> block_sizes(this->comm.size(), 0);
+//        	size_t old = this->c.size();
+//        	size_t step = this->c.size() / this->comm.size();
+//        	int rem =  this->c.size() % this->comm.size();
+//			for (int i = 0; i < this->comm.size(); ++i)
+//			{
+//				block_sizes[i] = (i < rem) ? (step + 1) : step;
+//			}
+//			::fsc::bucket_reduce(this->c, block_sizes, this->sorted,
+//					[this](iterator & first, iterator & last, iterator & output, bool & input_sorted){
+//            	return this->local_reduction(first, last, output, input_sorted);
+//            });
+//        	BL_BENCH_END(rehash, "blocked reduction", this->key_to_rank.map.size());
+//  		  if (this->comm.rank() == 0) printf("block_reduced. before %lu, after %lu\n", old, this->c.size());   fflush(stdout);
+//
+//		  // ensure locally sorted.
+//		  BL_BENCH_START(rehash);
+//		  this->sorted = false;
+//		  this->local_reduction(this->c, this->sorted);
+//		  BL_BENCH_END(rehash, "local_sort", this->c.size());
+//		  if (this->comm.rank() == 0) printf("local_sort\n");   fflush(stdout);
+//=============
+
+//=============
+// regular sampling creates some imbalance.
+//        	// 2. sample.  (without first sorting...?)
+//        	BL_BENCH_START(rehash);
+//            mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T> >();
+//        	auto splitters = mxx::impl::sample_block_decomp(this->c.begin(), this->c.end(), store_comp,
+//        			this->comm.size() - 1, this->comm, dt.type() );
+//        	BL_BENCH_END(rehash, "sample", this->key_to_rank.map.size());
+//
+//        	// 4. get splitters.
+//        	BL_BENCH_START(rehash);
+//        	this->key_to_rank.map.clear();
+//			for (int i = 0; i < splitters.size(); ++i)
+//			{
+//				this->key_to_rank.map.emplace_back(
+//						std::move(splitters[i].first), i);
+//			}
+//        	BL_BENCH_END(rehash, "splitters1", this->key_to_rank.map.size());
+//
+//
+//        	if (this->comm.rank() == 0)
+//				for (int i = 0; i < this->key_to_rank.map.size(); ++i) {
+//					std::cout << "rank " << this->comm.rank() << " kmer " << this->key_to_rank.map[i].first << " -> rank " << this->key_to_rank.map[i].second << std::endl;
+//				}
+//=================
+
+
+			// random number generator setup for sampling the container.
+			BL_BENCH_START(rehash);
+//			std::default_random_engine generator;
+//			std::uniform_int_distribution<size_t> distribution(0, (this->c.size() - 1));
+//			auto long_rand = std::bind ( distribution, generator );
+//
+//			// need at least 2p for nyquist, but let's be safe and do 4p.  this is unique ones.
+//			size_t target_samples = 16 * this->comm.size();
+//			std::vector<Key > new_samples, all_samples;
+//			this->key_to_rank.map.clear();
+//			all_samples.clear();
+//			BL_BENCH_END(rehash, "init", 0);
+//
+//			if (this->comm.rank() == 0) printf("init\n");   fflush(stdout);
+//
+//			// collect some samples
+//			BL_BENCH_START(rehash);
+//			size_t last_sample_size = 0;
+//			do {
+//				last_sample_size = all_samples.size();
+//
+//				if (this->comm.rank() == 0) printf("sampling 4\n");   fflush(stdout);
+//
+//				// 2. sample randomly, repeatedly
+//				new_samples.clear();
+//				for (size_t i = 0; i < 16; ++i) {
+//					size_t pos = long_rand();
+//					new_samples.emplace_back(this->c[long_rand()].first);
+//
+//					if (this->comm.rank() == 0) printf("sampling at %lu\n", pos);   fflush(stdout);
+//				}
+//
+//				// 3. all gather
+//				{
+//					new_samples = mxx::allgather(new_samples, this->comm);
+//					std::move(new_samples.begin(), new_samples.end(), ::std::back_inserter(all_samples));
+//					if (this->comm.rank() == 0) printf("potential samples count %lu \n", all_samples.size());   fflush(stdout);
+//
+//				}
+//
+//				// 4. sort sample and get unique
+//				::std::stable_sort(all_samples.begin(), all_samples.end(), store_comp);
+//				auto samples_end = ::std::unique(all_samples.begin(), all_samples.end(), store_equal);
+//				all_samples.erase(samples_end, all_samples.end());
+//				if (this->comm.rank() == 0) printf("sorted samples count %lu \n", all_samples.size());   fflush(stdout);
+//
+//
+//				// repeat until we have the target_samples size, or the number of samples have stopped growing (no new samples found)
+//			} while ((all_samples.size() < target_samples) && (all_samples.size() > last_sample_size));
+//
+//			std::vector<Key>().swap(new_samples);
+
+			auto splitters = ::dsc::sample_for_splitters(this->c, this->sorted, this->comm,
+					store_comp, store_equal);
+			BL_BENCH_END(rehash, "sample", splitters.size());
+
+
+
+			// 4. choose p-1 splitters.
+			BL_BENCH_START(rehash);
+//			size_t step = all_samples.size() / this->comm.size();
+//			int rem =  all_samples.size() % this->comm.size();
+//			// first rem steps get extra 1.  select the first one of the last p-1 buckets
+//			for (int i = 1; i < this->comm.size(); ++i)
+//			{
+//				this->key_to_rank.map.emplace_back(
+//						std::move(all_samples[i * step + (i < rem ? i : rem)]), i - 1);
+//			}
+//			std::vector<Key >().swap(all_samples);
+
+			this->key_to_rank.map.clear();
+			for (int i = 0; i < splitters.size(); ++i)
+			{
+				this->key_to_rank.map.emplace_back(
+						std::move(splitters[i].first), i);
+			}
+
+			BL_BENCH_END(rehash, "splitters1", this->key_to_rank.map.size());
+
+			if (this->comm.rank() == 0) printf("split1\n");  fflush(stdout);
+
+
+
+        	// 9. bucket - sort and unique, and 10. distribute
+        	BL_BENCH_START(rehash);
+        	this->sorted = false;
+            std::vector<size_t> recv_counts(
+            		::dsc::distribute_reduce(this->c, this->key_to_rank, this->sorted, this->comm,
+          				  [this](iterator & first, iterator & last, iterator & output, bool & input_sorted){
+            	return this->local_reduction(first, last, output, input_sorted);
+            }));
+//            std::vector<size_t> recv_counts(
+//            		::dsc::distribute(this->c, this->key_to_rank, this->sorted, this->comm));
+        	BL_BENCH_END(rehash, "dist", this->c.size());
+
+        	if (this->comm.rank() == 0) printf("dist\n");  fflush(stdout);
+
+
+        	// 11. local sort and reduce
+        	BL_BENCH_START(rehash);
+        	this->sorted = false;
+        	this->local_reduction(this->c, this->sorted);
+        	BL_BENCH_END(rehash, "reduce", this->c.size());
+
+        	if (this->comm.rank() == 0) printf("reduce\n");  fflush(stdout);
+
+        	// 12. stable block decomposition
+            BL_BENCH_START(rehash);
+            this->c = ::mxx::stable_distribute(this->c, this->comm);
+            BL_BENCH_END(rehash, "block decomp", this->c.size());
+
+        	if (this->comm.rank() == 0) printf("block\n"); fflush(stdout);
+
+        	// 13. record the splitters. first entry of each, except the first bucket
+            BL_BENCH_START(rehash);
+            // get new pivots
+            // next compute the splitters.
+            this->key_to_rank.map.clear();
+            if ((this->comm.rank() > 0) && (this->c.size() > 0)) {
+              // only send for the first p-1 proc, and only if they have a kmer to split with.
+              this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
+            }
+            this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+            BL_BENCH_END(rehash, "final_splitter", this->key_to_rank.map.size());
+
+        	if (this->comm.rank() == 0) printf("splitters\n"); fflush(stdout);
+
+
+        } else {
+          BL_BENCH_START(rehash);
+          // local reduction
+          this->local_reduction(this->c, this->sorted);
+          BL_BENCH_END(rehash, "reduc", this->c.size());
+        }
+
+        this->sorted = true;
+        this->set_balanced(true);
+        this->set_globally_sorted(true);
+        //printf("c size after: %lu\n", this->c.size());
+
+
+        BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_map:rehash", this->comm);
+
+      }
+#else
+      virtual void redistribute() {
+
+        BL_BENCH_INIT(rehash);
+
+        typename Base::Base::StoreTransformedFunc store_comp;
+        typename Base::Base::StoreTransformedFunc store_equal;
+
+        bool balanced = this->is_balanced();
+        bool gsorted = this->is_globally_sorted();
+
+        if (balanced && gsorted) // already balanced and globally_sorted.
+        {
+          // so the splitters are correct as well.
+
+          // ensure locally sorted.
+          BL_BENCH_START(rehash);
+          this->local_reduction(this->c, this->sorted);
+          BL_BENCH_END(rehash, "local_sort", this->c.size());
+
+          // then return.
+          BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_map:rehash", this->comm);
+          return;
+        }
+
+        //printf("c size before: %lu\n", this->c.size());
+        BL_BENCH_START(rehash);
+        BL_BENCH_END(rehash, "begin", this->c.size());
+
+        // stop if there are no data to rehash on any of the nodes.
+        if (this->empty()) {
+          this->key_to_rank.map.clear();
+          BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_map:rehash", this->comm);
+
+          this->sorted = true;
+          this->set_balanced(true);
+          this->set_globally_sorted(true);
+
+          return;
+        }
+
+
+        if (this->comm.size() > 1) {
+          // first balance
+
+          if (!balanced) {
+            BL_BENCH_START(rehash);
+            this->c = ::mxx::stable_distribute(this->c, this->comm);
+            BL_BENCH_END(rehash, "block1", this->c.size());
+          }
+
+          // global sort if needed
+          if (!gsorted) {
+        	  BL_BENCH_START(rehash);
+              this->local_reduction(this->c, this->sorted);
+              BL_BENCH_END(rehash, "reduc1", this->c.size());
+
+              // mxx code, essentially
+            //::mxx::sort(this->c.begin(), this->c.end(), typename Base::Base::StoreTransformedFunc(), this->comm);
+              // number of samples
+
+
+              // sample sort
+              // 1. pick `s` samples on each processor
+              // 2. gather to `rank=0`
+              // 3. local sort on master
+              // 4. broadcast the p-1 final splitters
+              // 5. locally find splitter positions in data
+              //    (if an identical splitter appears twice, then split evenly)
+              //    => send_counts
+              // 6. distribute send_counts with all2all to get recv_counts
+              // 7. allocate enough space (may be more than previously allocated) for receiving
+              // 8. all2allv
+              // 9. local reordering (multiway-merge or again std::sort)
+              // A. equalizing distribution into original size (e.g.,block decomposition)
+              //    by sending elements to neighbors
+
+              // get splitters, using the method depending on whether the input consists
+              // of arbitrary decompositions or not
+              BL_BENCH_START(rehash);
+              mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T> >();
+              std::vector<value_type> local_splitters =
+            		  mxx::impl::sample_arbit_decomp(this->c.begin(), this->c.end(),
+            				  store_comp, this->comm.size() - 1, this->comm, dt.type());
+              bool sorted_splitters = true;
+              ::fsc::sorted_unique(local_splitters, sorted_splitters, store_comp, store_equal);
+              BL_BENCH_END(rehash, "sampled", local_splitters.size());
+
+
+              // 5. locally find splitter positions in data
+              //    (if an identical splitter appears at least three times (or more),
+              //    then split the intermediary buckets evenly) => send_counts
+              BL_BENCH_START(rehash);
+              std::vector<size_t> send_counts =
+            		  mxx::impl::split(this->c.begin(), this->c.end(), store_comp, local_splitters, this->comm);
+              BL_BENCH_END(rehash, "split", this->c.size());
+
+
+              {
+                  BL_BENCH_START(rehash);
+				  std::vector<size_t> recv_counts = mxx::all2all(send_counts, this->comm);
+				  std::size_t recv_n = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
+				  // TODO: use different approach if there are less than p local elements
+				  std::vector<::std::pair<Key, T> > recv_elements(recv_n);
+				  // TODO: use collective with iterators [begin,end) instead of pointers!
+				  mxx::all2allv(&(this->c[0]), send_counts, &(recv_elements[0]), recv_counts, this->comm);
+				  this->c.swap(recv_elements);
+	              BL_BENCH_END(rehash, "a2a", recv_elements.size());
+              }
+
+
+              // 9. local reordering - merge and reduce
+              BL_BENCH_START(rehash);
+              // local unique
+              this->local_reduction(this->c, false);
+              BL_BENCH_END(rehash, "reduc2", this->c.size());
+
+              // A. rebalance.
+              BL_BENCH_START(rehash);
+              this->c = mxx::stable_distribute(this->c, this->comm);
+              BL_BENCH_END(rehash, "block2", this->c.size());
+
+          }
+          BL_BENCH_START(rehash);
+          // get new pivots
+          // next compute the splitters.
+          this->key_to_rank.map.clear();
+          if ((this->comm.rank() > 0) && (this->c.size() > 0)) {
+            // only send for the first p-1 proc, and only if they have a kmer to split with.
+            this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
+          }
+          this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+          // note that key_to_rank.map needs to be unique.
+          auto map_end = std::unique(this->key_to_rank.map.begin(), this->key_to_rank.map.end(), typename Base::Base::StoreTransformedEqual());
+          this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
+
+
+          BL_BENCH_END(rehash, "splitter2", this->c.size());
+          // no need to redistribute - each entry is unique so nothing is going to span processor boundaries.
+
+        } else {
+          BL_BENCH_START(rehash);
+          // local reduction
+          this->local_reduction(this->c, this->sorted);
+          BL_BENCH_END(rehash, "reduc", this->c.size());
+        }
+
+        this->sorted = true;
+        this->set_balanced(true);
+        this->set_globally_sorted(true);
+        //printf("c size after: %lu\n", this->c.size());
+
+
+        BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_map:rehash", this->comm);
+
+  }
+#endif
+#else
       virtual void redistribute() {
 
         BL_BENCH_INIT(rehash);
@@ -2155,7 +2634,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         BL_BENCH_REPORT_MPI_NAMED(rehash, "sorted_map:rehash", this->comm);
 
       }
-
+#endif
 
     public:
 
@@ -2661,6 +3140,35 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         ++reduc_target;
         input.erase(reduc_target, input.end());
       }
+
+      // ============= local reduction override.
+      virtual iterator local_reduction(iterator & first, iterator & last, iterator & output,
+    		  bool sorted_input = false) {
+
+		if (first == last) return output;
+		if (!sorted_input) ::std::sort(first, last, typename Base::StoreTransformedFunc());
+
+        typename Base::Base::Base::StoreTransformedEqual store_equal;
+
+		// then just get the unique stuff and remove rest.
+        // then do reduction
+        auto reduc_target = first;
+        auto curr = first;  ++curr;
+
+        while (curr != last) {
+          if (store_equal(*reduc_target, *curr))  // if same, do reduction
+            reduc_target->second = r(reduc_target->second, curr->second);
+          else {  // else reset b.
+            ++reduc_target;
+            *reduc_target = *curr;
+          }
+          ++curr;  // increment second.
+        }
+        ++reduc_target;
+
+        return reduc_target;
+      }
+
 
 
     public:
