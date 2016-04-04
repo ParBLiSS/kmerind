@@ -151,7 +151,7 @@ using CountType = uint32_t;
 #elif (pDistTrans == XOR)
 	template <typename KM>
 	using DistTrans = bliss::kmer::transform::xor_rev_comp<KM>;
-#elif (pDistTrans == IDEN)
+#else //if (pDistTrans == IDEN)
 	template <typename KM>
 	using DistTrans = bliss::kmer::transform::identity<KM>;
 #endif
@@ -166,7 +166,7 @@ using CountType = uint32_t;
 #elif (pDistHash == MURMUR)
 	template <typename KM>
 	using DistHash = bliss::kmer::hash::murmur<KM, true>;
-#elif (pDistHash == FARM)
+#else // if (pDistHash == FARM)
 	template <typename KM>
 	using DistHash = bliss::kmer::hash::farm<KM, true>;
 #endif
@@ -182,7 +182,7 @@ using CountType = uint32_t;
 #elif (pStoreHash == MURMUR)
 	template <typename KM>
 	using StoreHash = bliss::kmer::hash::murmur<KM, false>;
-#elif (pStoreHash == FARM)
+#else //if (pStoreHash == FARM)
 	template <typename KM>
 	using StoreHash = bliss::kmer::hash::farm<KM, false>;
 #endif

@@ -140,6 +140,27 @@ foreach(store SINGLE CANONICAL BIMOLECULE)
     endforeach(k)
   endforeach(format)
 endforeach(store)
+
+#=================  60 targets for FASTQ varying K.
+#vary K, fix Alphabet, and map types.  see effect on count and position (map vs multimap), and different kmerstores
+# do it for fastA
+
+foreach(store SINGLE CANONICAL BIMOLECULE)
+  foreach(map SORTED UNORDERED)
+
+    foreach(k 15 21 31 63 95)  # 31 already compiled for fastq.
+        # count maps.  note SORTED PATH ignores hash but uses transformation
+	add_executable(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
+	SET_TARGET_PROPERTIES(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
+    	 	PROPERTIES COMPILE_FLAGS 
+	     "-DpPARSER=FASTQ -DpDNA=4 -DpK=${k} -DpKmerStore=${store} -DpMAP=${map} -DpINDEX=COUNT")
+	target_link_libraries(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
+	   ${EXTRA_LIBS})
+       
+    endforeach(k)
+  endforeach(map)
+
+endforeach(store)
   
 
 #==================  1 target  quality map.  Single to assess quality effect.
@@ -210,19 +231,19 @@ foreach(store BIMOLECULE SINGLE)
   target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM
    ${EXTRA_LIBS})
 
-  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
-  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtXXXX-dhYYYY-shZZZZ
+  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtXXXX-dhYYYY-shZZZZ
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=SORTED -DpINDEX=POS")
-  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtXXXX-dhYYYY-shZZZZ
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=UNORDERED -DpINDEX=COUNT")
+  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtXXXX-dhYYYY-shZZZZ
    ${EXTRA_LIBS})
 
 
-  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
-  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtIDEN-dhFARM-shFARM
+  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtIDEN-dhFARM-shFARM
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=UNORDERED -DpINDEX=COUNT -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM")
-  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtIDEN-dhFARM-shFARM
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=SORTED -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM")
+  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtIDEN-dhFARM-shFARM
    ${EXTRA_LIBS})
 
   add_executable(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
