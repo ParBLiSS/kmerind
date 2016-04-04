@@ -227,14 +227,14 @@ foreach(store BIMOLECULE SINGLE)
   add_executable(testKmerIndex-COMPQ-a4-k31-${store}-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
   SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=COMPACTVEC -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM")
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=COMPACTVEC -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCompare")
   target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM
    ${EXTRA_LIBS})
 
   add_executable(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
   SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtXXXX-dhYYYY-shZZZZ
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=UNORDERED -DpINDEX=COUNT")
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=UNORDERED -DpINDEX=COUNT -DpCompare")
   target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtXXXX-dhYYYY-shZZZZ
    ${EXTRA_LIBS})
 
@@ -242,14 +242,14 @@ foreach(store BIMOLECULE SINGLE)
   add_executable(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
   SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtIDEN-dhFARM-shFARM
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=SORTED -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM")
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=SORTED -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCompare")
   target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtIDEN-dhFARM-shFARM
    ${EXTRA_LIBS})
 
   add_executable(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
   SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-COUNT-dtXXXX-dhYYYY-shZZZZ
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=SORTED -DpINDEX=COUNT")
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=SORTED -DpINDEX=COUNT -DpCompare")
   target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-COUNT-dtXXXX-dhYYYY-shZZZZ
    ${EXTRA_LIBS})
  
