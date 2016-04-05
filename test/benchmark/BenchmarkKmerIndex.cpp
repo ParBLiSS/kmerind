@@ -493,7 +493,7 @@ int main(int argc, char** argv) {
 
 	  BL_BENCH_START(test);
 	  idx.insert(temp);
-	  BL_BENCH_COLLECTIVE_END(test, "insert", idx.size(), comm);
+	  BL_BENCH_COLLECTIVE_END(test, "insert", idx.local_size(), comm);
   }
 
   {
