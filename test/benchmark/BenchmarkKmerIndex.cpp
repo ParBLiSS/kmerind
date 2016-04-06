@@ -491,9 +491,15 @@ int main(int argc, char** argv) {
 	  }
 	  BL_BENCH_COLLECTIVE_END(test, "read", temp.size(), comm);
 
+	  size_t total = mxx::allreduce(temp.size(), comm);
+	  if (comm.rank() == 0) printf("total size is %lu\n", total);
+
 	  BL_BENCH_START(test);
 	  idx.insert(temp);
 	  BL_BENCH_COLLECTIVE_END(test, "insert", idx.local_size(), comm);
+
+    total = idx.size();
+    if (comm.rank() == 0) printf("total size after insert/rehash is %lu\n", total);
   }
 
   {
