@@ -252,7 +252,7 @@ namespace dsc
 
       template <typename V>
       void transform_input(std::vector<V> & input) const {
-    	  std::for_each(input.begin(), input.end(), InputTransform());
+    	  std::transform(input.begin(), input.end(), input.begin(), InputTransform());
       }
 
   };
