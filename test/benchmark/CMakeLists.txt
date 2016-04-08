@@ -150,11 +150,19 @@ foreach(store SINGLE CANONICAL BIMOLECULE)
 
     foreach(k 15 21 31 63 95)  # 31 already compiled for fastq.
         # count maps.  note SORTED PATH ignores hash but uses transformation
-	add_executable(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
-	SET_TARGET_PROPERTIES(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
-    	 	PROPERTIES COMPILE_FLAGS 
-	     "-DpPARSER=FASTQ -DpDNA=4 -DpK=${k} -DpKmerStore=${store} -DpMAP=${map} -DpINDEX=COUNT")
-	target_link_libraries(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
+		add_executable(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
+		SET_TARGET_PROPERTIES(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
+	    	 	PROPERTIES COMPILE_FLAGS 
+		     "-DpPARSER=FASTQ -DpDNA=4 -DpK=${k} -DpKmerStore=${store} -DpMAP=${map} -DpINDEX=COUNT")
+		target_link_libraries(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
+	   ${EXTRA_LIBS})
+	   
+	    # count maps.  note SORTED PATH ignores hash but uses transformation
+		add_executable(testKmerIndex-COUNTA-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
+		SET_TARGET_PROPERTIES(testKmerIndex-COUNTA-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
+	    	 	PROPERTIES COMPILE_FLAGS 
+		     "-DpPARSER=FASTA -DpDNA=4 -DpK=${k} -DpKmerStore=${store} -DpMAP=${map} -DpINDEX=COUNT")
+		target_link_libraries(testKmerIndex-COUNTA-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
 	   ${EXTRA_LIBS})
        
     endforeach(k)
