@@ -554,7 +554,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
             // send back using the constructed recv count
             BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
-            results = mxx::all2allv(results, send_counts, this->comm);
+            mxx::all2allv(results, send_counts, this->comm).swap(results);
             BL_BENCH_END(find, "a2a2", results.size());
 
           } else {
@@ -882,7 +882,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
             // send back using the constructed recv count
             BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
-            results = mxx::all2allv(results, send_counts, this->comm);
+            mxx::all2allv(results, send_counts, this->comm).swap(results);
             BL_BENCH_END(find, "a2a2", results.size());
 
           } else {
@@ -1569,7 +1569,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
           BL_BENCH_COLLECTIVE_START(count, "a2a2", this->comm);
           // send back using the constructed recv count
-          results = mxx::all2allv(results, recv_counts, this->comm);
+          mxx::all2allv(results, recv_counts, this->comm).swap(results);
           BL_BENCH_END(count, "a2a2", results.size());
 
 
@@ -2284,7 +2284,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
         	// 12. stable block decomposition
             BL_BENCH_START(rehash);
-            this->c = ::mxx::stable_distribute(this->c, this->comm);
+            ::mxx::stable_distribute(this->c, this->comm).swap(this->c);
             BL_BENCH_END(rehash, "block decomp", this->c.size());
 
         	if (this->comm.rank() == 0) printf("block\n"); fflush(stdout);
@@ -2298,7 +2298,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               // only send for the first p-1 proc, and only if they have a kmer to split with.
               this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
             }
-            this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+            ::mxx::allgatherv(this->key_to_rank.map, this->comm).swap(this->key_to_rank.map);
             BL_BENCH_END(rehash, "final_splitter", this->key_to_rank.map.size());
 
         	if (this->comm.rank() == 0) printf("splitters\n"); fflush(stdout);
@@ -2367,7 +2367,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
           if (!balanced) {
             BL_BENCH_START(rehash);
-            this->c = ::mxx::stable_distribute(this->c, this->comm);
+            ::mxx::stable_distribute(this->c, this->comm).swap(this->c);
             BL_BENCH_END(rehash, "block1", this->c.size());
           }
 
@@ -2439,7 +2439,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
               // A. rebalance.
               BL_BENCH_START(rehash);
-              this->c = mxx::stable_distribute(this->c, this->comm);
+              mxx::stable_distribute(this->c, this->comm).swap(this->c);
               BL_BENCH_END(rehash, "block2", this->c.size());
 
           }
@@ -2451,7 +2451,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             // only send for the first p-1 proc, and only if they have a kmer to split with.
             this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
           }
-          this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+          ::mxx::allgatherv(this->key_to_rank.map, this->comm).swap(this->key_to_rank.map);
           // note that key_to_rank.map needs to be unique.
           auto map_end = std::unique(this->key_to_rank.map.begin(), this->key_to_rank.map.end(), typename Base::Base::StoreTransformedEqual());
           this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
@@ -2523,7 +2523,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
           if (!balanced) {
             BL_BENCH_START(rehash);
-            this->c = ::mxx::stable_distribute(this->c, this->comm);
+            ::mxx::stable_distribute(this->c, this->comm).swap(this->c);
             BL_BENCH_END(rehash, "block1", this->c.size());
           }
 
@@ -2598,7 +2598,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             // and final rebalance
             BL_BENCH_START(rehash);
             // rebalance
-            this->c = ::mxx::stable_distribute(this->c, this->comm);
+            ::mxx::stable_distribute(this->c, this->comm).swap(this->c);
             BL_BENCH_END(rehash, "block2", this->c.size());
 
           BL_BENCH_START(rehash);
@@ -2609,7 +2609,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             // only send for the first p-1 proc, and only if they have a kmer to split with.
             this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
           }
-          this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+          ::mxx::allgatherv(this->key_to_rank.map, this->comm).swap(this->key_to_rank.map);
           // note that key_to_rank.map needs to be unique.
           auto map_end = std::unique(this->key_to_rank.map.begin(), this->key_to_rank.map.end(), typename Base::Base::StoreTransformedEqual());
           this->key_to_rank.map.erase(map_end, this->key_to_rank.map.end());
@@ -2870,7 +2870,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             this->key_to_rank.map.emplace_back(this->c.front().first, this->comm.rank() - 1);
           }
           // using gatherv because some processes may not be sending anything.
-          this->key_to_rank.map = ::mxx::allgatherv(this->key_to_rank.map, this->comm);
+          ::mxx::allgatherv(this->key_to_rank.map, this->comm).swap(this->key_to_rank.map);
 
           // note that key_to_rank.map needs to be unique.
           auto map_end = std::unique(this->key_to_rank.map.begin(), this->key_to_rank.map.end(),
@@ -2897,7 +2897,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
           BL_BENCH_COLLECTIVE_START(rehash, "a2a", this->comm);
           // TODO: readjust boundaries using all2all.  is it better to move the deltas ourselves?
-          this->c = mxx::all2allv(this->c, send_counts, this->comm);
+          mxx::all2allv(this->c, send_counts, this->comm).swap(this->c);
           BL_BENCH_END(rehash, "a2a", this->c.size());
 
         } else {

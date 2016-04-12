@@ -665,7 +665,7 @@ namespace fsc {  // fast standard container
       size_t erase(const key_type& key) {
     	  size_t c = count(key);
     	  s -= c;
-    	  map.erase(key);
+    	  map.at(key).clear();  // do not remove vector.  just clear it.
           this->update_max_multiplicity(c, 0);
           return c;
       }
@@ -679,7 +679,10 @@ namespace fsc {  // fast standard container
         // for each vector, shrink it.
         auto max = map.end();
         for (auto it = map.begin(); it != max; ++it) {
-          it->second.shrink_to_fit();
+          if (it->second.size() == 0)
+            map.erase(it);
+          else
+            it->second.shrink_to_fit();
         }
       }
 
@@ -1576,7 +1579,7 @@ namespace fsc {  // fast standard container
       size_t erase(const key_type& key) {
     	  size_t c = count(key);
         s -= c;
-        map.erase(key);
+        map.at(key).clear();    // do not dealloc vector.  just clear it.
         this->update_max_multiplicity(c, 0);
 
         return c;
@@ -1591,7 +1594,10 @@ namespace fsc {  // fast standard container
         // for each vector, shrink it.
         auto max = map.end();
         for (auto it = map.begin(); it != max; ++it) {
-          it->second.shrink_to_fit();
+          if (it->second.size() == 0)
+            map.erase(it);
+          else
+            it->second.shrink_to_fit();
         }
       }
 

@@ -625,7 +625,7 @@ namespace dsc {
 
       // distribute (communication part)
       BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
-      vals = mxx::all2allv(vals, send_counts, _comm);
+      mxx::all2allv(vals, send_counts, _comm).swap(vals);
       BL_BENCH_END(distribute, "a2a", vals.size());
 
       BL_BENCH_START(distribute);
@@ -665,7 +665,7 @@ namespace dsc {
 
         // distribute (communication part)
         BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
-        vals = mxx::all2allv(vals, send_counts, _comm);
+        mxx::all2allv(vals, send_counts, _comm).swap(vals);
         BL_BENCH_END(distribute, "a2a", vals.size());
 
         BL_BENCH_START(distribute);
@@ -708,7 +708,7 @@ namespace dsc {
 
         // distribute (communication part)
         BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
-        vals = mxx::all2allv(vals, send_counts, _comm);
+        mxx::all2allv(vals, send_counts, _comm).swap(vals);
         BL_BENCH_END(distribute, "a2a", vals.size());
 
         BL_BENCH_START(distribute);
@@ -747,7 +747,7 @@ namespace dsc {
 
         // distribute (communication part)
         BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
-        vals = mxx::all2allv(vals, send_counts, _comm);
+        mxx::all2allv(vals, send_counts, _comm).swap(vals);
         BL_BENCH_END(distribute, "a2a", vals.size());
 
         BL_BENCH_START(distribute);
@@ -806,7 +806,7 @@ namespace dsc {
 
         // distribute (communication part)
         BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
-        vals = mxx::all2allv(vals, send_counts, _comm);
+        mxx::all2allv(vals, send_counts, _comm).swap(vals);
         BL_BENCH_END(distribute, "a2a", vals.size());
 
 
@@ -899,7 +899,7 @@ namespace dsc {
 		std::vector< V > splitters;
 //		if (_comm.rank() < (_comm.size() - 1)) splitters.emplace_back(moved_samples.back());
 		if (_comm.rank() > 0) splitters.emplace_back(moved_samples.front());
-		splitters = ::mxx::allgatherv(splitters, _comm);
+		::mxx::allgatherv(splitters, _comm).swap(splitters);
 
 		// allgather splitters and sort it
 		std::sort(splitters.begin(), splitters.end(), less);
@@ -911,7 +911,7 @@ namespace dsc {
 				::mxx::impl::split(samples.begin(), samples.end(), less, splitters, _comm);
 
 		// and all2all the samples (so there are no repeated values between nodes)
-		samples = mxx::all2allv(samples, send_counts, _comm);
+		mxx::all2allv(samples, send_counts, _comm).swap(samples);
 
 		// sort and reduce the split samples
 		std::sort(samples.begin(), samples.end(), less);
@@ -919,11 +919,11 @@ namespace dsc {
 		samples.erase(mend, samples.end());
 
 		// block decompose again
-		moved_samples = mxx::stable_distribute(samples, _comm);
+		mxx::stable_distribute(samples, _comm).swap(moved_samples);
 
 		splitters.clear();
 		if (_comm.rank() > 0) splitters.emplace_back(moved_samples.front());
-		splitters = mxx::allgatherv(splitters, _comm);
+		mxx::allgatherv(splitters, _comm).swap(splitters);
 
 		return splitters;
 
