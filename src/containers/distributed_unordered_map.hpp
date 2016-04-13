@@ -1220,7 +1220,6 @@ namespace dsc  // distributed std container
 
           BL_BENCH_START(erase);
           // then call local remove.
-          auto dummy_iter = keys.end();  // process requires a reference.
           ::fsc::unique(keys, sorted_input,
                                                   typename Base::StoreTransformedFunc(),
                                                   typename Base::StoreTransformedEqual());

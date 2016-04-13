@@ -393,7 +393,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
 
           BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
           // send back using the constructed recv count
-          mxx::all2allv(results, send_counts, this->comm).swap(result);
+          mxx::all2allv(results, send_counts, this->comm).swap(results);
           BL_BENCH_END(find, "a2a2", results.size());
 
         } else {
