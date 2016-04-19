@@ -1406,7 +1406,7 @@ namespace bliss {
         // alternative:  alignr.  2 inputs: a, b.  output composition is lowest shift bytes from the 2 lanes of a become the high bytes in the 2 lanes, in order,
         //                              and highest 16-shift bytes from b's 2 lanes are the lower bytes in teh 2 lanes of output.
         //                        to shift left, a = val, N = 15, lower lane of b should be 0, higher lane of b should be lower lane of val.  possibly 2 ops, permute latency is 3.
-        __m256i hi = _mm256_permute2x128_si256(val, val, 0x83);  // 1000.3 higher lane is 0, lower lane is higher lane of val
+        __m256i hi = _mm256_permute2x128_si256(val, val, 0x83);  // 1000.3 higher lane is 0, lower lane is higher lane of val latency = 3
         if (SHIFT == 128) return hi;   // hi is 0 0 A B
 
         // together, permute puts the high lane in low of tmp, then tmp and val's low parts are shifted, and high parts are shifted.
@@ -1417,7 +1417,8 @@ namespace bliss {
 
         __m256i v1 = (SHIFT < 128) ? _mm256_alignr_epi8(hi, val, 8) :  // shift by 8
         //  else shift > 128
-                   _mm256_permute4x64_epi64(hi, 0xFD); // permute and shift hi right more.  3 3 3 1 -> 0xFD
+                   //_mm256_permute4x64_epi64(hi, 0xFD); // permute and shift hi right more.  3 3 3 1 -> 0xFD   latency = 3
+                   _mm256_alignr_epi8(hi, val, 24);    // latency of 1
     // if shift < 128, v1 is 0 A B C.  else v1 is 0 0 0 A
 
         constexpr uint8_t bit64_shift = SHIFT & 0x3F;        // shift within the 64 bit block
@@ -1518,7 +1519,7 @@ namespace bliss {
         // alternative:  alignr.  2 inputs: a, b.  output composition is lowest shift bytes from the 2 lanes of a become the high bytes in the 2 lanes, in order,
         //                              and highest 16-shift bytes from b's 2 lanes are the lower bytes in teh 2 lanes of output.
         //                        to shift left, a = val, N = 15, lower lane of b should be 0, higher lane of b should be lower lane of val.  possibly 2 ops, permute latency is 3.
-        __m256i lo = _mm256_permute2x128_si256(val, val, 0x08);  // 0.1000 lower lane is 0, higher lane is lower lane of val
+        __m256i lo = _mm256_permute2x128_si256(val, val, 0x08);  // 0.1000 lower lane is 0, higher lane is lower lane of val  latency 3
         if (SHIFT == 128) return lo;   // lo is C D 0 0
 
         // together, permute puts the high lane in low of tmp, then tmp and val's low parts are shifted, and high parts are shifted.
@@ -1529,7 +1530,8 @@ namespace bliss {
 
 		__m256i v1 = (SHIFT < 128) ? _mm256_alignr_epi8(val, lo, 8) :  // left shift val 8 bytes
 				//  else shift > 128
-									 _mm256_permute4x64_epi64(lo, 0x80); // left shift lo 8 bytes.  2 0 0 0 -> 0x80 (3 element move to 4th pos.
+//									 _mm256_permute4x64_epi64(lo, 0x80); // left shift lo 8 bytes.  2 0 0 0 -> 0x80 (3rd element move to 4th pos.  latency 3
+		    _mm256_alignr_epi8(val, lo, 24);   // latency 1
 		// if shift < 128, v1 is B C D 0.  else v1 is D 0 0 0
 
         constexpr uint8_t bit64_shift = SHIFT & 0x3F;        // shift within the 64 bit block
