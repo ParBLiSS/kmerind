@@ -179,12 +179,16 @@ namespace bliss
       // of this
       for (unsigned int i = 0; i < size; ++i)
       {
-        result <<= 1;   // shifting the whole thing, inefficient but correct,
+        // result <<= 1;   // shifting the whole thing, inefficient but correct,
                                             // especially for char that cross word boundaries.
+        // non simd version
+        result.left_shift_bits(Kmer::bitsPerChar);
+
         // copy `bitsperChar` least significant bits
         copyBitsFixed<WORD_TYPE, Kmer::bitsPerChar>(result.getDataRef()[0], tmp_copy.getData()[0]);
 
-        tmp_copy >>= 1;
+        //tmp_copy >>= 1;
+        tmp_copy.right_shift_bits(Kmer::bitsPerChar);
       }
   
       // result already was 0 to begin with, so no need to sanitize
@@ -216,14 +220,20 @@ namespace bliss
 
       for (unsigned int i = 0; i < size; ++i)
       {
-        result <<= 1;   // shifting the whole thing, inefficient but correct,
+//        result <<= 1;   // shifting the whole thing, inefficient but correct,
                                             // especially for char that cross word boundaries.
+        // non simd version
+        result.left_shift_bits(Kmer::bitsPerChar);
 
         tmp = ALPHABET::TO_COMPLEMENT[tmp_copy.getData()[0] & getLeastSignificantBitsMask<WORD_TYPE>(Kmer::bitsPerChar)];
 
         // copy `bitsperChar` least significant bits
         copyBitsFixed<WORD_TYPE, Kmer::bitsPerChar>(result.getDataRef()[0], tmp);
-        tmp_copy >>= 1;
+
+//        tmp_copy >>= 1;
+        // non simd version
+        tmp_copy.right_shift_bits(Kmer::bitsPerChar);
+
       }
 
       // result already was 0 to begin with, so no need to sanitize

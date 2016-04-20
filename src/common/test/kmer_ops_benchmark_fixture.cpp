@@ -115,12 +115,6 @@ class KmerOpsBenchmark : public ::testing::Test {
     }
 
 
-
-
-
-
-
-
 };
 
 template <typename T>
@@ -142,13 +136,13 @@ TYPED_TEST_P(KmerOpsBenchmark, left_shift)
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 	  this->outputs[i].left_shift_bits();
   }
-	BL_TIMER_END(km, "bit<< auto", KmerOpsBenchmark<TypeParam>::iterations);
+	BL_TIMER_END(km, "bit << auto", KmerOpsBenchmark<TypeParam>::iterations);
 
 	BL_TIMER_START(km);
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 	  this->outputs[i].left_shift_bits(TypeParam::bitsPerChar);
   }
-  BL_TIMER_END(km, "<<", KmerOpsBenchmark<TypeParam>::iterations);
+  BL_TIMER_END(km, "word <<", KmerOpsBenchmark<TypeParam>::iterations);
 
 
   BL_TIMER_REPORT(km);
@@ -162,13 +156,13 @@ TYPED_TEST_P(KmerOpsBenchmark, right_shift)
     for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
     	  this->outputs[i].right_shift_bits();
     }
-	BL_TIMER_END(km, "bit>> auto", KmerOpsBenchmark<TypeParam>::iterations);
+	BL_TIMER_END(km, "bit >> auto", KmerOpsBenchmark<TypeParam>::iterations);
 
 	BL_TIMER_START(km);
 	  for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
 		  this->outputs[i].right_shift_bits(TypeParam::bitsPerChar);
 	  }
-	  BL_TIMER_END(km, ">>", KmerOpsBenchmark<TypeParam>::iterations);
+	  BL_TIMER_END(km, "word >>", KmerOpsBenchmark<TypeParam>::iterations);
 
 
   BL_TIMER_REPORT(km);
@@ -184,7 +178,7 @@ TYPED_TEST_P(KmerOpsBenchmark, bit_and)
     	  this->outputs[i].bit_and(this->kmers[i], this->kmers2[i]);
 
     }
-	BL_TIMER_END(km, "bit& auto", KmerOpsBenchmark<TypeParam>::iterations);
+	BL_TIMER_END(km, "bit & auto", KmerOpsBenchmark<TypeParam>::iterations);
 
 	  BL_TIMER_START(km);
 	  for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
@@ -204,7 +198,7 @@ TYPED_TEST_P(KmerOpsBenchmark, bit_or)
   	  this->outputs[i].bit_or(this->kmers[i], this->kmers2[i]);
 
   }
-	BL_TIMER_END(km, "bit| auto", KmerOpsBenchmark<TypeParam>::iterations);
+	BL_TIMER_END(km, "bit | auto", KmerOpsBenchmark<TypeParam>::iterations);
 
   BL_TIMER_START(km);
   for (size_t i = 0; i < KmerOpsBenchmark<TypeParam>::iterations; ++i) {
