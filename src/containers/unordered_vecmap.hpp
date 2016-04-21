@@ -439,7 +439,6 @@ namespace fsc {  // fast standard container
 
       supercontainer_type map;
       size_t s;
-      size_t max_multiplicity;
 
 
     public:
@@ -466,8 +465,7 @@ namespace fsc {  // fast standard container
                        const Equal& equal = Equal(),
                        const Allocator& alloc = Allocator()) :
                          map(bucket_count, hash, equal, alloc),
-                         s(0UL),
-                         max_multiplicity(0UL) {};
+                         s(0UL) {};
 
       template<class InputIt>
       unordered_compact_vecmap(InputIt first, InputIt last,
@@ -518,7 +516,6 @@ namespace fsc {  // fast standard container
       }
 
       void clear() {
-    	  max_multiplicity = 0;
     	  s = 0;
         map.clear();
       }
@@ -559,7 +556,6 @@ namespace fsc {  // fast standard container
           iter = map.emplace(key, subcontainer_type()).first;
         }
         iter->second.emplace_back(::std::forward<T>(value.second));
-        this->update_max_multiplicity(0UL, iter->second.size());
         auto pos = iter->second.end();
         ++s;
         return iterator(iter, map.end(), --pos, iter->second.size() - 1);
@@ -570,7 +566,6 @@ namespace fsc {  // fast standard container
           iter = map.emplace(key, subcontainer_type()).first;
         }
         iter->second.emplace_back(::std::forward<T>(value));
-        this->update_max_multiplicity(0UL, iter->second.size());
 
         auto pos = iter->second.end();
         ++s;
@@ -586,7 +581,6 @@ namespace fsc {  // fast standard container
             after = std::max(after, map[first->first].size());
           }
           s += std::distance(first, last);
-          this->update_max_multiplicity(0UL, after);
       }
 
       /// inserting sorted range
@@ -638,12 +632,14 @@ namespace fsc {  // fast standard container
     	  }
 
     	  s += std::distance(first, last);
-          this->update_max_multiplicity(0UL, after);
       }
 
       template <typename Pred>
       size_t erase(const key_type& key, Pred const & pred) {
-    	  auto vec = map.at(key);
+        auto iter = map.find(key);
+        if (iter == map.end()) return 0;
+
+    	  auto vec = iter->second;
     	  size_t before = vec.size();
 
     	  auto new_end = ::std::remove_if(vec.begin(), vec.end(),
@@ -654,7 +650,6 @@ namespace fsc {  // fast standard container
     	  vec.erase(new_end, vec.end());
 
     	  size_t after = vec.size();
-          this->update_max_multiplicity(before, after);
 
           s -= (before - after);
     	  return before - after;
@@ -663,10 +658,12 @@ namespace fsc {  // fast standard container
 
 
       size_t erase(const key_type& key) {
-    	  size_t c = count(key);
+        auto iter = map.find(key);
+        if (iter == map.end()) return 0;
+
+    	  size_t c = iter->second.size();
     	  s -= c;
-    	  map.at(key).clear();  // do not remove vector.  just clear it.
-          this->update_max_multiplicity(c, 0);
+    	  iter->second.clear();  // do not remove vector.  just clear it.
           return c;
       }
 
@@ -697,31 +694,21 @@ namespace fsc {  // fast standard container
       size_type unique_size() const {
         return map.size();
       }
+
       size_type get_max_multiplicity() const {
-        return max_multiplicity;
-      }
-      void update_max_multiplicity(size_type before, size_type after) {
-		  // after is larger, so set it whether we're inserting or deleting
-		  if (after >= max_multiplicity) {
-			  max_multiplicity = after;
-			  return;
-		  }
-
-		  // else after is smaller than max.  check if delete or insert
-		  if (before < max_multiplicity)  // delete or insert, but was not max.  return
-			  return;
-
-		  // delete and before was >= max, and after is less than max.  may have been max.
-		  // need a full check.
-		  max_multiplicity = map.cbegin()->second.size();
+        size_type max_multiplicity = map.cbegin()->second.size();
     	  for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
     		  max_multiplicity = ::std::max(max_multiplicity, it->second.size());
     	  }
-      }      size_type get_min_multiplicity() const {
+    	  return max_multiplicity;
+      }
+
+      size_type get_min_multiplicity() const {
         size_type min_multiplicity = ::std::numeric_limits<size_type>::max();
         auto max = map.cend();
         for (auto it = map.cbegin(); it != max; ++it) {
-          min_multiplicity = ::std::min(min_multiplicity, it->second.size());
+          if (it -> second.size() > 0)
+            min_multiplicity = ::std::min(min_multiplicity, it->second.size());
         }
         return min_multiplicity;
       }
@@ -1242,7 +1229,7 @@ namespace fsc {  // fast standard container
             if (at_end() || rhs.at_end()) return false;
 
             return ((curr_iter == rhs.curr_iter) && (curr_pos == rhs.curr_pos));
-            }
+            }s
 
           /// comparison operator
           inline bool operator!=(const type& rhs) const
@@ -1366,7 +1353,6 @@ namespace fsc {  // fast standard container
 
       supercontainer_type map;
       size_t s;
-      size_t max_multiplicity;
 
 
     public:
@@ -1393,8 +1379,7 @@ namespace fsc {  // fast standard container
                          const Equal& equal = Equal(),
                          const Allocator& alloc = Allocator()) :
                            map(bucket_count, hash, equal, alloc),
-                           s(0UL),
-                           max_multiplicity(0UL) {};
+                           s(0UL) {};
 
       template<class InputIt>
       unordered_vecmap(InputIt first, InputIt last,
@@ -1444,7 +1429,6 @@ namespace fsc {  // fast standard container
 
       void clear() {
     	  s = 0;
-    	  max_multiplicity = 0;
         map.clear();
       }
 
@@ -1483,7 +1467,6 @@ namespace fsc {  // fast standard container
           iter = map.emplace(key, subcontainer_type()).first;
         }
         iter->second.emplace_back(::std::forward<value_type>(value));
-        this->update_max_multiplicity(0, iter->second.size());
 
         auto pos = iter->second.end();
         ++s;
@@ -1495,7 +1478,6 @@ namespace fsc {  // fast standard container
           iter = map.emplace(key, subcontainer_type()).first;
         }
         iter->second.emplace_back(::std::forward<Key>(key), ::std::forward<T>(value));
-        this->update_max_multiplicity(0, iter->second.size());
 
         auto pos = iter->second.end();
         ++s;
@@ -1513,7 +1495,6 @@ namespace fsc {  // fast standard container
             after = std::max(after, map[first->first].size());
           }
           s += std::distance(first, last);
-          this->update_max_multiplicity(0UL, after);
       }
 
       /// inserting sorted range
@@ -1558,29 +1539,32 @@ namespace fsc {  // fast standard container
     	  }
 
     	  s += std::distance(first, last);
-          this->update_max_multiplicity(0UL, after);
       }
 
       template <typename Pred>
       size_t erase(const key_type& key, Pred const & pred) {
-    	  auto vec = map.at(key);
+        auto iter = map.find(key);
+        if (iter == map.end()) return 0;
+
+    	  auto vec = iter->second;
     	  size_t before = vec.size();
 
     	  auto new_end = ::std::remove_if(vec.begin(), vec.end(), pred);
     	  vec.erase(new_end, vec.end());
 
     	  size_t after = vec.size();
-          this->update_max_multiplicity(before, after);
 
           s -= (before - after);
     	  return before - after;
       }
 
       size_t erase(const key_type& key) {
-    	  size_t c = count(key);
+        auto iter = map.find(key);
+        if (iter == map.end()) return 0;
+
+    	  size_t c = iter->second.size();
         s -= c;
-        map.at(key).clear();    // do not dealloc vector.  just clear it.
-        this->update_max_multiplicity(c, 0);
+        iter->second.clear();    // do not dealloc vector.  just clear it.
 
         return c;
       }
@@ -1613,36 +1597,26 @@ namespace fsc {  // fast standard container
       size_type unique_size() const {
         return map.size();
       }
+
+
       size_type get_max_multiplicity() const {
+        size_type max_multiplicity = map.cbegin()->second.size();
+        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+          max_multiplicity = ::std::max(max_multiplicity, it->second.size());
+        }
         return max_multiplicity;
-      }
-      void update_max_multiplicity(size_type before, size_type after) {
-		  // after is larger, so set it whether we're inserting or deleting
-		  if (after >= max_multiplicity) {
-			  max_multiplicity = after;
-			  return;
-		  }
-
-		  // else after is smaller than max.  check if delete or insert
-		  if (before < max_multiplicity)  // delete or insert, but was not max.  return
-			  return;
-
-		  // delete and before was >= max, and after is less than max.  may have been max.
-		  // need a full check.
-		  max_multiplicity = map.cbegin()->second.size();
-    	  for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
-    		  max_multiplicity = ::std::max(max_multiplicity, it->second.size());
-    	  }
       }
 
       size_type get_min_multiplicity() const {
         size_type min_multiplicity = ::std::numeric_limits<size_type>::max();
         auto max = map.cend();
         for (auto it = map.cbegin(); it != max; ++it) {
-          min_multiplicity = ::std::min(min_multiplicity, it->second.size());
+          if (it->second.size() > 0)
+            min_multiplicity = ::std::min(min_multiplicity, it->second.size());
         }
         return min_multiplicity;
       }
+
       double get_mean_multiplicity() const {
         return static_cast<double>(s) / double(map.size());
       }
