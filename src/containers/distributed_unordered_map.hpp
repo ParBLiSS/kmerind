@@ -62,6 +62,7 @@
 
 #include "containers/distributed_map_base.hpp"
 #include "containers/unordered_vecmap.hpp"
+#include "containers/hashed_vecmap.hpp"
 
 #include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
@@ -84,6 +85,7 @@ namespace dsc  // distributed std container
 	using HashMapParams = ::dsc::DistributedMapParams<
 			Key, InputTrans, DistTrans, DistHash, DistEqual, StoreTrans, StoreHash, StoreEqual,
 			::fsc::TransformedHash, ::fsc::TransformedHash>;
+
 
 	// =================
 	// NOTE: when using this, need to further alias so that only Key param remains.
@@ -341,16 +343,21 @@ namespace dsc  // distributed std container
        */
       template <class InputIterator, class Predicate>
       size_t local_insert(InputIterator first, InputIterator last, Predicate const &pred) {
-          this->local_reserve(c.size() + ::std::distance(first, last));   // before branching, because reserve calls collective "empty()"
 
+          auto new_end = std::partition(first, last, pred);
+//
+//          this->local_reserve(c.size() + ::std::distance(first, last));   // before branching, because reserve calls collective "empty()"
+//
           if (first == last) return 0;
 
           size_t before = c.size();
 
-          for (auto it = first; it != last; ++it) {
-            if (pred(*it)) c.emplace(*it);
-          }
-
+          this->local_insert(first, new_end);
+//
+//          for (auto it = first; it != last; ++it) {
+//            if (pred(*it)) c.emplace(*it);
+//          }
+//
           if (c.size() != before) local_changed = true;
 
           return c.size() - before;
@@ -2830,8 +2837,6 @@ namespace dsc  // distributed std container
       }
 
 
-
-
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       virtual void local_reserve( size_t n) {
         if (!this->empty()) {// nothing is available.   so assume multiplicity of 1.
@@ -3041,7 +3046,6 @@ namespace dsc  // distributed std container
         return this->c.unique_size();
       }
   };
-
 
 
 } /* namespace dsc */

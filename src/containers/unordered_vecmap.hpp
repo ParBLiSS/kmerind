@@ -32,10 +32,14 @@
 #include <scoped_allocator>
 #include <algorithm>
 #include <cmath>   // ceil
+//#include "ext/pool_allocator.h"
 
 #include "utils/logging.h"
 
 namespace fsc {  // fast standard container
+
+template <typename T>
+using allocator = std::allocator<T>;
 
   /**
    * @brief my version of unordered map.  because std::unordered_map does chaining for collision using a LINKED LIST.
@@ -89,8 +93,8 @@ namespace fsc {  // fast standard container
   typename Hash = ::std::hash<Key>,
   typename Equal = ::std::equal_to<Key>,
   typename Allocator =
-      ::std::scoped_allocator_adaptor<::std::allocator<::std::pair<const Key, ::std::vector<T, ::std::allocator<T> > > >,
-       ::std::allocator<T> >
+      ::std::scoped_allocator_adaptor<::fsc::allocator<::std::pair<const Key, ::std::vector<T, ::fsc::allocator<T> > > >,
+       ::fsc::allocator<T> >
   >
   class unordered_compact_vecmap {
 
@@ -575,10 +579,10 @@ namespace fsc {  // fast standard container
       // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n)
       template <class InputIt>
       void insert(InputIt first, InputIt last) {
-    	  size_t after = 0;
+    	  //size_t after = 0;
           for (; first != last; ++first) {
             map[first->first].emplace_back(::std::forward<T>(first->second));
-            after = std::max(after, map[first->first].size());
+            //after = std::max(after, map[first->first].size());
           }
           s += std::distance(first, last);
       }
@@ -586,7 +590,7 @@ namespace fsc {  // fast standard container
       /// inserting sorted range
       template <class InputIt>
       void insert_sorted(InputIt first, InputIt last) {
-    	  size_t after = 0;
+    	  //size_t after = 0;
 
     	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
     	  key_equal eq;
@@ -609,7 +613,7 @@ namespace fsc {  // fast standard container
     				  [](InputValueType const & x){
     			  return x.second;
     		  });
-    		  after = std::max(after, map[start->first].size());
+    		  //after = std::max(after, map[start->first].size());
 
     		  // advance the pointers
     		  start = end;
@@ -627,7 +631,7 @@ namespace fsc {  // fast standard container
 				  [](InputValueType const & x){
 				return x.second;
 			  });
-    		  after = std::max(after, map[start->first].size());
+    		  //after = std::max(after, map[start->first].size());
 
     	  }
 
@@ -641,15 +645,21 @@ namespace fsc {  // fast standard container
 
     	  auto vec = iter->second;
     	  size_t before = vec.size();
+    	  size_t after = 0;
 
     	  auto new_end = ::std::remove_if(vec.begin(), vec.end(),
     			  [key, pred](mapped_type const & v){
     		  return pred(value_type(key, v));
     	  });
 
-    	  vec.erase(new_end, vec.end());
+        if (new_end != vec.begin()) {
+          vec.erase(new_end, vec.end());
 
-    	  size_t after = vec.size();
+          after = vec.size();
+        } else {
+          map.erase(iter);
+          after = 0;
+        }
 
           s -= (before - after);
     	  return before - after;
@@ -663,7 +673,7 @@ namespace fsc {  // fast standard container
 
     	  size_t c = iter->second.size();
     	  s -= c;
-    	  iter->second.clear();  // do not remove vector.  just clear it.
+    	  map.erase(iter);  // need to remove entry, else anything that uses the map.size or map.empty will not be correct.
           return c;
       }
 
@@ -771,12 +781,12 @@ namespace fsc {  // fast standard container
   typename T,
   typename Hash = ::std::hash<Key>,
   typename Equal = ::std::equal_to<Key>,
-  typename Allocator = ::std::allocator<::std::pair<Key, T> > >
+  typename Allocator = ::fsc::allocator<::std::pair<Key, T> > >
   class unordered_vecmap {
 
     protected:
-      using subcontainer_type = ::std::vector<::std::pair<Key, T>, Allocator >;
-      using superallocator_type = ::std::allocator<::std::pair<const Key, subcontainer_type > >;
+      using subcontainer_type = ::std::vector<::std::pair<Key, T>, ::std::allocator<::std::pair<Key, T> > >;
+      using superallocator_type = ::fsc::allocator<::std::pair<const Key, subcontainer_type > >;
       using supercontainer_type =
           ::std::unordered_map<Key, subcontainer_type, Hash, Equal, superallocator_type >;
 
@@ -1113,6 +1123,7 @@ namespace fsc {  // fast standard container
       };
 
 #if 0
+      // OLD.  inconsistent with new impl and may be incorrect.
       template<typename V>
       class concat_iter :
     public ::std::iterator<
@@ -1378,7 +1389,7 @@ namespace fsc {  // fast standard container
                          const Hash& hash = Hash(),
                          const Equal& equal = Equal(),
                          const Allocator& alloc = Allocator()) :
-                           map(bucket_count, hash, equal, alloc),
+                           map(bucket_count, hash, equal, superallocator_type()),
                            s(0UL) {};
 
       template<class InputIt>
@@ -1487,12 +1498,12 @@ namespace fsc {  // fast standard container
       // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n) but pays the random access and mem realloc cost
       template <class InputIt>
       void insert(InputIt first, InputIt last) {
-    	  size_t after = 0;
+    	  //size_t after = 0;
 
           for (; first != last; ++first) {
 
             map[first->first].emplace_back(::std::forward<value_type>(*first));
-            after = std::max(after, map[first->first].size());
+            //after = std::max(after, map[first->first].size());
           }
           s += std::distance(first, last);
       }
@@ -1500,7 +1511,7 @@ namespace fsc {  // fast standard container
       /// inserting sorted range
       template <class InputIt>
       void insert_sorted(InputIt first, InputIt last) {
-    	  size_t after = 0;
+    	  //size_t after = 0;
 
     	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
     	  key_equal eq;
@@ -1520,7 +1531,7 @@ namespace fsc {  // fast standard container
 
     		  // copy the range
     		  std::copy(start, end, std::back_inserter(map[start->first]));
-    		  after = std::max(after, map[start->first].size());
+    		  //after = std::max(after, map[start->first].size());
 
     		  // advance the pointers
     		  start = end;
@@ -1532,7 +1543,7 @@ namespace fsc {  // fast standard container
 			  // get current size.
 			  ss = map[start->first].size();
 			  map[start->first].reserve(ss + std::distance(start, end));
-    		  after = std::max(after, map[start->first].size());
+    		  //after = std::max(after, map[start->first].size());
 
 			  // copy the range
 			  std::copy(start, end, std::back_inserter(map[start->first]));
@@ -1548,11 +1559,16 @@ namespace fsc {  // fast standard container
 
     	  auto vec = iter->second;
     	  size_t before = vec.size();
-
+    	  size_t after;
     	  auto new_end = ::std::remove_if(vec.begin(), vec.end(), pred);
-    	  vec.erase(new_end, vec.end());
+    	  if (new_end != vec.begin()) {
+    	    vec.erase(new_end, vec.end());
 
-    	  size_t after = vec.size();
+    	    after = vec.size();
+    	  } else {
+    	    map.erase(iter);
+    	    after = 0;
+    	  }
 
           s -= (before - after);
     	  return before - after;
@@ -1564,7 +1580,7 @@ namespace fsc {  // fast standard container
 
     	  size_t c = iter->second.size();
         s -= c;
-        iter->second.clear();    // do not dealloc vector.  just clear it.
+        map.erase(iter);    // need to remove entry, (can't just clear vector) because we rely on map.size()
 
         return c;
       }

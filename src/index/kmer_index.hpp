@@ -71,6 +71,7 @@
 #include "common/kmer_transform.hpp"
 
 #include "io/mxx_support.hpp"
+#include "containers/distributed_hashed_vec.hpp"
 #include "containers/distributed_unordered_map.hpp"
 #include "containers/distributed_sorted_map.hpp"
 #include "containers/distributed_map.hpp"
@@ -1372,6 +1373,7 @@ using BimoleculeHashMapParams = ::dsc::HashMapParams<
 		    StoreHash,
 		    ::std::equal_to
 		  >;
+
 template <typename Key,
 			template <typename> class DistHash = DistHashFarm,
 			template <typename> class StoreLess = ::std::less,

@@ -94,7 +94,9 @@ function(add_hashmap_target file prefix parser dna k store map index disttrans d
 
 endfunction(add_hashmap_target)
 
-
+foreach(store SINGLE CANONICAL BIMOLECULE)
+	add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
+endforeach(store)
 
 #================= 36 + 12 targets
 # vary alphabet, which affects kmer transformations and has impact on type of backend containers.

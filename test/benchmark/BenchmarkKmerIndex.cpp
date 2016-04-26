@@ -87,7 +87,8 @@
 #define ORDERED 42
 #define VEC 43
 #define COMPACTVEC 44
-#define UNORDERED 45
+#define HASHEDVEC 45
+#define UNORDERED 46
 
 #define SINGLE 51
 #define CANONICAL 52
@@ -237,36 +238,38 @@ using CountType = uint32_t;
 
 
 #else  // hashmap
-	// choose a MapParam based on type of map and kmer model (canonical, original, bimolecule)
-	#if (pKmerStore == SINGLE)  // single stranded
-		template <typename Key>
-		using MapParams = ::bliss::index::kmer::SingleStrandHashMapParams<Key, DistHash, StoreHash, DistTrans>;
-	#elif (pKmerStore == CANONICAL)
-		template <typename Key>
-		using MapParams = ::bliss::index::kmer::CanonicalHashMapParams<Key, DistHash, StoreHash>;
-	#elif (pKmerStore == BIMOLECULE)  // bimolecule
-		template <typename Key>
-		using MapParams = ::bliss::index::kmer::BimoleculeHashMapParams<Key, DistHash, StoreHash>;
-	#endif
+  // choose a MapParam based on type of map and kmer model (canonical, original, bimolecule)
+  #if (pKmerStore == SINGLE)  // single stranded
+    template <typename Key>
+    using MapParams = ::bliss::index::kmer::SingleStrandHashMapParams<Key, DistHash, StoreHash, DistTrans>;
+  #elif (pKmerStore == CANONICAL)
+    template <typename Key>
+    using MapParams = ::bliss::index::kmer::CanonicalHashMapParams<Key, DistHash, StoreHash>;
+  #elif (pKmerStore == BIMOLECULE)  // bimolecule
+    template <typename Key>
+    using MapParams = ::bliss::index::kmer::BimoleculeHashMapParams<Key, DistHash, StoreHash>;
+  #endif
 
-	// DEFINE THE MAP TYPE base on the type of data to be stored.
-	#if (pINDEX == POS) || (pINDEX == POSQUAL)  // multimap
-		#if (pMAP == VEC)
-			using MapType = ::dsc::unordered_multimap_vec<
-				  KmerType, ValType, MapParams>;
+  // DEFINE THE MAP TYPE base on the type of data to be stored.
+  #if (pINDEX == POS) || (pINDEX == POSQUAL)  // multimap
+    #if (pMAP == VEC)
+      using MapType = ::dsc::unordered_multimap_vec<
+          KmerType, ValType, MapParams>;
 
-		#elif (pMAP == UNORDERED)
-			using MapType = ::dsc::unordered_multimap<
-				  KmerType, ValType, MapParams>;
-		#elif (pMAP == COMPACTVEC)
-			using MapType = ::dsc::unordered_multimap_compact_vec<
-					KmerType, ValType, MapParams>;
-		#endif
-	#elif (pINDEX == COUNT)  // map
-		using MapType = ::dsc::counting_unordered_map<
-				KmerType, ValType, MapParams>;
-	#endif
-
+    #elif (pMAP == UNORDERED)
+      using MapType = ::dsc::unordered_multimap<
+          KmerType, ValType, MapParams>;
+    #elif (pMAP == COMPACTVEC)
+      using MapType = ::dsc::unordered_multimap_compact_vec<
+          KmerType, ValType, MapParams>;
+    #elif (pMAP == HASHEDVEC)
+      using MapType = ::dsc::unordered_multimap_hashvec<
+          KmerType, ValType, MapParams>;
+    #endif
+  #elif (pINDEX == COUNT)  // map
+    using MapType = ::dsc::counting_unordered_map<
+        KmerType, ValType, MapParams>;
+  #endif
 
 
 #endif
