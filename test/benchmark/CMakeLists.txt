@@ -379,3 +379,10 @@ endif()
 
 endif()
 
+
+# EXECUTABLES
+include_directories("${EXT_PROJECTS_DIR}/sparsehash/src")
+include_directories("${EXT_PROJECTS_DIR}/judy-1.0.5/src")
+include_directories("${EXT_PROJECTS_DIR}/tommyds")
+add_executable(benchmark_hashtables BenchmarkHashTables.cpp)
+target_link_libraries(benchmark_hashtables ${EXTRA_LIBS})

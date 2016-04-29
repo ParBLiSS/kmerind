@@ -1124,7 +1124,9 @@ namespace bliss
       }
     }
   
-  
+    KMER_INLINE void sanitize() {
+      do_sanitize();
+    }
   
   protected:
   

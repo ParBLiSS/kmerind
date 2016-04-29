@@ -91,6 +91,7 @@ using allocator = std::allocator<T>;
   template <typename Key,
   typename T,
   typename Hash = ::std::hash<Key>,
+  typename Comparator = ::std::less<Key>,
   typename Equal = ::std::equal_to<Key>,
   typename Allocator =
       ::std::scoped_allocator_adaptor<::fsc::allocator<::std::pair<const Key, ::std::vector<T, ::fsc::allocator<T> > > >,
@@ -99,6 +100,24 @@ using allocator = std::allocator<T>;
   class unordered_compact_vecmap {
 
     protected:
+      struct Less {
+        Comparator l;
+
+        inline bool operator()(Key const &x, Key const &y ) {
+          return l(x, y);
+        }
+
+        template <typename V>
+        inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) {
+          return l(x.first, y.first);
+        }
+        template <typename V>
+        inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) {
+          return l(x.first, y.first);
+        }
+      };
+
+
       using subcontainer_type = ::std::vector<T, ::std::allocator<T> >;
       using supercontainer_type =
           ::std::unordered_map<Key, subcontainer_type, Hash, Equal, Allocator >;
@@ -587,56 +606,96 @@ using allocator = std::allocator<T>;
           s += std::distance(first, last);
       }
 
-      /// inserting sorted range
+
       template <class InputIt>
       void insert_sorted(InputIt first, InputIt last) {
-    	  //size_t after = 0;
+          size_t ss = std::distance(first, last);
 
-    	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
-    	  key_equal eq;
-    	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
-    	    return !(eq(x.first, y.first));
-    	  };
+          if (ss == 0) return;
 
-    	  size_t ss;
-    	  InputIt start = first;
-    	  InputIt end = ::std::adjacent_find(start, last, key_neq);
-    	  if (end != last) ++end;
+          map.reserve(map.size() + ss);
 
-    	  while (end != last) {
-    		  // get current size.
-    		  ss = map[start->first].size();
-    		  map[start->first].reserve(ss + std::distance(start, end));
+          Less less;
+          std::sort(first, last, less);
 
-    		  // copy the range
-    		  std::transform(start, end, std::back_inserter(map[start->first]),
-    				  [](InputValueType const & x){
-    			  return x.second;
-    		  });
-    		  //after = std::max(after, map[start->first].size());
+          using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
 
-    		  // advance the pointers
-    		  start = end;
-    		  end = ::std::adjacent_find(start, last, key_neq);
-    		  if (end != last) ++end;
-    	  }
-    	  // can have end at last, because start is at last-1.  need to copy the last part.,
-    	  if (start != last) {
-				// end is at last.
-			  ss = map[start->first].size();
-			  map[start->first].reserve(ss + std::distance(start, end));
+          InputIt start = first;
+          auto key = start->first;
+          for (auto it = start, max = last; it != max;) {
+            start = it;
+            key = start->first;
 
-			  // copy the range
-			  std::transform(start, end, std::back_inserter(map[start->first]),
-				  [](InputValueType const & x){
-				return x.second;
-			  });
-    		  //after = std::max(after, map[start->first].size());
+            // find the last of the entries with same key
+            it = std::adjacent_find(it, max, less);
 
-    	  }
+            if (it != max) {
+              // not last entry, so advance 1.
+              ++it;
+            }
 
-    	  s += std::distance(first, last);
+            ss = std::distance(start, it);
+            map[key].reserve(map[key].size() + ss);
+            std::transform(start, it, std::back_inserter(map[key]),
+                 [](InputValueType const & x){
+                    return x.second;
+                    });
+
+            s += ss;
+          }
       }
+
+//
+//      /// inserting sorted range
+//      template <class InputIt>
+//      void insert_sorted(InputIt first, InputIt last) {
+//    	  //size_t after = 0;
+//
+//    	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
+//    	  key_equal eq;
+//    	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
+//    	    return !(eq(x.first, y.first));
+//    	  };
+//
+//    	  size_t ss;
+//    	  InputIt start = first;
+//    	  InputIt end = ::std::adjacent_find(start, last, key_neq);
+//    	  if (end != last) ++end;
+//
+//    	  while (end != last) {
+//    		  // get current size.
+//    		  ss = map[start->first].size();
+//    		  map[start->first].reserve(ss + std::distance(start, end));
+//
+//    		  // copy the range
+//    		  std::transform(start, end, std::back_inserter(map[start->first]),
+//    				  [](InputValueType const & x){
+//    			  return x.second;
+//    		  });
+//    		  //after = std::max(after, map[start->first].size());
+//
+//    		  // advance the pointers
+//    		  start = end;
+//    		  end = ::std::adjacent_find(start, last, key_neq);
+//    		  if (end != last) ++end;
+//    	  }
+//    	  // can have end at last, because start is at last-1.  need to copy the last part.,
+//    	  if (start != last) {
+//				// end is at last.
+//			  ss = map[start->first].size();
+//			  map[start->first].reserve(ss + std::distance(start, end));
+//
+//			  // copy the range
+//			  std::transform(start, end, std::back_inserter(map[start->first]),
+//				  [](InputValueType const & x){
+//				return x.second;
+//			  });
+//    		  //after = std::max(after, map[start->first].size());
+//
+//    	  }
+//
+//    	  s += std::distance(first, last);
+//      }
 
       template <typename Pred>
       size_t erase(const key_type& key, Pred const & pred) {
@@ -780,11 +839,30 @@ using allocator = std::allocator<T>;
   template <typename Key,
   typename T,
   typename Hash = ::std::hash<Key>,
+  typename Comparator = ::std::less<Key>,
   typename Equal = ::std::equal_to<Key>,
   typename Allocator = ::fsc::allocator<::std::pair<Key, T> > >
   class unordered_vecmap {
 
     protected:
+      struct Less {
+        Comparator l;
+
+        inline bool operator()(Key const &x, Key const &y ) {
+          return l(x, y);
+        }
+
+        template <typename V>
+        inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) {
+          return l(x.first, y.first);
+        }
+        template <typename V>
+        inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) {
+          return l(x.first, y.first);
+        }
+      };
+
+
       using subcontainer_type = ::std::vector<::std::pair<Key, T>, ::std::allocator<::std::pair<Key, T> > >;
       using superallocator_type = ::fsc::allocator<::std::pair<const Key, subcontainer_type > >;
       using supercontainer_type =
@@ -1499,58 +1577,51 @@ using allocator = std::allocator<T>;
       template <class InputIt>
       void insert(InputIt first, InputIt last) {
     	  //size_t after = 0;
-
+        //  size_t count = 0;
           for (; first != last; ++first) {
 
             map[first->first].emplace_back(::std::forward<value_type>(*first));
+
+            //++count;
             //after = std::max(after, map[first->first].size());
           }
           s += std::distance(first, last);
+          //s += count;
       }
 
-      /// inserting sorted range
       template <class InputIt>
       void insert_sorted(InputIt first, InputIt last) {
-    	  //size_t after = 0;
+          size_t ss = std::distance(first, last);
 
-    	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
-    	  key_equal eq;
-    	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
-    		return !(eq(x.first, y.first));
-    	  };
+          if (ss == 0) return;
 
-    	  size_t ss;
-    	  InputIt start = first;
-    	  InputIt end = ::std::adjacent_find(start, last, key_neq);
-    	  if (end != last) ++end;
+          map.reserve(map.size() + ss);
 
-    	  while (end != last) {
-    		  // get current size.
-    		  ss = map[start->first].size();
-    		  map[start->first].reserve(ss + std::distance(start, end));
+          Less less;
+          std::sort(first, last, less);
 
-    		  // copy the range
-    		  std::copy(start, end, std::back_inserter(map[start->first]));
-    		  //after = std::max(after, map[start->first].size());
+          InputIt start = first;
+          auto key = start->first;
+          for (auto it = start, max = last; it != max;) {
+            start = it;
+            key = start->first;
 
-    		  // advance the pointers
-    		  start = end;
-    		  end = ::std::adjacent_find(start, last, key_neq);
-    		  if (end != last) ++end;
-    	  }
-    	  // can have end at last, because start is at last-1.  need to copy the last part.,
-    	  if (start != last) {
-			  // get current size.
-			  ss = map[start->first].size();
-			  map[start->first].reserve(ss + std::distance(start, end));
-    		  //after = std::max(after, map[start->first].size());
+            // find the last of the entries with same key
+            it = std::adjacent_find(it, max, less);
 
-			  // copy the range
-			  std::copy(start, end, std::back_inserter(map[start->first]));
-    	  }
+            if (it != max) {
+              // not last entry, so advance 1.
+              ++it;
+            }
 
-    	  s += std::distance(first, last);
+            ss = std::distance(start, it);
+            map[key].reserve(map[key].size() + ss);
+            std::copy(start, it, std::back_inserter(map[key]));
+
+            s += ss;
+          }
       }
+
 
       template <typename Pred>
       size_t erase(const key_type& key, Pred const & pred) {

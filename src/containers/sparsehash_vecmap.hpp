@@ -15,17 +15,17 @@
  */
 
 /**
- * @file    hashed_vecmap.hpp
+ * @file    sparsehash_vecmap.hpp
  * @ingroup
  * @author  tpan
  * @brief
  * @details
  *
  */
-#ifndef SRC_WIP_HASHED_VECMAP_HPP_
-#define SRC_WIP_HASHED_VECMAP_HPP_
+#ifndef SRC_WIP_SPARSEHASH_VECMAP_HPP_
+#define SRC_WIP_SPARSEHASH_VECMAP_HPP_
 
-#include <unordered_map>
+#include <sparsehash/dense_hash_map>
 #include <vector>
 #include <functional>  // hash, equal_to, etc
 #include <tuple>   // pair
@@ -104,7 +104,7 @@ namespace fsc {  // fast standard container
   typename Comparator = ::std::less<Key>,
   typename Equal = ::std::equal_to<Key>,
   typename Allocator = ::std::allocator<::std::pair<Key, T> > >
-  class hashed_vecmap {
+  class sparsehash_vecmap {
 
     protected:
       struct Less {
@@ -136,8 +136,12 @@ namespace fsc {  // fast standard container
 
       using superallocator_type = ::std::allocator<::std::pair<const Key, value_range_type > >;
       using supercontainer_type =
-          ::std::unordered_map<Key, value_range_type,
+          ::google::dense_hash_map<Key, value_range_type,
                          Hash, Equal, superallocator_type >;
+
+      subcontainer_type vec;
+      supercontainer_type map;
+      size_t s;
 
 
       // use of vector - increased cost during construction but query will be fast.
@@ -148,13 +152,13 @@ namespace fsc {  // fast standard container
         return std::distance(iters.first, iters.second);
       }
       inline size_t dist(Key const & k) const {
-        return dist(map.at(k));
+        return dist(map.find(k));
       }
-      inline size_t dist(typename supercontainer_type::iterator map_iter) const {
-        return dist(map_iter->second);
+      inline size_t dist(typename supercontainer_type::iterator map_iter) {
+        return (map_iter == map.end()) ? 0 : dist(map_iter->second);
       }
       inline size_t dist(typename supercontainer_type::const_iterator map_iter) const {
-        return dist(map_iter->second);
+        return (map_iter == map.end()) ? 0 : dist(map_iter->second);
       }
 
       /**
@@ -182,8 +186,8 @@ namespace fsc {  // fast standard container
         public:
           template <typename KK, typename TT, typename HH, typename EE, typename AA, typename OutputIterator>
           OutputIterator
-          copy(typename ::fsc::hashed_vecmap<KK, TT, HH, EE, AA>::template concat_iter<V> first,
-               typename ::fsc::hashed_vecmap<KK, TT, HH, EE, AA>::template concat_iter<V> last, OutputIterator result);
+          copy(typename ::fsc::sparsehash_vecmap<KK, TT, HH, EE, AA>::template concat_iter<V> first,
+               typename ::fsc::sparsehash_vecmap<KK, TT, HH, EE, AA>::template concat_iter<V> last, OutputIterator result);
 
 
         protected:
@@ -333,7 +337,7 @@ namespace fsc {  // fast standard container
           type& operator+=(difference_type n)
           {
             // ::std::advance will use this or the ++ operator.
-            if (n < 0) throw ::std::logic_error("::fsc::hashed_vecmap::iterator does not support decrement.");
+            if (n < 0) throw ::std::logic_error("::fsc::sparsehash_vecmap::iterator does not support decrement.");
             if (n == 0) return *this;  // nothing to add.
             if (at_max) return *this;  // iterator at the end.
 
@@ -458,14 +462,10 @@ namespace fsc {  // fast standard container
 
 
 
-      subcontainer_type vec;
-      supercontainer_type map;
-      size_t s;
-
       /// compact the vector after disjoint entries are deleted.
       void compact() {
         if (vec.size() == 0 || map.size() == 0) {
-          map.clear();
+          map.clear_no_resize();
           vec.clear();
           return;
         }
@@ -501,7 +501,7 @@ namespace fsc {  // fast standard container
       /// compact the vector after disjoint entries are deleted.  ASSUMPTION: all entries with same key are contiguous in memory, and map points to a subrange of each of these ranges.
       void inplace_compact() {
         if (vec.size() == 0 || map.size() == 0) {
-            map.clear();
+            map.clear_no_resize();
             vec.clear();
             return;
           }
@@ -558,12 +558,12 @@ namespace fsc {  // fast standard container
 
       /// rehash to rebuild the hashmap index.
       void rebuild() {
-        map.clear();
+        map.clear_no_resize();
         s = 0UL;
 
         if (vec.size() == 0) return;
 
-        map.reserve(vec.size());
+        map.resize(map.size() + vec.size());
         Less less;
 
         auto first = vec.begin();
@@ -579,7 +579,7 @@ namespace fsc {  // fast standard container
             // not last entry, so advance 1.
             ++it;
           }
-          map.emplace(std::move(key), std::move(std::make_pair(first, it)));
+          map.insert(::std::make_pair(std::move(key), std::move(std::make_pair(first, it) ) ) );
           s += std::distance(first, it);
 
         }
@@ -612,17 +612,20 @@ namespace fsc {  // fast standard container
 
 
       //  if multiplicity of dataset is kind of known, can initialize data to that to avoid growing vector on average.
-      hashed_vecmap(size_type load_factor = 1,
+      sparsehash_vecmap(Key empty_key, Key deleted_key,
                    size_type bucket_count = 128,
                          const Hash& hash = Hash(),
                          const Less& less = Less(),
                          const Equal& equal = Equal(),
                          const Allocator& alloc = Allocator()) :
-                           map(bucket_count, hash, equal, alloc), s(0UL) {};
+                           map(bucket_count, hash, equal, alloc), s(0UL) {
+        map.set_empty_key(empty_key);
+        map.set_deleted_key(deleted_key);
+      };
 
       template<class InputIt>
-      hashed_vecmap(InputIt first, InputIt last,
-                         size_type load_factor = 1,
+      sparsehash_vecmap(InputIt first, InputIt last,
+                        Key empty_key, Key deleted_key,
                          size_type bucket_count = 128,
                          const Hash& hash = Hash(),
                          const Less& less = Less(),
@@ -630,13 +633,15 @@ namespace fsc {  // fast standard container
                          const Allocator& alloc = Allocator()) :
                          vec(first, last),
                          map(vec.size(), hash, equal, alloc), s(0UL) {
+          map.set_empty_key(empty_key);
+          map.set_deleted_key(deleted_key);
 
           std::sort(vec.begin(), vec.end(), less);
 
           this->rebuild();
       };
 
-      virtual ~hashed_vecmap() {};
+      virtual ~sparsehash_vecmap() {};
 
 
 
@@ -647,7 +652,7 @@ namespace fsc {  // fast standard container
         return cbegin();
       }
       const_iterator cbegin() const {
-        return const_iterator(map.cbegin(), map.cend(), map.cbegin()->second.first, 0);
+        return const_iterator(map.begin(), map.end(), map.begin()->second.first, 0);
       }
 
 
@@ -659,7 +664,7 @@ namespace fsc {  // fast standard container
         return cend();
       }
       const_iterator cend() const {
-        return const_iterator(map.cend());
+        return const_iterator(map.end());
       }
 
       bool empty() const {
@@ -835,8 +840,8 @@ namespace fsc {  // fast standard container
 
       size_type get_max_multiplicity() const {
         size_type max_multiplicity = 0;
-        auto max = map.cend();
-        for (auto it = map.cbegin(); it != max; ++it) {
+        auto max = map.end();
+        for (auto it = map.begin(); it != max; ++it) {
           max_multiplicity = ::std::max(max_multiplicity, dist(it));
         }
         return max_multiplicity;
@@ -844,9 +849,9 @@ namespace fsc {  // fast standard container
 
       size_type get_min_multiplicity() const {
         size_type min_multiplicity = ::std::numeric_limits<size_type>::max();
-        auto max = map.cend();
+        auto max = map.end();
         size_type ss = 0;
-        for (auto it = map.cbegin(); it != max; ++it) {
+        for (auto it = map.begin(); it != max; ++it) {
           ss = dist(it);
           if (ss > 0)
             min_multiplicity = ::std::min(min_multiplicity, ss);
@@ -859,9 +864,9 @@ namespace fsc {  // fast standard container
       }
       double get_stdev_multiplicity() const {
         double stdev_multiplicity = 0;
-        auto max = map.cend();
+        auto max = map.end();
         double key_s;
-        for (auto it = map.cbegin(); it != max; ++it) {
+        for (auto it = map.begin(); it != max; ++it) {
           key_s = dist(it);
           stdev_multiplicity += (key_s * key_s);
         }
@@ -897,10 +902,10 @@ namespace fsc {  // fast standard container
       ::std::pair<const_iterator, const_iterator> equal_range(Key const & key) const {
         auto iter = map.find(key);
 
-        if (iter == map.cend()) return ::std::make_pair(const_iterator(map.cend()), const_iterator(map.cend()));
+        if (iter == map.end()) return ::std::make_pair(const_iterator(map.end()), const_iterator(map.end()));
 
-        return ::std::make_pair(const_iterator(iter, map.cend(), iter->second.first, 0),
-                                const_iterator(iter, map.cend(), iter->second.second, dist(iter->second)));
+        return ::std::make_pair(const_iterator(iter, map.end(), iter->second.first, 0),
+                                const_iterator(iter, map.end(), iter->second.second, dist(iter->second)));
 
       }
       // NO bucket interfaces
@@ -915,8 +920,8 @@ namespace std {
 
   template <typename Key, typename T, typename Hash, typename Equal, typename Allocator, typename OutputIterator>
   OutputIterator
-  copy(typename ::fsc::hashed_vecmap<Key, T, Hash, Equal, Allocator>::iterator first,
-       typename ::fsc::hashed_vecmap<Key, T, Hash, Equal, Allocator>::iterator last, OutputIterator result) {
+  copy(typename ::fsc::sparsehash_vecmap<Key, T, Hash, Equal, Allocator>::iterator first,
+       typename ::fsc::sparsehash_vecmap<Key, T, Hash, Equal, Allocator>::iterator last, OutputIterator result) {
 
     // can last be reach from first?
     if ((last - first) <= 0) return result;
@@ -944,8 +949,8 @@ namespace std {
 
   template <typename Key, typename T, typename Hash, typename Equal, typename Allocator, typename OutputIterator>
   OutputIterator
-  copy(typename ::fsc::hashed_vecmap<Key, T, Hash, Equal, Allocator>::const_iterator first,
-       typename ::fsc::hashed_vecmap<Key, T, Hash, Equal, Allocator>::const_iterator last, OutputIterator result) {
+  copy(typename ::fsc::sparsehash_vecmap<Key, T, Hash, Equal, Allocator>::const_iterator first,
+       typename ::fsc::sparsehash_vecmap<Key, T, Hash, Equal, Allocator>::const_iterator last, OutputIterator result) {
 
     // can last be reach from first?
     if ((last - first) <= 0) return result;
@@ -977,4 +982,4 @@ namespace std {
 
 
 
-#endif /* SRC_WIP_HASHED_VECMAP_HPP_ */
+#endif /* SRC_WIP_SPARSEHASH_VECMAP_HPP_ */
