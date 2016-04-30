@@ -14,7 +14,6 @@
 #include <tommyds/tommytrie.h>
 #include <tommyds/tommytrie.c>
 
-#include <Judy.h>
 
 #include "containers/unordered_vecmap.hpp"
 #include "containers/hashed_vecmap.hpp"
