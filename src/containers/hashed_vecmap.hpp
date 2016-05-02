@@ -144,17 +144,17 @@ namespace fsc {  // fast standard container
       // group all entries with the same key with vector - list chaing but already sorted.
       // group all entries with same hash with vector - list chaining but with randomly accessible container.
 
-      inline size_t dist(value_range_type const & iters) const {
+      inline size_t distance(value_range_type const & iters) const {
         return std::distance(iters.first, iters.second);
       }
-      inline size_t dist(Key const & k) const {
-        return dist(map.at(k));
+      inline size_t distance(Key const & k) const {
+        return distance(map.at(k));
       }
-      inline size_t dist(typename supercontainer_type::iterator map_iter) const {
-        return dist(map_iter->second);
+      inline size_t distance(typename supercontainer_type::iterator map_iter) const {
+        return distance(map_iter->second);
       }
-      inline size_t dist(typename supercontainer_type::const_iterator map_iter) const {
-        return dist(map_iter->second);
+      inline size_t distance(typename supercontainer_type::const_iterator map_iter) const {
+        return distance(map_iter->second);
       }
 
       /**
@@ -173,7 +173,7 @@ namespace fsc {  // fast standard container
         protected:
           using subiterator_type = typename ::std::conditional<::std::is_const<V>::value,
               typename subcontainer_type::const_iterator, typename subcontainer_type::iterator>::type;
-          using superiterator_type = typename ::std::conditional<::std::is_const<V>::value,
+    	  using superiterator_type = typename ::std::conditional<::std::is_const<V>::value,
               typename supercontainer_type::const_iterator, typename supercontainer_type::iterator>::type;
           using type = concat_iter<V>;
 
@@ -218,6 +218,7 @@ namespace fsc {  // fast standard container
             }
           }
 
+
         public:
           using difference_type = typename ::std::iterator_traits<subiterator_type>::difference_type;
 
@@ -235,7 +236,8 @@ namespace fsc {  // fast standard container
           /// constructor for start concatenating iterator.  general version with checking that _pos belongs to _iter subcontainer via distance check.
           concat_iter(superiterator_type _iter, superiterator_type _end, subiterator_type _pos, difference_type distance_check) :
             concat_iter<V>(_iter, _end, _pos) {
-            if (!at_max && (distance_check != ::std::distance(_iter->second.first, _pos) ) )
+        	  subiterator_type temp = _iter->second.first;
+            if (!at_max && (distance_check != ::std::distance(temp, _pos) ) )
               throw std::logic_error("unordered_compact_vecmap constructor failing distance check, suggesting that _pos is not from same subcontainer as what _iter points to");
             ensure_dereferenceable();
           };
@@ -340,14 +342,15 @@ namespace fsc {  // fast standard container
             auto orig_iter = curr_iter;
 
             // dereferenceable right now
-            auto curr_dist = ::std::distance(curr_pos, curr_iter->second.second);
+            subiterator_type temp = curr_iter->second.second;
+            auto curr_dist = ::std::distance(curr_pos, temp);
             while (n >= curr_dist) {
               // not at end, and n is larger than curr dist, so go to next subcontainer.
               n -= curr_dist;  // consume some entries
               ++curr_iter;     // go to next container.
               at_max = (curr_iter == max_iter);
               if (at_max) return *this;  // if we are at end right now, then we can just return.
-              else curr_dist = dist(curr_iter);    // see how much the next container has.
+              else curr_dist = ::std::distance(curr_iter->second.first, curr_iter->second.second);    // see how much the next container has.
 
             }  // when exiting here, we are at a subcontainer that has more entries than n.  n could be 0.
 
@@ -410,14 +413,15 @@ namespace fsc {  // fast standard container
             auto cit = first.curr_iter;
 
             // init distance.  only meaningful here when first and last are not on same subcontainer.
-            auto dist = std::distance(first.curr_pos, cit->second.second);
+            subiterator_type temp = cit->second.second;
+            auto dist = std::distance(first.curr_pos, temp);
 
             // walk until either we are in same subcontainer, or at end of first iterator.
             while (cit != last.curr_iter) {
               n += dist;  //
               ++cit;
               if (cit == first.max_iter) break;
-              else dist = dist(cit->second);
+              else dist = ::std::distance(cit->second.first, cit->second.second);
             }
 
             // at this point, we have cit == last.curr_iter, or cit == eit (cit == eit == last_curr_iter possible)
@@ -431,7 +435,8 @@ namespace fsc {  // fast standard container
             // need to recalculate dist now.  first move cpos
 
             // recalc distance. if cit hasn't moved, use original.  else use beginning of current subcontainer.
-            dist = std::distance(((cit == first.curr_iter) ? first.curr_pos : cit->second.first), last.curr_pos);
+            temp = cit->second.first;
+            dist = std::distance(((cit == first.curr_iter) ? first.curr_pos : temp), last.curr_pos);
             // if dist is negative, then last.curr_pos is before cpos.  not reachable.
             // else add the distance to running total.
             return ((dist < 0) ? ::std::numeric_limits<difference_type>::lowest() : (n + dist));
@@ -524,10 +529,10 @@ namespace fsc {  // fast standard container
 
 
           // if in map, then compact
-          if ((map_it != map.end()) && (dist(map_it) > 0)) {
+          if ((map_it != map.end()) && (distance(map_it) > 0)) {
 
               it = map_it->second.first;  // use original range to jump past stuff.
-              std::advance(it, dist(map_it) - 1);
+              std::advance(it, distance(map_it) - 1);
               it = std::adjacent_find(it, max, less);
 
               // in map.  we copy over the entries to keep.  advances the target it
@@ -754,7 +759,7 @@ namespace fsc {  // fast standard container
 //        bool erased = false;
 
         // mark for erasure
-        auto middle = first->second.first;
+        auto middle = map.begin()->second.first;
         for (; first != last; ++first) {
           auto iter = map.find(*(first));
           if (iter == map.end()) continue;
@@ -764,7 +769,7 @@ namespace fsc {  // fast standard container
           count += std::distance(iter->second.first, middle);
           iter->second.first = middle;
 
-          if (dist(iter) == 0) map.erase(iter);
+          if (distance(iter) == 0) map.erase(iter);
 //          erased = true;
         }
 //        if (erased) this->inplace_compact();
@@ -789,7 +794,7 @@ namespace fsc {  // fast standard container
           auto iter = map.find(*first);
           if (iter == map.end()) continue;
 
-          count += dist(iter);
+          count += distance(iter);
           //iter->second.first = iter->second.second;
           map.erase(iter);
 
@@ -820,7 +825,7 @@ namespace fsc {  // fast standard container
 
       size_type count(Key const & key) const {
         if (map.find(key) == map.end()) return 0;
-        else return dist(key);
+        else return distance(key);
       }
 
 
@@ -837,7 +842,7 @@ namespace fsc {  // fast standard container
         size_type max_multiplicity = 0;
         auto max = map.cend();
         for (auto it = map.cbegin(); it != max; ++it) {
-          max_multiplicity = ::std::max(max_multiplicity, dist(it));
+          max_multiplicity = ::std::max(max_multiplicity, distance(it));
         }
         return max_multiplicity;
       }
@@ -847,7 +852,7 @@ namespace fsc {  // fast standard container
         auto max = map.cend();
         size_type ss = 0;
         for (auto it = map.cbegin(); it != max; ++it) {
-          ss = dist(it);
+          ss = distance(it);
           if (ss > 0)
             min_multiplicity = ::std::min(min_multiplicity, ss);
         }
@@ -862,7 +867,7 @@ namespace fsc {  // fast standard container
         auto max = map.cend();
         double key_s;
         for (auto it = map.cbegin(); it != max; ++it) {
-          key_s = dist(it);
+          key_s = distance(it);
           stdev_multiplicity += (key_s * key_s);
         }
         return stdev_multiplicity / double(map.size()) - get_mean_multiplicity();
@@ -892,7 +897,7 @@ namespace fsc {  // fast standard container
         if (iter == map.end()) return ::std::make_pair(iterator(map.end()), iterator(map.end()));
 
         return ::std::make_pair(iterator(iter, map.end(), iter->second.first, 0),
-                                iterator(iter, map.end(), iter->second.second, dist(iter->second)));
+                                iterator(iter, map.end(), iter->second.second, distance(iter->second)));
       }
       ::std::pair<const_iterator, const_iterator> equal_range(Key const & key) const {
         auto iter = map.find(key);
@@ -900,7 +905,7 @@ namespace fsc {  // fast standard container
         if (iter == map.cend()) return ::std::make_pair(const_iterator(map.cend()), const_iterator(map.cend()));
 
         return ::std::make_pair(const_iterator(iter, map.cend(), iter->second.first, 0),
-                                const_iterator(iter, map.cend(), iter->second.second, dist(iter->second)));
+                                const_iterator(iter, map.cend(), iter->second.second, distance(iter->second)));
 
       }
       // NO bucket interfaces

@@ -60,6 +60,7 @@
 #include <mxx/algos.hpp> // for bucketing
 
 #include "containers/distributed_map_base.hpp"
+#include "containers/unordered_vecmap.hpp"
 #include "containers/hashed_vecmap.hpp"
 
 #include "utils/benchmark_utils.hpp"  // for timing.
@@ -129,9 +130,9 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  template <typename, typename, typename, typename, typename...> class Container,
-  template <typename> class MapParams,
-  class Alloc = ::std::allocator< ::std::pair<const Key, T> >
+    template <typename, typename, typename, typename, typename...> class Container,
+    template <typename> class MapParams,
+    class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class hashed_vec_base :
 		  public ::dsc::map_base<Key, T, MapParams, Alloc> {
@@ -1555,13 +1556,11 @@ namespace dsc  // distributed std container
             // add the output entry.
             size_t count = 0;
 
-            typename std::iterator_traits<decltype(range.first)>::value_type w;
-
             if (pred(range.first, range.second)) {
               for (auto it2 = range.first; it2 != range.second; ++it2) {
-                w = *it2;
-                if (pred(w)) {
-                  *output = w;
+
+                if (pred(*it2)) {
+                  *output = *it2;
                   ++output;
                   ++count;
                 }
@@ -1874,7 +1873,7 @@ namespace dsc  // distributed std container
   template <typename> class MapParams,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class unordered_multimap_vec : public hashed_vec_basee<Key, T, ::fsc::unordered_vecmap, MapParams, Alloc> {
+  class unordered_multimap_vec : public hashed_vec_base<Key, T, ::fsc::unordered_vecmap, MapParams, Alloc> {
 
     protected:
       using Base = hashed_vec_base<Key, T, ::fsc::unordered_vecmap, MapParams, Alloc>;
