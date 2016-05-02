@@ -89,6 +89,7 @@
 #define COMPACTVEC 44
 #define HASHEDVEC 45
 #define UNORDERED 46
+#define DENSEHASH 47
 
 #define SINGLE 51
 #define CANONICAL 52
@@ -145,7 +146,7 @@ using CountType = uint32_t;
 
 //----- get them all. may not use subsequently.
 
-// distribution trasnforms
+// distribution transforms
 #if (pDistTrans == LEX)
 	template <typename KM>
 	using DistTrans = bliss::kmer::transform::lex_less<KM>;
@@ -238,16 +239,35 @@ using CountType = uint32_t;
 
 
 #else  // hashmap
+		struct MSBSplitter {
+		    template <typename Kmer>
+		    bool operator()(Kmer const & kmer) const {
+		      return (kmer.getData()[Kmer::nWords - 1] & ~(~(static_cast<typename Kmer::KmerWordType>(0)) >> 2)) > 0;
+		    }
+
+		    template <typename Kmer, typename V>
+		    bool operator()(std::pair<Kmer, V> const & x) const {
+		      return (x.first.getData()[Kmer::nWords - 1] & ~(~(static_cast<typename Kmer::KmerWordType>(0)) >> 2)) > 0;
+		    }
+		};
+
+
   // choose a MapParam based on type of map and kmer model (canonical, original, bimolecule)
   #if (pKmerStore == SINGLE)  // single stranded
     template <typename Key>
     using MapParams = ::bliss::index::kmer::SingleStrandHashMapParams<Key, DistHash, StoreHash, DistTrans>;
+
+    using Splitter = MSBSplitter;
   #elif (pKmerStore == CANONICAL)
     template <typename Key>
     using MapParams = ::bliss::index::kmer::CanonicalHashMapParams<Key, DistHash, StoreHash>;
+
+    using Splitter = ::fsc::TruePredicate;
   #elif (pKmerStore == BIMOLECULE)  // bimolecule
     template <typename Key>
     using MapParams = ::bliss::index::kmer::BimoleculeHashMapParams<Key, DistHash, StoreHash>;
+
+    using Splitter = MSBSplitter;
   #endif
 
   // DEFINE THE MAP TYPE base on the type of data to be stored.
@@ -265,10 +285,18 @@ using CountType = uint32_t;
     #elif (pMAP == HASHEDVEC)
       using MapType = ::dsc::unordered_multimap_hashvec<
           KmerType, ValType, MapParams>;
+    #elif (pMAP == DENSEHASH)
+      using MapType = ::dsc::densehash_multimap<
+          KmerType, ValType, MapParams, Splitter>;
     #endif
   #elif (pINDEX == COUNT)  // map
-    using MapType = ::dsc::counting_unordered_map<
+    #if (pMAP == DENSEHASH)
+      using MapType = ::dsc::counting_densehash_map<
+        KmerType, ValType, MapParams, Splitter>;
+    #else
+      using MapType = ::dsc::counting_unordered_map<
         KmerType, ValType, MapParams>;
+    #endif
   #endif
 
 

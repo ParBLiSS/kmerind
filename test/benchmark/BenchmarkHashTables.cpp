@@ -440,7 +440,7 @@ void benchmark_densehash_full_map(size_t const count, size_t const query_frac, :
   deleted2.getDataRef()[Kmer::nWords - 1] = empty2.getDataRef()[Kmer::nWords - 1] >> 1;  // for now, works for odd k values
 
 
-  ::fsc::densehash_map<Kmer, Value, MSBSplitter, ::bliss::kmer::hash::farm<Kmer, false> > map(empty, deleted, empty2, deleted2, count);
+  ::fsc::densehash_map<Kmer, Value, MSBSplitter, ::bliss::kmer::hash::farm<Kmer, false> > map(empty, deleted, empty2, deleted2, MSBSplitter(), count);
   BL_BENCH_END(map, "reserve", count);
 
 
@@ -640,7 +640,7 @@ void benchmark_densehash_full_multimap(size_t const count, size_t const query_fr
   Kmer deleted2(true);
   deleted2.getDataRef()[Kmer::nWords - 1] = empty2.getDataRef()[Kmer::nWords - 1] >> 1;  // for now, works for odd k values
 
-  ::fsc::densehash_multimap<Kmer, Value, MSBSplitter, ::bliss::kmer::hash::farm<Kmer, false> > map(empty, deleted, empty2, deleted2, count);
+  ::fsc::densehash_multimap<Kmer, Value, MSBSplitter, ::bliss::kmer::hash::farm<Kmer, false> > map(empty, deleted, empty2, deleted2, MSBSplitter(), count);
   BL_BENCH_END(map, "reserve", count);
 
 

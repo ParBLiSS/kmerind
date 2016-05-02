@@ -286,8 +286,8 @@ class densehash_map {
     //  if multiplicity of dataset is kind of known, can initialize data to that to avoid growing vector on average.
     densehash_map(Key empty_key, Key deleted_key,
     		 	 	   Key upper_empty_key, Key upper_deleted_key,
-					   size_type bucket_count = 128,
 					   const LowerKeySpaceSelector & _splitter = LowerKeySpaceSelector(),
+             size_type bucket_count = 128,
                        const Hash& hash = Hash(),
                        const Equal& equal = Equal(),
                        const Allocator& alloc = Allocator()) :
@@ -311,7 +311,7 @@ class densehash_map {
                        const Equal& equal = Equal(),
                        const Allocator& alloc = Allocator()) :
 					   densehash_map(empty_key, deleted_key, upper_empty_key, upper_deleted_key,
-							   bucket_count, _splitter, hash, equal, alloc) {
+							   _splitter, bucket_count, hash, equal, alloc) {
 
     	this->insert(first, last);
     };
@@ -340,6 +340,49 @@ class densehash_map {
 //    const_iterator cend() const {
 //    	return concat_iter<const value_type>(lower_map, upper_map);
 //    }
+    std::vector<Key> keys() {
+      std::vector<Key> ks;
+
+      keys(ks);
+
+      return ks;
+    }
+    void keys(std::vector<Key> & ks) {
+      ks.clear();
+      ks.reserve(size());
+
+      for (auto it = lower_map.begin(), max = lower_map.end(); it != max; ++it) {
+        ks.emplace_back(it->first);
+      }
+      for (auto it = upper_map.begin(), max = upper_map.end(); it != max; ++it) {
+        ks.emplace_back(it->first);
+      }
+
+      return ks;
+    }
+
+    std::vector<Key> to_vector() {
+      std::vector<value_type> vs;
+
+      to_vector(vs);
+
+      return vs;
+    }
+    void to_vector(  std::vector<Key> & vs) {
+      vs.clear();
+      vs.reserve(size());
+
+      for (auto it = lower_map.begin(), max = lower_map.end(); it != max; ++it) {
+        vs.emplace_back(*it);
+      }
+      for (auto it = upper_map.begin(), max = upper_map.end(); it != max; ++it) {
+        vs.emplace_back(*it);
+      }
+
+      return vs;
+    }
+
+
 
     bool empty() const {
       return lower_map.empty() && upper_map.empty();
@@ -391,6 +434,15 @@ class densehash_map {
     	insert(input.begin(), input.end());
     }
 
+    std::pair<typename supercontainer_type::iterator, bool> insert(::std::pair<Key, T> const & x) {
+      if (splitter(x.first)) {
+        return lower_map.insert(std::forward(x));
+      }
+      else {
+        return upper_map.insert(std::forward(x));
+      }
+    }
+
     template <typename InputIt, typename Pred>
     size_t erase(InputIt first, InputIt last, Pred const & pred) {
         static_assert(::std::is_convertible<Key, typename ::std::iterator_traits<InputIt>::value_type>::value,
@@ -426,7 +478,6 @@ class densehash_map {
         }
       }
 
-
       return count;
     }
 
@@ -449,8 +500,8 @@ class densehash_map {
           auto iter = lower_map.find(*(first));
           if (iter == lower_map.end()) continue;
 
-			lower_map.erase(iter);
-			++count;
+          lower_map.erase(iter);
+          ++count;
         }
 
         for (; first != last; ++first) {
@@ -594,6 +645,44 @@ class densehash_map<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
       return map.begin();
     }
 
+
+    std::vector<Key> keys() {
+      std::vector<Key> ks;
+
+      keys(ks);
+
+      return ks;
+    }
+    void keys(std::vector<Key> & ks) {
+      ks.clear();
+      ks.reserve(size());
+
+      for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+        ks.emplace_back(it->first);
+      }
+
+      return ks;
+    }
+
+    std::vector<Key> to_vector() {
+      std::vector<value_type> vs;
+
+      to_vector(vs);
+
+      return vs;
+    }
+    void to_vector(  std::vector<Key> & vs) {
+      vs.clear();
+      vs.reserve(size());
+
+      for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+        vs.emplace_back(*it);
+      }
+
+      return vs;
+    }
+
+
     bool empty() const {
       return map.empty();
     }
@@ -636,6 +725,11 @@ class densehash_map<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
     void insert(::std::vector<::std::pair<Key, T> > & input) {
       insert(input.begin(), input.end());
     }
+
+    std::pair<typename supercontainer_type::iterator, bool> insert(::std::pair<Key, T> const & x) {
+      return map.insert(std::forward(x));
+    }
+
 
     template <typename InputIt, typename Pred>
     size_t erase(InputIt first, InputIt last, Pred const & pred) {
@@ -838,6 +932,8 @@ class densehash_multimap {
         // TODO: compact
     }
 
+
+
     template <typename InputIt, typename Pred>
     void erase_impl(InputIt first, InputIt last, Pred const & pred, supercontainer_type & map) {
 
@@ -1033,8 +1129,8 @@ class densehash_multimap {
     //  if multiplicity of dataset is kind of known, can initialize data to that to avoid growing vector on average.
     densehash_multimap(Key empty_key, Key deleted_key,
                              Key upper_empty_key, Key upper_deleted_key,
+                             const LowerKeySpaceSelector & _splitter = LowerKeySpaceSelector(),
                        size_type bucket_count = 128,
-                       const LowerKeySpaceSelector & _splitter = LowerKeySpaceSelector(),
                        const Hash& hash = Hash(),
                        const Equal& equal = Equal(),
                        const Allocator& alloc = Allocator()) :
@@ -1055,7 +1151,7 @@ class densehash_multimap {
                        const Hash& hash = Hash(),
                        const Equal& equal = Equal(),
                        const Allocator& alloc = Allocator()) :
-                       densehash_multimap(empty_key, deleted_key, upper_empty_key, upper_deleted_key, bucket_count, _splitter, hash, equal, alloc) {
+                       densehash_multimap(empty_key, deleted_key, upper_empty_key, upper_deleted_key, _splitter, bucket_count, hash, equal, alloc) {
         this->insert(first, last);
     };
 
@@ -1065,6 +1161,65 @@ class densehash_multimap {
 
 
     // TODO: begin and end iterator accessors.
+
+
+    std::vector<Key> keys() {
+      std::vector<Key> ks;
+
+      keys(ks);
+
+      return ks;
+    }
+    void keys(std::vector<Key> & ks) {
+      ks.clear();
+      ks.reserve(size());
+
+      for (auto it = lower_map.begin(), max = lower_map.end(); it != max; ++it) {
+        ks.emplace_back(it->first);
+      }
+      for (auto it = upper_map.begin(), max = upper_map.end(); it != max; ++it) {
+        ks.emplace_back(it->first);
+      }
+
+      return ks;
+    }
+
+    std::vector<Key> to_vector() {
+      std::vector<value_type> vs;
+
+      to_vector(vs);
+
+      return vs;
+    }
+    void to_vector(  std::vector<Key> & vs) {
+      vs.clear();
+      vs.reserve(size());
+
+      subcontainer_type & vec;
+      for (auto it = lower_map.begin(), max = lower_map.end(); it != max; ++it) {
+        if (it->second < 0) {
+          vec = vecX[it->second & ::std::numeric_limits<int64_t>::max()];
+          for (auto it2 = vec.begin(), max2 = vec.end(); it2 != max2; ++it2) {
+            vs.emplace_back(*it2);
+          }
+        } else {  // singleton
+          vs.emplace_back(vec1[it->second]);
+        }
+      }
+      for (auto it = upper_map.begin(), max = upper_map.end(); it != max; ++it) {
+        if (it->second < 0) {
+          vec = vecX[it->second & ::std::numeric_limits<int64_t>::max()];
+          for (auto it2 = vec.begin(), max2 = vec.end(); it2 != max2; ++it2) {
+            vs.emplace_back(*it2);
+          }
+        } else {  // singleton
+          vs.emplace_back(vec1[it->second]);
+        }
+      }
+
+      return vs;
+    }
+
 
     bool empty() const {
       return lower_map.empty() && upper_map.empty();
@@ -1290,6 +1445,47 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
 
 
     // TODO: begin and end iterator accessors.
+    std::vector<Key> keys() {
+      std::vector<Key> ks;
+
+      keys(ks);
+
+      return ks;
+    }
+    void keys(std::vector<Key> & ks) {
+      ks.clear();
+      ks.reserve(size());
+
+      for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+        ks.emplace_back(it->first);
+      }
+    }
+
+    std::vector<Key> to_vector() {
+      std::vector<value_type> vs;
+
+      to_vector(vs);
+
+      return vs;
+    }
+    void to_vector(  std::vector<Key> & vs) {
+      vs.clear();
+      vs.reserve(size());
+
+      subcontainer_type & vec;
+      for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+        if (it->second < 0) {
+          vec = vecX[it->second & ::std::numeric_limits<int64_t>::max()];
+          for (auto it2 = vec.begin(), max2 = vec.end(); it2 != max2; ++it2) {
+            vs.emplace_back(*it2);
+          }
+        } else {  // singleton
+          vs.emplace_back(vec1[it->second]);
+        }
+      }
+    }
+
+
 
     bool empty() const {
       return map.empty();
