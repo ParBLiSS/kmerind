@@ -344,20 +344,19 @@ void benchmark_hashed_vecmap(size_t const count, size_t const query_frac, ::mxx:
 }
 
 template <typename Kmer, typename Value>
-void benchmark_sparsehash(size_t const count, size_t const query_frac, ::mxx::comm const & comm) {
+void benchmark_sparsehash_map(size_t const count, size_t const query_frac, ::mxx::comm const & comm) {
   BL_BENCH_INIT(map);
 
   std::vector<Kmer> query;
 
   BL_BENCH_START(map);
   // no transform involved.
-  ::google::dense_hash_map<Kmer, Value, ::bliss::kmer::hash::farm<Kmer, false> > map(count);
   Kmer empty(true);
   empty.getDataRef()[Kmer::nWords - 1] = ~(~(static_cast<typename Kmer::KmerWordType>(0)) >> 1);  // for now, works for odd k values
-  map.set_empty_key(empty);
   Kmer deleted(true);
   deleted.getDataRef()[Kmer::nWords - 1] = empty.getDataRef()[Kmer::nWords - 1] >> 1;  // for now, works for odd k values
-  map.set_deleted_key(deleted);
+
+  ::fsc::sparsehash_map<Kmer, Value, ::bliss::kmer::hash::farm<Kmer, false> > map(empty, deleted, count);
   BL_BENCH_END(map, "reserve", count);
 
 
@@ -398,15 +397,102 @@ void benchmark_sparsehash(size_t const count, size_t const query_frac, ::mxx::co
   BL_BENCH_END(map, "count", result);
 
   BL_BENCH_START(map);
-  result = 0;
-  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
-    result += map.erase(query[i]);
-  }
+  result = map.erase(query.begin(), query.end());
+
+//  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
+//    result += map.erase(query[i]);
+//  }
   map.resize(0);
   BL_BENCH_END(map, "erase", result);
 
 
-  BL_BENCH_REPORT_MPI_NAMED(map, "sparsehash", comm);
+  BL_BENCH_REPORT_MPI_NAMED(map, "sparsehash_map", comm);
+}
+
+
+struct MSBSplitter {
+    template <typename Kmer>
+    bool operator()(Kmer const & kmer) const {
+      return (kmer.getData()[Kmer::nWords - 1] & ~(~(static_cast<typename Kmer::KmerWordType>(0)) >> 2)) > 0;
+    }
+
+    template <typename Kmer, typename V>
+    bool operator()(std::pair<Kmer, V> const & x) const {
+      return (x.first.getData()[Kmer::nWords - 1] & ~(~(static_cast<typename Kmer::KmerWordType>(0)) >> 2)) > 0;
+    }
+};
+
+
+template <typename Kmer, typename Value>
+void benchmark_sparsehash_fullmap(size_t const count, size_t const query_frac, ::mxx::comm const & comm) {
+  BL_BENCH_INIT(map);
+
+  std::vector<Kmer> query;
+
+  BL_BENCH_START(map);
+  // no transform involved.
+  Kmer empty(true);
+  empty.getDataRef()[Kmer::nWords - 1] = ~(~(static_cast<typename Kmer::KmerWordType>(0)) >> 1);  // for now, works for odd k values
+  Kmer deleted(true);
+  deleted.getDataRef()[Kmer::nWords - 1] = empty.getDataRef()[Kmer::nWords - 1] >> 1;  // for now, works for odd k values
+
+  Kmer empty2(true);
+  empty2.getDataRef()[Kmer::nWords - 1] = ~(static_cast<typename Kmer::KmerWordType>(0)) >> 1;  // for now, works for odd k values
+  Kmer deleted2(true);
+  deleted2.getDataRef()[Kmer::nWords - 1] = empty2.getDataRef()[Kmer::nWords - 1] >> 1;  // for now, works for odd k values
+
+
+  ::fsc::sparsehash_fullmap<Kmer, Value, MSBSplitter, ::bliss::kmer::hash::farm<Kmer, false> > map(empty, deleted, empty2, deleted2, count);
+  BL_BENCH_END(map, "reserve", count);
+
+
+
+  {
+//    BL_BENCH_START(map);
+    std::vector<::std::pair<Kmer, Value> > input(count);
+//    BL_BENCH_END(map, "reserve input", count);
+
+//    BL_BENCH_START(map);
+    generate_input(input, count);
+    query.resize(count / query_frac);
+    std::transform(input.begin(), input.begin() + input.size() / query_frac, query.begin(),
+                   [](::std::pair<Kmer, Value> const & x){
+      return x.first;
+    });
+//    BL_BENCH_END(map, "generate input", input.size());
+
+    BL_BENCH_START(map);
+    map.insert(input.begin(), input.end());
+    BL_BENCH_END(map, "insert", map.size());
+  }
+
+  BL_BENCH_START(map);
+  size_t result = 0;
+  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
+    auto iters = map.equal_range(query[i]);
+    for (auto it = iters.first; it != iters.second; ++it)
+      result ^= (*it).second;
+  }
+  BL_BENCH_END(map, "find", result);
+
+  BL_BENCH_START(map);
+  result = 0;
+  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
+    result += map.count(query[i]);
+  }
+  BL_BENCH_END(map, "count", result);
+
+  BL_BENCH_START(map);
+  result = map.erase(query.begin(), query.end());
+
+//  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
+//    result += map.erase(query[i]);
+//  }
+  map.resize(0);
+  BL_BENCH_END(map, "erase", result);
+
+
+  BL_BENCH_REPORT_MPI_NAMED(map, "sparsehash_fullmap", comm);
 }
 
 
@@ -474,6 +560,138 @@ void benchmark_sparsehash_vecmap(size_t const count, size_t const query_frac, ::
 }
 
 
+
+
+template <typename Kmer, typename Value>
+void benchmark_sparsehash_multimap(size_t const count, size_t const query_frac, ::mxx::comm const & comm) {
+  BL_BENCH_INIT(map);
+
+  std::vector<Kmer> query;
+
+  BL_BENCH_START(map);
+  Kmer empty(true);
+  empty.getDataRef()[Kmer::nWords - 1] = ~(~(static_cast<typename Kmer::KmerWordType>(0)) >> 1);  // for now, works for odd k values
+  Kmer deleted(true);
+  deleted.getDataRef()[Kmer::nWords - 1] = empty.getDataRef()[Kmer::nWords - 1] >> 1;  // for now, works for odd k values
+
+  ::fsc::sparsehash_multimap<Kmer, Value, ::bliss::kmer::hash::farm<Kmer, false> > map(empty, deleted, count);
+  BL_BENCH_END(map, "reserve", count);
+
+
+  {
+
+//    BL_BENCH_START(map);
+    std::vector<::std::pair<Kmer, Value> > input(count);
+//    BL_BENCH_END(map, "reserve input", count);
+
+//    BL_BENCH_START(map);
+    generate_input(input, count);
+    query.resize(count / query_frac);
+    std::transform(input.begin(), input.begin() + input.size() / query_frac, query.begin(),
+                   [](::std::pair<Kmer, Value> const & x){
+      return x.first;
+    });
+//    BL_BENCH_END(map, "generate input", input.size());
+
+    BL_BENCH_START(map);
+    map.insert(input);
+    BL_BENCH_END(map, "insert", map.size());
+  }
+
+  BL_BENCH_START(map);
+  size_t result = 0;
+  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
+    auto iters = map.equal_range(query[i]);
+    for (auto it = iters.first; it != iters.second; ++it)
+      result ^= (*it).second;
+  }
+  BL_BENCH_END(map, "find", result);
+
+
+  BL_BENCH_START(map);
+  result = 0;
+  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
+    result += map.count(query[i]);
+  }
+  BL_BENCH_END(map, "count", result);
+
+
+
+  BL_BENCH_START(map);
+  result = map.erase(query.begin(), query.end());
+  BL_BENCH_END(map, "erase", result);
+
+
+  BL_BENCH_REPORT_MPI_NAMED(map, "sparsehash_multimap", comm);
+}
+
+template <typename Kmer, typename Value>
+void benchmark_sparsehash_full_multimap(size_t const count, size_t const query_frac, ::mxx::comm const & comm) {
+  BL_BENCH_INIT(map);
+
+  std::vector<Kmer> query;
+
+  BL_BENCH_START(map);
+  Kmer empty(true);
+  empty.getDataRef()[Kmer::nWords - 1] = ~(~(static_cast<typename Kmer::KmerWordType>(0)) >> 1);  // for now, works for odd k values
+  Kmer deleted(true);
+  deleted.getDataRef()[Kmer::nWords - 1] = empty.getDataRef()[Kmer::nWords - 1] >> 1;  // for now, works for odd k values
+
+  Kmer empty2(true);
+  empty2.getDataRef()[Kmer::nWords - 1] = ~(static_cast<typename Kmer::KmerWordType>(0)) >> 1;  // for now, works for odd k values
+  Kmer deleted2(true);
+  deleted2.getDataRef()[Kmer::nWords - 1] = empty2.getDataRef()[Kmer::nWords - 1] >> 1;  // for now, works for odd k values
+
+  ::fsc::sparsehash_full_multimap<Kmer, Value, MSBSplitter, ::bliss::kmer::hash::farm<Kmer, false> > map(empty, deleted, empty2, deleted2, count);
+  BL_BENCH_END(map, "reserve", count);
+
+
+  {
+
+//    BL_BENCH_START(map);
+    std::vector<::std::pair<Kmer, Value> > input(count);
+//    BL_BENCH_END(map, "reserve input", count);
+
+//    BL_BENCH_START(map);
+    generate_input(input, count);
+    query.resize(count / query_frac);
+    std::transform(input.begin(), input.begin() + input.size() / query_frac, query.begin(),
+                   [](::std::pair<Kmer, Value> const & x){
+      return x.first;
+    });
+//    BL_BENCH_END(map, "generate input", input.size());
+
+    BL_BENCH_START(map);
+    map.insert(input);
+    BL_BENCH_END(map, "insert", map.size());
+  }
+
+  BL_BENCH_START(map);
+  size_t result = 0;
+  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
+    auto iters = map.equal_range(query[i]);
+    for (auto it = iters.first; it != iters.second; ++it)
+      result ^= (*it).second;
+  }
+  BL_BENCH_END(map, "find", result);
+
+
+  BL_BENCH_START(map);
+  result = 0;
+  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
+    result += map.count(query[i]);
+  }
+  BL_BENCH_END(map, "count", result);
+
+
+
+  BL_BENCH_START(map);
+  result = map.erase(query.begin(), query.end());
+  BL_BENCH_END(map, "erase", result);
+
+
+  BL_BENCH_REPORT_MPI_NAMED(map, "sparsehash_full_multimap", comm);
+}
 
 
 
@@ -968,6 +1186,7 @@ void benchmark_tommytrie(size_t const count, size_t const query_frac, ::mxx::com
 int main(int argc, char** argv) {
 
   size_t count = 10000000;
+//  size_t count = 100;
   size_t query_frac = 10;
 
 
@@ -990,10 +1209,17 @@ int main(int argc, char** argv) {
   benchmark_unordered_map<Kmer, size_t>(count, query_frac, comm);
   BL_BENCH_COLLECTIVE_END(test, "unordered_map", count, comm);
 
+  BL_BENCH_START(test);
+  benchmark_sparsehash_map<Kmer, size_t>(count, query_frac, comm);
+  BL_BENCH_COLLECTIVE_END(test, "sparsehash_map", count, comm);
 
   BL_BENCH_START(test);
-  benchmark_sparsehash<Kmer, size_t>(count, query_frac, comm);
-  BL_BENCH_COLLECTIVE_END(test, "sparsehash", count, comm);
+  benchmark_sparsehash_map<Kmer, size_t>(count, query_frac, comm);
+  BL_BENCH_COLLECTIVE_END(test, "sparsehash_map", count, comm);
+
+  BL_BENCH_START(test);
+  benchmark_sparsehash_fullmap<Kmer, size_t>(count, query_frac, comm);
+  BL_BENCH_COLLECTIVE_END(test, "sparsehash_fullmap", count, comm);
 
 
   BL_BENCH_START(test);
@@ -1003,6 +1229,15 @@ int main(int argc, char** argv) {
   BL_BENCH_START(test);
   benchmark_sparsehash_vecmap<Kmer, size_t>(count, query_frac, comm);
   BL_BENCH_COLLECTIVE_END(test, "sparsehash_vecmap", count, comm);
+
+  BL_BENCH_START(test);
+  benchmark_sparsehash_multimap<Kmer, size_t>(count, query_frac, comm);
+  BL_BENCH_COLLECTIVE_END(test, "sparsehash_multimap", count, comm);
+
+  BL_BENCH_START(test);
+  benchmark_sparsehash_full_multimap<Kmer, size_t>(count, query_frac, comm);
+  BL_BENCH_COLLECTIVE_END(test, "sparsehash_full_multimap", count, comm);
+
 
   BL_BENCH_START(test);
   benchmark_tommyhashdyn<Kmer, size_t>(count, query_frac, comm);
