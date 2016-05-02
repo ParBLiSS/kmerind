@@ -62,7 +62,7 @@
 #include "utils/logging.h"
 #include "containers/distributed_map_base.hpp"
 #include "common/kmer_transform.hpp"
-#include "containers/container_utils.hpp"
+#include "containers/dsc_container_utils.hpp"
 
 
 namespace dsc  // distributed std container
@@ -222,7 +222,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           }
 
           // assumes that container is sorted. and exact overlap region is provided.  do not filter output here since it's an output iterator.
-          template <class DBIter, class QueryIter, class OutputIter, class Operator, class Predicate = TruePredicate>
+          template <class DBIter, class QueryIter, class OutputIter, class Operator, class Predicate = ::fsc::TruePredicate>
           static size_t process(DBIter range_begin, DBIter range_end,
                                 QueryIter query_begin, QueryIter query_end,
                                 OutputIter &output, Operator & op,
@@ -249,7 +249,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               if (linear) {  // based on number of input and search source, choose a method to search.
 
                 // iterate through the input and search in output -
-                if (!::std::is_same<Predicate, TruePredicate>::value)
+                if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
                   for (auto it = query_begin; it != query_end;) {
                     v = *it;
                     count += op.template operator()<true>(range_begin, el_end, range_end, v, output, pred);
@@ -274,7 +274,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
                 // use logarithmic search
 
                 // iterate through the input and search in output -
-                if (!::std::is_same<Predicate, TruePredicate>::value)
+                if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
                   for (auto it = query_begin; it != query_end;) {
                     v = *it;
                       count += op.template operator()<false>(range_begin, el_end, range_end, v, output, pred);
@@ -390,7 +390,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               return 1;
           }
           // filtered element-wise.
-          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = TruePredicate>
+          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, OutputIter &output,
                             Predicate const& pred) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
@@ -434,7 +434,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               return dist;
           }
           /// Return how much was KEPT.
-          template<bool linear, class DBIter, typename Query, class Predicate = TruePredicate>
+          template<bool linear, class DBIter, typename Query, class Predicate = ::fsc::TruePredicate>
           size_t operator()(DBIter &curr_start, DBIter &last_end, DBIter const &range_end, Query const &v, DBIter &output,
                             Predicate const & pred) {
               // find start of segment to delete == end of prev segment to keep
@@ -483,7 +483,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <class LocalFind, class Predicate = TruePredicate >
+      template <class LocalFind, class Predicate = ::fsc::TruePredicate >
       ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & lf,
     		  ::std::vector<Key>& keys, bool & sorted_input,
     		  Predicate const& pred = Predicate() ) const {
@@ -606,7 +606,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <class LocalFind, class Predicate = TruePredicate >
+      template <class LocalFind, class Predicate = ::fsc::TruePredicate >
       ::std::vector<::std::pair<Key, T> > find_overlap(LocalFind & lf, ::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(find);
@@ -803,7 +803,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <class LocalFind, class Predicate = TruePredicate >
+      template <class LocalFind, class Predicate = ::fsc::TruePredicate >
       ::std::vector<::std::pair<Key, T> > find(LocalFind & lf,
     		  ::std::vector<Key>& keys, bool & sorted_input,
     		  Predicate const& pred = Predicate() ) const {
@@ -951,7 +951,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param keys    content will be changed and reordered.
        * @param last
        */
-      template <class LocalFind, typename Predicate = TruePredicate>
+      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(LocalFind & lf, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
@@ -1149,7 +1149,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 //       * @param first
 //       * @param last
 //       */
-//      template <class LocalFind, class Predicate = TruePredicate >
+//      template <class LocalFind, class Predicate = ::fsc::TruePredicate >
 //      ::std::vector<::std::pair<Key, T> > find_irecv(LocalFind & lf, ::std::vector<Key>& keys, bool sorted_input = false,
 //          Predicate const& pred = Predicate() ) const {
 //          BL_BENCH_INIT(find);
@@ -1364,7 +1364,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 //      }
 
       /// version using predicate, applies to entire container.
-      template <class LocalFind, class Predicate = TruePredicate>
+      template <class LocalFind, class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(LocalFind & lf,
     		  Predicate const & pred = Predicate()) const {
           ::std::vector<::std::pair<Key, T> > results;
@@ -1503,7 +1503,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
@@ -1608,7 +1608,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
       }
 
 
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
 
@@ -1637,7 +1637,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 //       * @param src_begin
 //       * @param src_end
 //       */
-//      template <class InputIter, class Predicate = TruePredicate>
+//      template <class InputIter, class Predicate = ::fsc::TruePredicate>
 //      size_t insert(InputIter src_begin, InputIter src_end, bool sorted_input = false, Predicate const &pred = Predicate()) {
 //          if (src_begin == src_end) return 0;
 //          BL_BENCH_INIT(insert);
@@ -1647,7 +1647,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 //          this->sorted = false; this->balanced = false; this->globally_sorted = false;
 //          ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
 //
-//          if (::std::is_same<Predicate, TruePredicate>::value) ::std::copy(src_begin, src_end, emplace_iter);
+//          if (::std::is_same<Predicate, ::fsc::TruePredicate>::value) ::std::copy(src_begin, src_end, emplace_iter);
 //          else ::std::copy_if(src_begin, src_end, emplace_iter, pred);
 //
 //          size_t count = ::std::distance(src_begin, src_end);
@@ -1665,7 +1665,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       size_t insert(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
           if (input.size() == 0) return 0;  // OKAY HERE ONLY BECAUSE NO COMMUNICATION IS HERE.
 
@@ -1683,7 +1683,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_START(insert);
 
           ::fsc::back_emplace_iterator<local_container_type> emplace_iter(c);
-          if (::std::is_same<Predicate, TruePredicate>::value) {
+          if (::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
             if (c.size() == 0)   // container is empty, so swap it in.
               c.swap(input);
             else {
@@ -1717,7 +1717,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        *
        * TODO: return size should be global value
        */
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const & pred = Predicate() ) {
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           BL_BENCH_INIT(erase);
@@ -1794,13 +1794,13 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         return before - c.size();
       }
 
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       size_t erase(Predicate const & pred = Predicate()) {
 
         if (this->local_empty()) return 0;
 
         size_t before = c.size();
-        if (!::std::is_same<Predicate, TruePredicate>::value) {
+        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
 
           this->local_sort();
 
@@ -1920,7 +1920,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             	  return 0;
 
           }
-          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = TruePredicate>
+          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end,
         		  Query const &v, OutputIter &output, Predicate const &pred) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
@@ -2643,28 +2643,28 @@ using SortedMapParams = ::dsc::DistributedMapParams<
       virtual ~sorted_map() {};
 
       // specialized here so that the local_find functor can be used.
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
@@ -2765,7 +2765,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
               return ::std::distance(range_begin, el_end);
           }
-          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = TruePredicate>
+          template<bool linear, class DBIter, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end,
         		  Query const &v, OutputIter &output, Predicate const &pred) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
@@ -2941,28 +2941,28 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
 
       //========= override find, so can pass in LocalFind object.
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
@@ -3249,7 +3249,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       size_t insert(::std::vector<Key> &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
 
           if (input.size() == 0) return 0;  // OKAY HERE ONLY BECAUSE NO COMMUNICATION IS HERE.
@@ -3275,7 +3275,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         BL_BENCH_START(insert);
 
         ::fsc::back_emplace_iterator<local_container_type> emplace_iter(this->c);
-        if (::std::is_same<Predicate, TruePredicate>::value) {
+        if (::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
           if (this->c.size() == 0)   // container is empty, so swap it in.
             this->c.swap(temp);
           else {

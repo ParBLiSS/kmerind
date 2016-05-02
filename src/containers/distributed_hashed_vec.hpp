@@ -43,7 +43,6 @@
 #define BLISS_DISTRIBUTED_HASHED_VEC_HPP
 
 
-#include <unordered_map>  // local storage hash table  // for multimap
 #include <utility> 			  // for std::pair
 
 //#include <sparsehash/dense_hash_map>  // not a multimap, where we need it most.
@@ -68,7 +67,7 @@
 
 #include "common/kmer_transform.hpp"
 
-#include "containers/container_utils.hpp"
+#include "containers/dsc_container_utils.hpp"
 
 namespace dsc  // distributed std container
 {
@@ -178,7 +177,7 @@ namespace dsc  // distributed std container
       struct QueryProcessor {  // assume unique, always.
 
           // assumes that container is sorted. and exact overlap region is provided.  do not filter output here since it's an output iterator.
-          template <class DB, class QueryIter, class OutputIter, class Operator, class Predicate = TruePredicate>
+          template <class DB, class QueryIter, class OutputIter, class Operator, class Predicate = ::fsc::::fsc::TruePredicate>
           static size_t process(DB &db,
                                 QueryIter query_begin, QueryIter query_end,
                                 OutputIter &output, Operator & op,
@@ -187,7 +186,7 @@ namespace dsc  // distributed std container
               if (query_begin == query_end) return 0;
 
               size_t count = 0;  // before size.
-              if (!::std::is_same<Predicate, TruePredicate>::value)
+              if (!::std::is_same<Predicate, ::fsc::::fsc::TruePredicate>::value)
                 for (auto it = query_begin; it != query_end; ++it) {
                   count += op(db, *it, output, pred);
                 }
@@ -236,7 +235,7 @@ namespace dsc  // distributed std container
               return 1;
           }
           // filtered element-wise.
-          template<class DB, typename Query, class OutputIter, class Predicate = TruePredicate>
+          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::::fsc::TruePredicate>
           size_t operator()(DB &db, Query const &v, OutputIter &output,
                             Predicate const& pred) const {
               auto range = db.equal_range(v);
@@ -262,7 +261,7 @@ namespace dsc  // distributed std container
               return before - db.size();
           }
           /// Return how much was KEPT.
-          template<class DB, typename Query, class OutputIter, class Predicate = TruePredicate>
+          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::::fsc::TruePredicate>
           size_t operator()(DB &db, Query const &v, OutputIter &,
                             Predicate const & pred) {
               auto range = (const_cast<DB const &>(db)).equal_range(v);
@@ -359,7 +358,7 @@ namespace dsc  // distributed std container
        * @param keys  content will be changed and reordered
        * @param last
        */
-      template <class LocalFind, typename Predicate = TruePredicate>
+      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
@@ -465,7 +464,7 @@ namespace dsc  // distributed std container
        * @param keys    content will be changed and reordered.
        * @param last
        */
-      template <class LocalFind, typename Predicate = TruePredicate>
+      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
@@ -651,7 +650,7 @@ namespace dsc  // distributed std container
        * @param keys  content will be changed and reordered
        * @param last
        */
-      template <class LocalFind, typename Predicate = TruePredicate>
+      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
@@ -771,7 +770,7 @@ namespace dsc  // distributed std container
        * @param keys    content will be changed and reordered.
        * @param last
        */
-      template <class LocalFind, typename Predicate = TruePredicate>
+      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
@@ -950,7 +949,7 @@ namespace dsc  // distributed std container
 //       * @param keys    content will be changed and reordered.
 //       * @param last
 //       */
-//      template <class LocalFind, typename Predicate = TruePredicate>
+//      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
 //      ::std::vector<::std::pair<Key, T> > find_irecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
 //          BL_BENCH_INIT(find);
 //
@@ -1152,7 +1151,7 @@ namespace dsc  // distributed std container
 //      }
 
 
-      template <class LocalFind, typename Predicate = TruePredicate>
+      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, Predicate const& pred = Predicate()) const {
           ::std::vector<::std::pair<Key, T> > results;
 
@@ -1181,7 +1180,7 @@ namespace dsc  // distributed std container
           return results;
       }
 
-      template <class LocalErase, typename Predicate = TruePredicate>
+      template <class LocalErase, typename Predicate = ::fsc::TruePredicate>
       size_t erase(LocalErase & erase_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) {
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           size_t before = this->c.size();
@@ -1234,14 +1233,14 @@ namespace dsc  // distributed std container
       }
 
 
-      template <class LocalErase, typename Predicate = TruePredicate>
+      template <class LocalErase, typename Predicate = ::fsc::TruePredicate>
       size_t erase(LocalErase & erase_element, Predicate const& pred = Predicate()) {
           size_t count = 0;
 
           if (this->local_empty()) return 0;
 
 
-          if (!::std::is_same<Predicate, TruePredicate>::value) {
+          if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
 
             auto keys = this->keys();  // already unique
 
@@ -1328,7 +1327,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
                                                         Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(count);
@@ -1418,7 +1417,7 @@ namespace dsc  // distributed std container
       }
 
 
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
 
@@ -1443,11 +1442,11 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
           return this->erase(erase_element, keys, sorted_input, pred);
       }
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       size_t erase(Predicate const & pred = Predicate()) {
         return this->erase(erase_element, pred);
       }
@@ -1548,7 +1547,7 @@ namespace dsc  // distributed std container
             return db.count(v);
         }
         // filtered element-wise.
-        template<class DB, typename Query, class OutputIter, class Predicate = TruePredicate>
+        template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
         size_t operator()(DB &db, Query const &v, OutputIter &output,
                           Predicate const& pred) const {
             auto range = db.equal_range(v);
@@ -1639,28 +1638,28 @@ namespace dsc  // distributed std container
       using Base::unique_size;
 
 
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
                                                Predicate const& pred = Predicate()) const {
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
@@ -1670,7 +1669,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) {
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           size_t before = this->c.size();
@@ -1710,7 +1709,7 @@ namespace dsc  // distributed std container
 
 
           BL_BENCH_START(erase);
-          if (std::is_same<Predicate, TruePredicate>::value)
+          if (std::is_same<Predicate, ::fsc::TruePredicate>::value)
             this->c.erase(keys.begin(), keys.end());
           else
             this->c.erase(keys.begin(), keys.end(), pred);
@@ -1725,9 +1724,9 @@ namespace dsc  // distributed std container
 
 
 
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       size_t erase(Predicate const & pred = Predicate()) {
-        if (std::is_same<Predicate, TruePredicate>::value) {
+        if (std::is_same<Predicate, ::fsc::TruePredicate>::value) {
           size_t s = this->c.size();
           this->c.clear();
           return s;
@@ -1741,7 +1740,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
@@ -1776,7 +1775,7 @@ namespace dsc  // distributed std container
         BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
         size_t count = 0;
-        if (!::std::is_same<Predicate, TruePredicate>::value)
+        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
           count = this->local_insert(input.begin(), input.end(), pred);
         else
           count = this->local_insert(input.begin(), input.end());
@@ -1910,7 +1909,7 @@ namespace dsc  // distributed std container
             return db.count(v);
         }
         // filtered element-wise.
-        template<class DB, typename Query, class OutputIter, class Predicate = TruePredicate>
+        template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
         size_t operator()(DB &db, Query const &v, OutputIter &output,
                           Predicate const& pred) const {
             auto range = db.equal_range_value_only(v);
@@ -1945,7 +1944,7 @@ namespace dsc  // distributed std container
               return before - db.size();
           }
           /// Return how much was KEPT.
-          template<class DB, typename Query, class OutputIter, class Predicate = TruePredicate>
+          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
           size_t operator()(DB &db, Query const &v, OutputIter &,
                             Predicate const & pred) {
               auto range = db.equal_range(v);  // get the range as values
@@ -2025,7 +2024,7 @@ namespace dsc  // distributed std container
       using Base::unique_size;
 
 
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
                                                Predicate const& pred = Predicate()) const {
           /*
@@ -2063,23 +2062,23 @@ namespace dsc  // distributed std container
            */
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
@@ -2089,13 +2088,13 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
           return Base::erase(erase_element, keys, sorted_input, pred);
       }
 
 
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       size_t erase(Predicate const & pred = Predicate()) {
         return Base::erase(erase_element, pred);
       }
@@ -2105,7 +2104,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
@@ -2140,7 +2139,7 @@ namespace dsc  // distributed std container
         BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
         size_t count = 0;
-        if (!::std::is_same<Predicate, TruePredicate>::value)
+        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
           count = this->Base::local_insert(input.begin(), input.end(), pred);
         else
           count = this->local_insert(input.begin(), input.end());
@@ -2281,7 +2280,7 @@ namespace dsc  // distributed std container
             return db.count(v);
         }
         // filtered element-wise.
-        template<class DB, typename Query, class OutputIter, class Predicate = TruePredicate>
+        template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
         size_t operator()(DB &db, Query const &v, OutputIter &output,
                           Predicate const& pred) const {
             auto range = db.equal_range(v);
@@ -2311,7 +2310,7 @@ namespace dsc  // distributed std container
               return before - db.size();
           }
           /// Return how much was KEPT.
-          template<class DB, typename Query, class OutputIter, class Predicate = TruePredicate>
+          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
           size_t operator()(DB &db, Query const &v, OutputIter &,
                             Predicate const & pred) {
               auto range = db.equal_range(v);
@@ -2395,7 +2394,7 @@ namespace dsc  // distributed std container
       using Base::local_size;
 
 
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
                                                Predicate const& pred = Predicate()) const {
           /*
@@ -2432,24 +2431,24 @@ namespace dsc  // distributed std container
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
 
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
@@ -2459,13 +2458,13 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class Predicate = TruePredicate>
+      template <class Predicate = ::fsc::TruePredicate>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
           return Base::erase(erase_element, keys, sorted_input, pred);
       }
 
 
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       size_t erase(Predicate const & pred = Predicate()) {
         return Base::erase(erase_element, pred);
       }
@@ -2478,7 +2477,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate = TruePredicate>
+      template <typename Predicate = ::fsc::TruePredicate>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
@@ -2510,7 +2509,7 @@ namespace dsc  // distributed std container
         BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
         size_t count = 0;
-        if (!::std::is_same<Predicate, TruePredicate>::value)
+        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
           count = this->Base::local_insert(input.begin(), input.end(), pred);
         else
           count = this->local_insert(input.begin(), input.end());
