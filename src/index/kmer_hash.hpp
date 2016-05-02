@@ -291,6 +291,138 @@ namespace bliss {
 
       };
 
+
+      namespace sparsehash {
+      	  // sparsehash empty keys and delete keys.  these are kmers that NEVER appears in input data.
+      	  // NOTE:  single strand and bimolecule have kmers that can be on either strand.  canonical has a more restricted set.
+      	  // so for DNA and DNA16, full k-mer (no padding bits), use a key that's compatible with canonical.
+      	  // for the other strand cases, use the bitwise complement of that key (in implementation directly.)
+      	  // 			not-full			full, Single stranded or bimolecule	     full, Canonical
+      	  //   DNA		use high bits		split into high and low hashtables		 no TTTTTTTTTT, or TTTTTTTTG - chosen because revcomp is rev + neg
+      	  //   DNA16	use high bits		split into high and low hashtables       no NNNNNNNNN(~A), or NNNNNNNN(~A~C) - chosen because revcomp is bit reverse
+      	  //   DNA5		use unused values : 2 (010) and 5 (101).  set at low bit
+      	  // note that full word kmers (even kmers) should be infrequent.
+      	  template <typename KMER>
+      	  struct empty_key {
+
+      		  /// kmer empty key for DNA5  000000000010
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA5>::value, int>::type = 0>
+      		  inline KMER operator()() {
+      			  KMER em(true); // create an empty one
+      			  em.getDataRef()[0] = 0x010;
+      			  return em;
+      		  }
+
+      		  /// kmer empty key for DNA, unfull kmer 10000000
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
+							  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value)	  &&
+					  (KM::nBits < (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
+      		  inline KMER operator()() {
+      			  KMER em(true); // create an empty one
+      			  em.getDataRef()[KM::nWords - 1] = ~(~(static_cast<typename KM::KmerWordType>(0)) >> 1);
+      			  return em;
+      		  }
+
+      		  /// kmer empty key for DNA, unfull kmer.  11111111111111
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value &&
+					  (KM::nBits == (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
+      		  inline KMER operator()() {
+      			  KMER em; // create an empty one
+      			  for (size_t i = 0; i < KM::nWords; ++i) {
+      				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
+      			  }
+      			  return em;
+      		  }
+
+      		  /// kmer empty key for DNA, unfull kmer.  111111111111110
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value &&
+					  (KM::nBits == (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
+      		  inline KMER operator()() {
+      			  KMER em; // create an empty one
+      			  for (size_t i = 1; i < KM::nWords; ++i) {
+      				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
+      			  }
+      			  em.getDataRef()[0] = ~(static_cast<typename KM::KmerWordType>(0)) << 1;  // all 1s is its own complement and maps to N, so is a possible value
+      			  return em;
+      		  }
+
+      	  };
+
+      	  template <typename KMER>
+      	  struct deleted_key {
+
+      		  /// kmer empty key for DNA5  0000000000101
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA5>::value, int>::type = 0>
+      		  inline KMER operator()() {
+      			  KMER em(true); // create an empty one
+      			  em.getDataRef()[0] = 0x101;
+      			  return em;
+      		  }
+
+      		  /// kmer empty key for DNA, unfull kmer 110000000
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
+					  	::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value) &&
+					  (KM::nBits < (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
+      		  inline KMER operator()() {
+      			  KMER em(true); // create an empty one
+      			  em.getDataRef()[KM::nWords - 1] = ~(~(static_cast<typename KM::KmerWordType>(0)) >> 2);
+      			  return em;
+      		  }
+
+      		  /// kmer empty key for DNA, unfull kmer.  11111111111110
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value  &&
+					  (KM::nBits == (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
+      		  inline KMER operator()() {
+      			  KMER em; // create an empty one
+      			  for (size_t i = 1; i < KM::nWords; ++i) {
+      				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
+      			  }
+      			 em.getDataRef()[0] = ~(static_cast<typename KM::KmerWordType>(0)) << 1;
+      			  return em;
+      		  }
+
+
+      		  /// kmer empty key for DNA, unfull kmer.  111111111111100
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value &&
+					  (KM::nBits == (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
+      		  inline KMER operator()() {
+      			  KMER em; // create an empty one
+      			  for (size_t i = 1; i < KM::nWords; ++i) {
+      				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
+      			  }
+      			 em.getDataRef()[0] = ~(static_cast<typename KM::KmerWordType>(0)) << 2;
+      			  return em;
+      		  }
+
+
+      	  };
+
+      	  // this covers the Canonical case when kmer is full and DNA is 2bit or 4 bit, which allows lex_less
+      	  // for less_greater, we can use the negation of these keys for DNA and DNA16, full kmer.
+
+
+
+
+
+
+      }  // namespace sparsehash
+
       // usage  apply transform first, then apply hash.
     } // namespace hash
   } // namespace kmer

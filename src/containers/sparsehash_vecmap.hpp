@@ -32,10 +32,624 @@
 #include <scoped_allocator>
 #include <algorithm>
 #include <cmath>   // ceil
+#include <memory>  // allocator
+
+#include "iterators/transform_iterator.hpp"
+#include "iterators/filter_iterator.hpp"
 
 #include "utils/logging.h"
 
 namespace fsc {  // fast standard container
+
+
+
+template <typename Key,
+typename T,
+typename Hash = ::std::hash<Key>,
+typename Equal = ::std::equal_to<Key>,
+typename Allocator = ::std::allocator<::std::pair<const Key, T> > >
+class sparsehash_map {
+
+  protected:
+
+    using supercontainer_type =
+        ::google::dense_hash_map<Key, T,
+                       Hash, Equal, Allocator >;
+
+    supercontainer_type map;
+
+
+
+  public:
+    using key_type              = Key;
+    using mapped_type           = T;
+    using value_type            = ::std::pair<const Key, T>;
+    using hasher                = Hash;
+    using key_equal             = Equal;
+    using allocator_type        = Allocator;
+    using reference             = value_type&;
+    using const_reference       = const value_type&;
+    using pointer               = typename std::allocator_traits<Allocator>::pointer;
+    using const_pointer         = typename std::allocator_traits<Allocator>::const_pointer;
+    using iterator              = typename supercontainer_type::iterator;
+    using const_iterator        = typename supercontainer_type::const_iterator;
+    using size_type             = size_t;
+    using difference_type       = ptrdiff_t;
+
+
+    //  if multiplicity of dataset is kind of known, can initialize data to that to avoid growing vector on average.
+    sparsehash_map(Key empty_key, Key deleted_key,
+                   size_type bucket_count = 128,
+                       const Hash& hash = Hash(),
+                       const Equal& equal = Equal(),
+                       const Allocator& alloc = Allocator()) :
+                         map(bucket_count, hash, equal, alloc) {
+      map.set_empty_key(empty_key);
+      map.set_deleted_key(deleted_key);
+    };
+
+    template<class InputIt>
+    sparsehash_map(InputIt first, InputIt last,
+                      Key empty_key, Key deleted_key,
+                       size_type bucket_count = 128,
+                       const Hash& hash = Hash(),
+                       const Equal& equal = Equal(),
+                       const Allocator& alloc = Allocator()) :
+                       sparsehash_map(empty_key, deleted_key, std::distance(first, last), hash, equal, alloc) {
+
+        insert(first, last);
+    };
+
+    virtual ~sparsehash_map() {};
+
+
+
+    iterator begin() {
+    	return map.begin();
+    }
+    const_iterator begin() const {
+      return cbegin();
+    }
+    const_iterator cbegin() const {
+      return map.begin();
+    }
+
+
+
+    iterator end() {
+    	return map.begin();
+    }
+    const_iterator end() const {
+      return cend();
+    }
+    const_iterator cend() const {
+    	return map.begin();
+    }
+
+    bool empty() const {
+      return map.empty();
+    }
+
+    size_type size() const {
+      return map.size();
+    }
+
+    void clear() {
+      map.clear_no_resize();
+    }
+
+
+    /// rehash for new count number of BUCKETS.  iterators are invalidated.
+    void rehash(size_type count) {
+    }
+
+    /// bucket count.  same as underlying buckets
+    size_type bucket_count() { return map.bucket_count(); }
+
+    /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
+    float load_factor() {
+      return  static_cast<float>(map.size()) / static_cast<float>(map.bucket_count());
+    }
+
+
+
+    // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n) but pays the random access and mem realloc cost
+    template <class InputIt>
+    void insert(InputIt first, InputIt last) {
+    	map.resize(map.size(), std::distance(first, last));
+
+    	map.insert(first, last);
+    }
+
+    /// inserting sorted range
+    void insert(::std::vector<::std::pair<Key, T> > & input) {
+    	insert(input.begin(), input.end());
+    }
+
+    template <typename InputIt, typename Pred>
+    size_t erase(InputIt first, InputIt last, Pred const & pred) {
+      static_assert(::std::is_convertible<Key, typename ::std::iterator_traits<InputIt>::value_type>::value,
+                    "InputIt value type for erase cannot be converted to key type");
+
+      if (first == last) return 0;
+
+      size_t count = 0;
+
+      // mark for erasure
+      auto middle = first->second.first;
+      for (; first != last; ++first) {
+        auto iter = map.find(*(first));
+        if (iter == map.end()) continue;
+
+        if (pred(*iter)) {
+        	map.erase(iter);
+        	++count;
+        }
+      }
+      return count;
+    }
+
+    template <typename InputIt>
+    size_t erase(InputIt first, InputIt last) {
+        static_assert(::std::is_convertible<Key, typename ::std::iterator_traits<InputIt>::value_type>::value,
+                      "InputIt value type for erase cannot be converted to key type");
+
+        if (first == last) return 0;
+
+        size_t count = 0;
+
+        // mark for erasure
+        auto middle = first->second.first;
+        for (; first != last; ++first) {
+          auto iter = map.find(*(first));
+          if (iter == map.end()) continue;
+
+          	map.erase(iter);
+          	++count;
+        }
+        return count;
+    }
+
+    template <typename Pred>
+    size_t erase(Pred const & pred) {
+    	size_t before = map.size();
+
+    	for (auto it = map.begin(); it != map.end(); ++it) {
+    		if (pred(*it))
+    				map.erase(it);
+    	}
+
+    	return before - map.size();
+    }
+
+    size_type count(Key const & key) const {
+    	return map.count(key);
+    }
+
+
+    ::std::pair<iterator, iterator> equal_range(Key const & key) {
+    	return map.equal_range(key);
+    }
+    ::std::pair<const_iterator, const_iterator> equal_range(Key const & key) const {
+    	return map.equal_range(key);
+    }
+    // NO bucket interfaces
+
+};
+
+
+template <typename Key,
+typename T,
+typename LowerSelector,
+typename Hash = ::std::hash<Key>,
+typename Equal = ::std::equal_to<Key>,
+typename Allocator = ::std::allocator<::std::pair<const Key, T> > >
+class sparsehash_fullmap {
+
+  protected:
+
+    using supercontainer_type =
+        ::google::dense_hash_map<Key, T,
+                       Hash, Equal, Allocator >;
+
+    supercontainer_type lower_map;
+    supercontainer_type upper_map;
+
+    LowerSelector splitter;
+
+    /**
+     * @class    bliss::iterator::ConcatenatingIterator
+     * @brief    this class presents a single/sequential view of a series of underlying iterator ranges
+     * @details  random access iterator is not supported. other iterator categories are okay.
+     *
+     */
+    template<typename V>
+    class concat_iter :
+      public ::std::iterator<
+        typename ::std::forward_iterator_tag,
+        V
+      >
+    {
+      protected:
+        using superiterator_type = typename ::std::conditional<::std::is_const<V>::value,
+            typename supercontainer_type::const_iterator, typename supercontainer_type::iterator>::type;
+        using type = concat_iter<V>;
+
+      protected:
+        /// the current position in the ranges list
+
+        supercontainer_type & lmap;
+        supercontainer_type & umap;
+
+        superiterator_type curr_iter;
+
+        bool at_max;
+
+        /// enforce that iterator is at a dereferenceable position
+        void ensure_dereferenceable() {
+          if (at_max) return;
+
+          if (curr_iter == lmap.end()) {
+        	  curr_iter = umap.begin();
+          }
+
+          if (curr_iter == umap.end()) {
+            at_max = true;
+            return;
+          }
+
+          return;
+
+        }
+
+      public:
+        using difference_type = typename ::std::iterator_traits<superiterator_type>::difference_type;
+
+
+        /// constructor for end concat iterator.  _end refers to end of supercontainer.
+        concat_iter(supercontainer_type & _lmap, supercontainer_type & _umap) : lmap(_lmap), umap(_umap), curr_iter(_umap.end()), at_max(true) {};
+
+        /// constructor for end concat iterator.  _end refers to end of supercontainer.
+        concat_iter(supercontainer_type & _lmap, supercontainer_type & _umap, superiterator_type _iter) :
+        	lmap(_lmap), umap(_umap), curr_iter(_iter) {
+        	ensure_dereferenceable();
+        };
+
+        // note that explicit keyword cannot be on copy and move constructors else the constructors are not defined/found.
+
+        // copy constructor, assignment operator, move constructor, assignment operator should
+        // should be default since the member vars are simple.
+
+        bool is_at_max() const {
+          at_max = (curr_iter == umap.end());
+          return at_max;
+        }
+
+        /**
+         * @brief increment:  move to the next position in the concatenating iterator, which may cross range boundaries.
+         * @note  side effect: set at_end variable.
+         * @return
+         */
+        type& operator++() {
+          // if at end, return
+          if (!at_max) {
+            // now increment.  since we are careful to leave iterator at a dereferenceable state, curr_pos is not at a subcontainer's end.
+            // so just increment.
+            ++curr_iter;
+
+            // now make sure we don't end up at a subcontainer's end.
+            ensure_dereferenceable();
+          }
+          return *this;
+        }
+
+
+        /**
+         * post increment.  make a copy then increment that.
+         */
+        type operator++(int)
+        {
+          type output(*this);
+          this->operator++();
+          return output;
+        }
+
+        //=== input iterator specific
+
+        /// comparison operator
+        bool operator==(const type& rhs) const
+          {
+          if ((lmap != rhs.lmap) || (umap != rhs.umap)) throw std::logic_error("the iterators being compared do not have the same internal end iterators so they are not comparable.");
+
+          if (at_max && rhs.at_max) return true;
+          if (at_max || rhs.at_max) return false;
+
+          return (curr_iter == rhs.curr_iter);
+          }
+
+        /// comparison operator
+        bool operator!=(const type& rhs) const
+          {
+          if ((lmap != rhs.lmap) || (umap != rhs.umap)) throw std::logic_error("the iterators being compared do not have the same internal end iterators so they are not comparable.");
+
+          if (at_max && rhs.at_max) return false;
+          if (at_max || rhs.at_max) return true;
+
+          return (curr_iter != rhs.curr_iter);
+          }
+
+
+        inline V operator*() const {
+          return *curr_iter;
+        }
+
+        /*=== NOT output iterator.  this is a map, does not make sense to change the  */
+        /* content via iterator.                                                      */
+
+
+        //=== NOT full forward iterator - no default constructor
+
+        //=== NOT bidirectional iterator - no decrement because map produces forward iterator only.
+
+        //=== NOT full random access iterator - only have +, += but not -. -=.  no comparison operators. have offset dereference operator [].
+
+    };
+
+    template <typename InputIt>
+    InputIt partition_input(InputIt first, InputIt last) {
+    	InputIt middle = ::std::partition(first, last, splitter);
+    }
+
+  public:
+    using key_type              = Key;
+    using mapped_type           = T;
+    using value_type            = ::std::pair<const Key, T>;
+    using hasher                = Hash;
+    using key_equal             = Equal;
+    using allocator_type        = Allocator;
+    using reference             = value_type&;
+    using const_reference       = const value_type&;
+    using pointer               = typename std::allocator_traits<Allocator>::pointer;
+    using const_pointer         = typename std::allocator_traits<Allocator>::const_pointer;
+    using iterator              = typename supercontainer_type::iterator;
+    using const_iterator        = typename supercontainer_type::const_iterator;
+    using size_type             = size_t;
+    using difference_type       = ptrdiff_t;
+
+
+    //  if multiplicity of dataset is kind of known, can initialize data to that to avoid growing vector on average.
+    sparsehash_fullmap(Key empty_key, Key deleted_key,
+    		 	 	   Key upper_empty_key, Key upper_deleted_key,
+					   size_type bucket_count = 128,
+					   const LowerSelector & _splitter = LowerSelector(),
+                       const Hash& hash = Hash(),
+                       const Equal& equal = Equal(),
+                       const Allocator& alloc = Allocator()) :
+                         lower_map(bucket_count / 2, hash, equal, alloc),
+						 upper_map(bucket_count / 2, hash, equal, alloc),
+						 splitter(splitter) {
+      lower_map.set_empty_key(empty_key);
+      lower_map.set_deleted_key(deleted_key);
+
+      upper_map.set_empty_key(upper_empty_key);
+      upper_map.set_deleted_key(upper_deleted_key);
+    };
+
+    template<class InputIt>
+    sparsehash_fullmap(InputIt first, InputIt last,
+                      Key empty_key, Key deleted_key,
+					  Key upper_empty_key, Key upper_deleted_key,
+                       size_type bucket_count = 128,
+					   const LowerSelector & _splitter = LowerSelector(),
+                       const Hash& hash = Hash(),
+                       const Equal& equal = Equal(),
+                       const Allocator& alloc = Allocator()) :
+					   sparsehash_fullmap(empty_key, deleted_key, upper_empty_key, upper_deleted_key,
+							   bucket_count, _splitter, hash, equal, alloc) {
+
+    	this->insert(first, last);
+    };
+
+    virtual ~sparsehash_fullmap() {};
+
+
+    iterator begin() {
+    	return concat_iter<value_type>(lower_map, upper_map, lower_map.begin());
+    }
+    const_iterator begin() const {
+      return cbegin();
+    }
+    const_iterator cbegin() const {
+    	return concat_iter<const value_type>(lower_map, upper_map, lower_map.begin());
+    }
+
+
+
+    iterator end() {
+    	return concat_iter<value_type>(lower_map, upper_map);
+    }
+    const_iterator end() const {
+      return cend();
+    }
+    const_iterator cend() const {
+    	return concat_iter<const value_type>(lower_map, upper_map);
+    }
+
+    bool empty() const {
+      return lower_map.empty() && upper_map.empty();
+    }
+
+    size_type size() const {
+      return lower_map.size() + upper_map.size();
+    }
+
+    void clear() {
+      lower_map.clear_no_resize();
+      upper_map.clear_no_resize();
+    }
+
+
+    /// rehash for new count number of BUCKETS.  iterators are invalidated.
+    void rehash(size_type count) {
+    }
+
+    /// bucket count.  same as underlying buckets
+    size_type bucket_count() { return lower_map.bucket_count() + upper_map.bucket_count(); }
+
+    /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
+    float load_factor() {
+      return  static_cast<float>(size()) / static_cast<float>(bucket_count());
+    }
+
+
+
+    // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n) but pays the random access and mem realloc cost
+    template <class InputIt>
+    void insert(InputIt first, InputIt last) {
+
+        InputIt middle = partition(first, last);
+
+        lower_map.resize(lower_map.size() + ::std::distance(first, middle));
+        lower_map.insert(first, middle);
+
+        upper_map.resize(upper_map.size() + ::std::distance(middle, last));
+        upper_map.insert(middle, last);
+    }
+
+    /// inserting sorted range
+    void insert(::std::vector<::std::pair<Key, T> > & input) {
+    	insert(input.begin(), input.end());
+    }
+
+    template <typename InputIt, typename Pred>
+    size_t erase(InputIt first, InputIt last, Pred const & pred) {
+        static_assert(::std::is_convertible<Key, typename ::std::iterator_traits<InputIt>::value_type>::value,
+                      "InputIt value type for erase cannot be converted to key type");
+
+
+      if (first == last) return 0;
+
+      size_t count = 0;
+
+
+      InputIt middle = partition(first, last);
+
+
+      // mark for erasure
+      for (; first != middle; ++first) {
+        auto iter = lower_map.find(*(first));
+        if (iter == lower_map.end()) continue;
+
+        if (pred(*iter)) {
+        	lower_map.erase(iter);
+        	++count;
+        }
+      }
+
+      for (; first != last; ++first) {
+        auto iter = upper_map.find(*(first));
+        if (iter == upper_map.end()) continue;
+
+        if (pred(*iter)) {
+        	upper_map.erase(iter);
+        	++count;
+        }
+      }
+
+
+      return count;
+    }
+
+    template <typename InputIt>
+    size_t erase(InputIt first, InputIt last) {
+
+        static_assert(::std::is_convertible<Key, typename ::std::iterator_traits<InputIt>::value_type>::value,
+                      "InputIt value type for erase cannot be converted to key type");
+
+        if (first == last) return 0;
+
+        size_t count = 0;
+
+
+        InputIt middle = partition(first, last);
+
+
+        // mark for erasure
+        for (; first != middle; ++first) {
+          auto iter = lower_map.find(*(first));
+          if (iter == lower_map.end()) continue;
+
+			lower_map.erase(iter);
+			++count;
+        }
+
+        for (; first != last; ++first) {
+          auto iter = upper_map.find(*(first));
+          if (iter == upper_map.end()) continue;
+
+          	upper_map.erase(iter);
+          	++count;
+        }
+
+
+        return count;
+    }
+
+    template <typename Pred>
+    size_t erase(Pred const & pred) {
+    	size_t before = size();
+
+    	for (auto it = lower_map.begin(); it != lower_map.end(); ++it) {
+    		if (pred(*it))
+    				lower_map.erase(it);
+    	}
+    	for (auto it = upper_map.begin(); it != upper_map.end(); ++it) {
+    		if (pred(*it))
+    				upper_map.erase(it);
+    	}
+
+    	return before - size();
+    }
+
+    size_type count(Key const & key) const {
+    	if (splitter(key))
+    		return lower_map.count(key);
+    	else
+    		return upper_map.count(key);
+    }
+
+
+    ::std::pair<iterator, iterator> equal_range(Key const & key) {
+    	if (splitter(key)) {
+    		auto iters = lower_map.equal_range(key);
+    		return std::make_pair(concat_iter<value_type>(lower_map, upper_map, iters.first),
+    				concat_iter<value_type>(lower_map, upper_map, iters.second));
+    	}
+    	else {
+    		auto iters = upper_map.equal_range(key);
+    		return std::make_pair(concat_iter<value_type>(lower_map, upper_map, iters.first),
+    				concat_iter<value_type>(lower_map, upper_map, iters.second));
+
+    	}
+
+    }
+    ::std::pair<const_iterator, const_iterator> equal_range(Key const & key) const {
+    	if (splitter(key)) {
+    		auto iters = lower_map.equal_range(key);
+    		return std::make_pair(concat_iter<const value_type>(lower_map, upper_map, iters.first),
+    				concat_iter<const value_type>(lower_map, upper_map, iters.second));
+    	}
+    	else {
+    		auto iters = upper_map.equal_range(key);
+
+    		return std::make_pair(concat_iter<const value_type>(lower_map, upper_map, iters.first),
+    				concat_iter<const value_type>(lower_map, upper_map, iters.second));
+    	}
+    }
+    // NO bucket interfaces
+
+};
+
 
   /**
    * @brief my version of hashed map.  because std::unordered_map does chaining for collision using a LINKED LIST.
@@ -85,6 +699,340 @@ namespace fsc {  // fast standard container
    *
    *  // no compact vec - can't effectively sort by key when key is not there.
    */
+
+
+/**
+ * second attempt at multimap using sparsehash's dense hashmap.  this version changes the key (appends a counter).  hash still uses the key,
+ * but equal compares the key and counter both.  Goal is to hash into the same bucket, so find/count/delete with key traverses the bucket
+ * and compare only the key (not counter).  counter is only for sparsehash's benefit to allow multiple objects of the same key
+ *
+ * space - increase size by size_t.
+ * time - internal chaining/open addressing may now have significant overhead.  since sparsehash is not designed with this use case, it may not work at all...
+ * 	(i.e., key multiplicity may be in the thousands, especially for metagenomics.)
+ *
+ * critical: bucket size needs to be as small as possible.
+ *
+ * added benefit:  counter can be used to indicate empty key and deleted key:  reserve counter == 0 for that.
+ *
+ */
+template <typename Key,
+typename T,
+typename Hash = ::std::hash<Key>,
+typename Equal = ::std::equal_to<Key>,
+typename Allocator = ::std::allocator<::std::pair<Key, T> >,
+typename Counter = size_t>
+class sparsehash_multimap {
+
+  protected:
+
+	Hash hs;
+	Equal eq;
+
+    // index "pointers"
+    using internal_key = ::std::pair<Key, Counter>;
+
+    struct KeyHash {
+    	Hash hs;
+    	KeyHash(Hash const & hash) : hs(hash) {}
+
+    	inline size_t operator()(internal_key const & x) {
+    		return hs(x.first);
+    	}
+    };
+    struct InternalEqual {
+    	Equal eq;
+    	InternalEqual(Equal const & _eq) : eq(_eq) {}
+
+    	inline bool operator()(internal_key const & x, internal_key const & y) {
+    		return eq(x.first, y.first) && (x.second == y.second);
+    	}
+    };
+
+    using superallocator_type = ::std::allocator_traits<Allocator>::rebind_alloc<::std::pair<const internal_key, T> >;
+    using supercontainer_type =
+        ::google::dense_hash_map<internal_key, T,
+                       KeyHash, InternalEqual, superallocator_type >;
+
+    struct KeyEqual {
+    	Equal eq;
+    	KeyEqual(Equal const & _eq) : eq(_eq) {}
+
+    	inline bool operator()(internal_key const & x, internal_key const & y) {
+    		return eq(x.first, y.first);
+    	}
+    	inline bool operator()(Key const & x, internal_key const & y) {
+    		return eq(x, y.first);
+    	}
+    	inline bool operator()(internal_key const & x, Key const & y) {
+    		return eq(x.first, y);
+    	}
+    	inline bool operator()(Key const & x, Key const & y) {
+    		return eq(x, y);
+    	}
+    } key_eq;
+
+    struct toValueType {
+    	::std::pair<const Key, T> operator()(::std::pair<const internal_key, T> const & x) {
+    		return ::std::make_pair(x.first.first, x.second);
+    	}
+
+    	const ::std::pair<const Key, T> operator()(::std::pair<const internal_key, T> const & x) const {
+    		return ::std::make_pair(x.first.first, x.second);
+    	}
+    } to_external;
+
+    struct toInternalType {
+    	::std::pair<const internal_key, T> operator()(::std::pair<const Key, T> const & x, Counter & c) {
+    		return ::std::make_pair(std::make_pair(x.first, c++), x.second);
+    	}
+
+    	::std::pair<internal_key, T> operator()(::std::pair<Key, T> const & x, Counter & c) {
+    		return ::std::make_pair(std::make_pair(x.first, c++), x.second);
+    	}
+    } to_internal;
+
+    struct KeyFilter {
+    	Key k;
+    	Equal eq;
+    	KeyFilter(Equal const & _eq, Key const & key) : eq(_eq), k(key) {};
+
+    	inline bool operator()(std::pair<internal_key, T> const & x) {
+    		return eq(x.first.first, k);
+    	}
+    	inline bool operator()(std::pair<const internal_key, T> const & x) {
+    		return eq(x.first.first, k);
+    	}
+    };
+
+
+    template <typename IT>
+    using ToInternalTypeIterator = ::bliss::iterator::transform_iterator<IT, toInternalType>;
+
+    template <typename IT>
+    using ToExternalTypeIterator = ::bliss::iterator::transform_iterator<IT, toValueType>;
+
+    template <typename IT>
+    using KeyFilterIterator = ::bliss::iterator::filter_iterator<IT, KeyFilter>;
+
+
+    supercontainer_type map;
+    Counter c;
+
+  public:
+    using key_type              = Key;
+    using mapped_type           = T;
+    using value_type            = ::std::pair<const Key, T>;
+    using hasher                = Hash;
+    using key_equal             = Equal;
+    using allocator_type        = Allocator;
+    using reference             = value_type&;
+    using const_reference       = const value_type&;
+    using pointer               = typename std::allocator_traits<Allocator>::pointer;
+    using const_pointer         = typename std::allocator_traits<Allocator>::const_pointer;
+    using iterator              = ToExternalTypeIterator<typename supercontainer_type::iterator>;
+    using const_iterator        = ToExternalTypeIterator<typename supercontainer_type::const_iterator>;
+    using size_type             = size_t;
+    using difference_type       = ptrdiff_t;
+
+    using filtered_iterator              = ToExternalTypeIterator<KeyFilterIterator<typename supercontainer_type::iterator> >;
+    using const_filtered_iterator        = ToExternalTypeIterator<KeyFilterIterator<typename supercontainer_type::const_iterator > >;
+
+
+    //  if multiplicity of dataset is kind of known, can initialize data to that to avoid growing vector on average.
+    sparsehash_multimap(Key empty_key, Key deleted_key,
+                 	 size_type bucket_count = 128,
+                       const Hash& hash = Hash(),
+                       const Equal& equal = Equal(),
+                       const Allocator& alloc = Allocator()) : hs(hash), eq(equal),
+						 map(bucket_count, KeyHash(hash), InternalEqual(equal), superallocator_type()), c(1UL) {
+      map.set_empty_key(std::make_pair(empty_key, 0UL));
+      map.set_deleted_key(std::make_pair(deleted_key, 0UL));
+    };
+
+    template<class InputIt>
+    sparsehash_multimap(InputIt first, InputIt last,
+                      Key empty_key, Key deleted_key,
+                       size_type bucket_count = 128,
+                       const Hash& hash = Hash(),
+                       const Equal& equal = Equal(),
+                       const Allocator& alloc = Allocator()) :
+                       sparsehash_multimap(empty_key, deleted_key, bucket_count, hash, equal, alloc) {
+
+    		insert(first, last);
+    };
+
+    virtual ~sparsehash_multimap() {};
+
+
+
+    iterator begin() {
+      return iterator(map.begin(), to_external);
+    }
+    const_iterator begin() const {
+      return cbegin();
+    }
+    const_iterator cbegin() const {
+      return const_iterator(map.begin(), to_external);
+    }
+
+
+
+    iterator end() {
+      return iterator(map.end(), to_external);
+    }
+    const_iterator end() const {
+      return cend();
+    }
+    const_iterator cend() const {
+      return const_iterator(map.end(), to_external);
+    }
+
+    bool empty() const {
+      return map.empty();
+    }
+
+    size_type size() const {
+      return map.size();
+    }
+
+    void clear() {
+      map.clear_no_resize();
+      c = 1UL;
+    }
+
+
+    /// rehash for new count number of BUCKETS.  iterators are invalidated.
+    void rehash(size_type count) {
+    }
+
+    /// bucket count.  same as underlying buckets
+    size_type bucket_count() { return map.bucket_count(); }
+
+    /// max load factor.  this is the map's max load factor (vectors per bucket) x multiplicity = elements per bucket.  side effect is multiplicity is updated.
+    float max_load_factor() {
+      return static_cast<float>(size()) / static_cast<float>(bucket_count());
+    }
+
+
+
+    // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n) but pays the random access and mem realloc cost
+    template <class InputIt>
+    void insert(InputIt first, InputIt last) {
+        static_assert(::std::is_convertible<std::pair<Key, T>,
+                      typename ::std::iterator_traits<InputIt>::value_type>::value,
+                      "InputIt value type for insert cannot be converted to std::pair<Key, T> type");
+
+        if (first == last) return;
+
+        map.resize(map.size() + std::distane(first, last));
+
+        map.insert(ToInternalTypeIterator(first, to_internal),
+    				ToInternalTypeIterator(last, to_internal));
+    }
+
+    /// inserting sorted range
+    void insert(::std::vector<::std::pair<Key, T> > & input) {
+    	insert(input.begin(), input.end());
+
+    }
+
+    template <typename InputIt, typename Pred>
+    size_t erase(InputIt first, InputIt last, Pred const & pred) {
+        static_assert(::std::is_convertible<Key, typename ::std::iterator_traits<InputIt>::value_type>::value,
+                      "InputIt value type for erase cannot be converted to key type");
+
+        if (first == last) return 0;
+
+        size_t before = this->size();
+
+        size_t bucket_id;
+        for (InputIt it = first; it != last; ++it) {
+      	  Key k = *it;
+            // get the bucket this belongs to
+            bucket_id = map.bucket(::std::make_pair(k, 1UL));
+
+            // iterate through the bucket.
+            for (auto bit = map.begin(bucket_id), max = map.end(bucket_id); bit != max; ++bit) {
+          	  if (key_eq(bit->first, k) && pred(to_external(*bit)))  {
+          		  map.erase(bit);
+          	  }
+            }
+        }
+        return before - this->size();
+    }
+
+    template <typename InputIt>
+    size_t erase(InputIt first, InputIt last) {
+      static_assert(::std::is_convertible<Key, typename ::std::iterator_traits<InputIt>::value_type>::value,
+                    "InputIt value type for erase cannot be converted to key type");
+
+      if (first == last) return 0;
+
+      size_t before = this->size();
+
+      size_t bucket_id;
+      for (InputIt it = first; it != last; ++it) {
+    	  Key k = *it;
+          // get the bucket this belongs to
+          bucket_id = map.bucket(::std::make_pair(k, 1UL));
+
+          // iterate through the bucket.
+          for (auto bit = map.begin(bucket_id), max = map.end(bucket_id); bit != max; ++bit) {
+        	  if (key_eq(bit->first, k))  {
+        		  map.erase(bit);
+        	  }
+          }
+      }
+      return before - this->size();
+    }
+
+    template <typename Pred>
+    size_t erase(Pred const & pred) {
+
+      if (this->size() == 0) return 0;
+
+      size_t before = this->size();
+
+      for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+    	  if (pred(to_external(*it))) map.erase(it);
+      }
+
+      return before - this->size();
+    }
+
+    size_type count(Key const & key) const {
+    	size_t cnt = 0;
+
+		// get the bucket this belongs to
+		size_t bucket_id = map.bucket(::std::make_pair(key, 1UL));
+
+		// iterate through the bucket.
+		for (auto bit = map.begin(bucket_id), max = map.end(bucket_id); bit != max; ++bit) {
+		  if (key_eq(bit->first, k))  ++cnt;
+		}
+		return cnt;
+	}
+
+
+    ::std::pair<filtered_iterator, filtered_iterator > equal_range(Key const & key) {
+		size_t bucket_id = map.bucket(::std::make_pair(key, 1UL));
+
+		return ::std::make_pair(filtered_iterator(KeyFilterIterator(KeyFilter(eq, key), map.begin(bucket_id), map.end(bucket_id)), to_external),
+				filtered_iterator(KeyFilterIterator(KeyFilter(eq, key), map.end(bucket_id)), to_external));
+    }
+    ::std::pair<const_filtered_iterator, const_filtered_iterator> equal_range(Key const & key) const {
+		size_t bucket_id = map.bucket(::std::make_pair(key, 1UL));
+
+		return ::std::make_pair(filtered_iterator(KeyFilterIterator(KeyFilter(eq, key), map.begin(bucket_id), map.end(bucket_id)), to_external),
+				filtered_iterator(KeyFilterIterator(KeyFilter(eq, key), map.end(bucket_id)), to_external));
+
+    }
+    // NO bucket interfaces
+
+};
+
+
+
 
   /**
    * uncompacted version of the vecmap
@@ -681,7 +1629,7 @@ namespace fsc {  // fast standard container
 
       void clear() {
     	  vec.clear();
-        map.clear();
+        map.clear_no_resize();
         s = 0UL;
       }
 
