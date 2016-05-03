@@ -1337,6 +1337,8 @@ class densehash_multimap {
 
     /// inserting sorted range
     void insert(::std::vector<::std::pair<Key, T> > & input) {
+      // TODO: more memory efficient version of this.
+
       insert(input.begin(), input.end());
     }
 
@@ -1433,22 +1435,24 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
   protected:
 
     // data container
-    using subcontainer_type = ::std::vector<::std::pair<Key, T>, Allocator >;
-    using subiter_type = typename ::std::vector<::std::pair<Key, T>, Allocator >::iterator;
-    using const_subiter_type = typename ::std::vector<::std::pair<Key, T>, Allocator >::const_iterator;
+    using tuple_allocator_type = typename Allocator::template rebind< ::std::pair<Key, T> >::other;
+    using subcontainer_type = ::std::vector<::std::pair<Key, T>, tuple_allocator_type >;
+    using subiter_type = typename subcontainer_type::iterator;
+    using const_subiter_type = typename subcontainer_type::const_iterator;
 
     // index in the vector - this is so we don't have to worry about pointer or iterators being invalidated when vector resizes
     // non-negative values indicate singletons.  negative values indicate multiple entries.
     // multiple entries is stored in a vector of vector.  the index is internal_val_type with sign bit removed.
     using internal_val_type = int64_t;
 
-
+    using super_allocator_type = typename Allocator::template rebind<std::pair< const Key, internal_val_type> >::other;
     using supercontainer_type =
         ::google::dense_hash_map<Key, internal_val_type,
-                       Hash, Equal, Allocator >;
+                       Hash, Equal, super_allocator_type >;
 
     subcontainer_type vec1;
-    std::vector<subcontainer_type, Allocator> vecX;
+    using vector_allocator_type = typename Allocator::template rebind< subcontainer_type >::other;
+    std::vector<subcontainer_type, vector_allocator_type> vecX;
     supercontainer_type map;
     size_t s;
 
@@ -1658,7 +1662,63 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
 
     /// inserting sorted range
     void insert(::std::vector<::std::pair<Key, T> > & input) {
-      insert(input.begin(), input.end());
+
+      if (input.size() == 0) return;
+
+      if (this->size() > 0) {
+        // there is data in there already.  so do normal insert
+        this->insert(input.begin(), input.end());
+        return;
+      }
+
+      // else empty, so we can improve the memory utilization a little.
+
+      // get previous sizes so we know where to start from
+      input.swap(vec1);
+      int64_t idx1 = 0;
+
+      // iterator over all and insert into map.
+      std::pair<typename supercontainer_type::iterator, bool> insert_result;
+      Key k;
+      int64_t idx;
+      int64_t max = vec1.size();
+      for (int64_t i = 0; i < max; ++i) {
+        k = vec1[i].first;
+
+        // try inserting
+        insert_result = map.insert(std::make_pair(k, idx1));
+
+        if (insert_result.second) {
+          // new map entry already inserted. just need to increment.
+
+          // and also move the entry to the right place
+          if (i != idx1) ::std::swap(vec1[idx1], vec1[i]);
+
+          ++idx1;
+        } else {
+          // entry already there.  get the iterator and check the idx
+          idx = insert_result.first->second;
+          if (idx < 0) {
+            // previously inserted multiple entries, so reuse the vector, and insert
+            vecX[idx & ::std::numeric_limits<int64_t>::max()].emplace_back(vec1[i]);
+            // no map update is needed.
+          } else {
+            // previously inserted 1 entry. so
+            // update map with new vecX value
+            insert_result.first->second = static_cast<int64_t>(vecX.size()) | ~(::std::numeric_limits<int64_t>::max());
+            // create a new entry in vecX
+            vecX.emplace_back(subcontainer_type());
+            // get previous value from vec1 and insert into vecX
+            vecX.back().emplace_back(std::move(vec1[idx]));
+            // insert new value into vecX
+            vecX.back().emplace_back(vec1[i]);
+          }
+        }
+      }
+
+      s += vec1.size();
+
+      vec1.erase(vec1.begin() + idx1, vec1.end());
     }
 
     template <typename InputIt, typename Pred>

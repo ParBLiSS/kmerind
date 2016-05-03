@@ -257,19 +257,19 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class InputIterator>
-      size_t local_insert(InputIterator first, InputIterator last) {
+      template <typename KT>
+      size_t local_insert(std::vector<KT> & input) {
           BL_BENCH_INIT(local_insert);
 
     	  BL_BENCH_START(local_insert);
-          this->local_reserve(c.size() + ::std::distance(first, last));  // before branching, because reserve calls collective "empty()"
+          this->local_reserve(c.size() + input.size());  // before branching, because reserve calls collective "empty()"
           BL_BENCH_END(local_insert, "reserve", this->c.size());
 
 
           size_t before = c.size();
 
           BL_BENCH_START(local_insert);
-          this->c.insert(first, last);
+          this->c.insert(input);
           BL_BENCH_END(local_insert, "insert", this->c.size());
 
           if (c.size() != before) local_changed = true;
@@ -285,16 +285,17 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class InputIterator, class Predicate>
-      size_t local_insert(InputIterator first, InputIterator last, Predicate const &pred) {
+      template <class KT, class Predicate>
+      size_t local_insert(std::vector<KT> & input, Predicate const &pred) {
 
-          if (first == last) return 0;
+          if (input.size() == 0) return 0;
 
-          auto new_end = std::partition(first, last, pred);
+          auto new_end = std::partition(input.begin(), input.end(), pred);
+          input.erase(new_end, input.end());
 
           size_t before = c.size();
 
-          this->local_insert(first, new_end);
+          this->local_insert(input);
 
           if (c.size() != before) local_changed = true;
 
@@ -1590,9 +1591,9 @@ namespace dsc  // distributed std container
         // local compute part.  called by the communicator.
         size_t count = 0;
         if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
-          count = this->Base::local_insert(input.begin(), input.end(), pred);
+          count = this->Base::local_insert(input, pred);
         else
-          count = this->Base::local_insert(input.begin(), input.end());
+          count = this->Base::local_insert(input);
         BL_BENCH_END(insert, "insert", this->c.size());
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "hashmap:insert", this->comm);
@@ -1874,9 +1875,9 @@ namespace dsc  // distributed std container
         // local compute part.  called by the communicator.
         size_t count = 0;
         if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
-          count = this->Base::local_insert(input.begin(), input.end(), pred);
+          count = this->Base::local_insert(input, pred);
         else
-          count = this->Base::local_insert(input.begin(), input.end());
+          count = this->Base::local_insert(input);
         BL_BENCH_END(insert, "insert", this->c.size());
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "hash_multimap:insert", this->comm);
