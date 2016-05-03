@@ -177,7 +177,7 @@ namespace dsc  // distributed std container
       struct QueryProcessor {  // assume unique, always.
 
           // assumes that container is sorted. and exact overlap region is provided.  do not filter output here since it's an output iterator.
-          template <class DB, class QueryIter, class OutputIter, class Operator, class Predicate = ::fsc::::fsc::TruePredicate>
+          template <class DB, class QueryIter, class OutputIter, class Operator, class Predicate = ::fsc::TruePredicate>
           static size_t process(DB &db,
                                 QueryIter query_begin, QueryIter query_end,
                                 OutputIter &output, Operator & op,
@@ -186,7 +186,7 @@ namespace dsc  // distributed std container
               if (query_begin == query_end) return 0;
 
               size_t count = 0;  // before size.
-              if (!::std::is_same<Predicate, ::fsc::::fsc::TruePredicate>::value)
+              if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
                 for (auto it = query_begin; it != query_end; ++it) {
                   count += op(db, *it, output, pred);
                 }
@@ -235,7 +235,7 @@ namespace dsc  // distributed std container
               return 1;
           }
           // filtered element-wise.
-          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::::fsc::TruePredicate>
+          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
           size_t operator()(DB &db, Query const &v, OutputIter &output,
                             Predicate const& pred) const {
               auto range = db.equal_range(v);
@@ -261,7 +261,7 @@ namespace dsc  // distributed std container
               return before - db.size();
           }
           /// Return how much was KEPT.
-          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::::fsc::TruePredicate>
+          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
           size_t operator()(DB &db, Query const &v, OutputIter &,
                             Predicate const & pred) {
               auto range = (const_cast<DB const &>(db)).equal_range(v);

@@ -114,6 +114,9 @@ foreach(dna 4 5 16)
     # position maps.  note SORTED PATH ignores hash but uses transformation
     add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} SORTED POS IDEN FARM FARM)
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} COMPACTVEC POS IDEN FARM FARM)
+
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} DENSEHASH COUNT IDEN FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} DENSEHASH POS IDEN FARM FARM)
   endforeach(store)
   
   # then add for SINGLE strand store, different distribution transforms for COUNT and POS
@@ -148,9 +151,9 @@ endforeach(store)
 # do it for fastA
 
 foreach(store SINGLE CANONICAL BIMOLECULE)
-  foreach(map SORTED UNORDERED)
+  foreach(map SORTED UNORDERED DENSEHASH)
 
-    foreach(k 15 21 31 63 95)  # 31 already compiled for fastq.
+    foreach(k 15 21 31 63 95)  
         # count maps.  note SORTED PATH ignores hash but uses transformation
 		add_executable(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
 		SET_TARGET_PROPERTIES(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
@@ -381,7 +384,6 @@ endif()
 
 
 # EXECUTABLES
-include_directories("${EXT_PROJECTS_DIR}/sparsehash/src")
 include_directories("${EXT_PROJECTS_DIR}/tommyds")
 add_executable(benchmark_hashtables BenchmarkHashTables.cpp)
 target_link_libraries(benchmark_hashtables ${EXTRA_LIBS})

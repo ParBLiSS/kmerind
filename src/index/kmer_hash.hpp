@@ -309,7 +309,7 @@ namespace bliss {
       		  template <typename KM = KMER,
       				  typename std::enable_if<
 					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA5>::value, int>::type = 0>
-      		  inline KMER operator()() {
+      		  static inline KMER generate() {
       			  KMER em(true); // create an empty one
       			  em.getDataRef()[0] = 0x010;
       			  return em;
@@ -321,18 +321,18 @@ namespace bliss {
 					  (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
 							  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value)	  &&
 					  (KM::nBits < (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
-      		  inline KMER operator()() {
+      		  static inline KMER generate() {
       			  KMER em(true); // create an empty one
       			  em.getDataRef()[KM::nWords - 1] = ~(~(static_cast<typename KM::KmerWordType>(0)) >> 1);
       			  return em;
       		  }
 
-      		  /// kmer empty key for DNA, unfull kmer.  11111111111111
+      		  /// kmer empty key for DNA, full kmer.  11111111111111
       		  template <typename KM = KMER,
       				  typename std::enable_if<
 					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value &&
 					  (KM::nBits == (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
-      		  inline KMER operator()() {
+      		  static inline KMER generate() {
       			  KMER em; // create an empty one
       			  for (size_t i = 0; i < KM::nWords; ++i) {
       				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
@@ -340,12 +340,12 @@ namespace bliss {
       			  return em;
       		  }
 
-      		  /// kmer empty key for DNA, unfull kmer.  111111111111110
+      		  /// kmer empty key for DNA, full kmer.  111111111111110
       		  template <typename KM = KMER,
       				  typename std::enable_if<
 					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value &&
 					  (KM::nBits == (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
-      		  inline KMER operator()() {
+      		  static inline KMER generate() {
       			  KMER em; // create an empty one
       			  for (size_t i = 1; i < KM::nWords; ++i) {
       				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
@@ -363,7 +363,7 @@ namespace bliss {
       		  template <typename KM = KMER,
       				  typename std::enable_if<
 					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA5>::value, int>::type = 0>
-      		  inline KMER operator()() {
+      		  static inline KMER generate() {
       			  KMER em(true); // create an empty one
       			  em.getDataRef()[0] = 0x101;
       			  return em;
@@ -375,18 +375,18 @@ namespace bliss {
 					  (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
 					  	::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value) &&
 					  (KM::nBits < (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
-      		  inline KMER operator()() {
+      		  static inline KMER generate() {
       			  KMER em(true); // create an empty one
       			  em.getDataRef()[KM::nWords - 1] = ~(~(static_cast<typename KM::KmerWordType>(0)) >> 2);
       			  return em;
       		  }
 
-      		  /// kmer empty key for DNA, unfull kmer.  11111111111110
+      		  /// kmer empty key for DNA, full kmer.  11111111111110
       		  template <typename KM = KMER,
       				  typename std::enable_if<
 					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value  &&
 					  (KM::nBits == (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
-      		  inline KMER operator()() {
+      		  static inline KMER generate() {
       			  KMER em; // create an empty one
       			  for (size_t i = 1; i < KM::nWords; ++i) {
       				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
@@ -396,12 +396,12 @@ namespace bliss {
       		  }
 
 
-      		  /// kmer empty key for DNA, unfull kmer.  111111111111100
+      		  /// kmer empty key for DNA, full kmer.  111111111111100
       		  template <typename KM = KMER,
       				  typename std::enable_if<
 					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value &&
 					  (KM::nBits == (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
-      		  inline KMER operator()() {
+      		  static inline KMER generate() {
       			  KMER em; // create an empty one
       			  for (size_t i = 1; i < KM::nWords; ++i) {
       				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));

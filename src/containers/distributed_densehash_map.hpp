@@ -1132,24 +1132,9 @@ namespace dsc  // distributed std container
           return results;
       }
 
-      template <typename KeySpaceSelector = LowerKeySpaceSelector,
-          typename ::std::enable_if<::std::is_same<KeySpaceSelector, ::fsc::TruePredicate>::value,
-            int>::type = 1>
-      densehash_map_base(Key empty_key, Key deleted_key, const mxx::comm& _comm) :  Base(_comm),
-          key_to_rank(_comm.size()), c(empty_key, deleted_key),
-          local_changed(false) {}
-
-      template <typename KeySpaceSelector = LowerKeySpaceSelector,
-          typename ::std::enable_if<!::std::is_same<KeySpaceSelector, ::fsc::TruePredicate>::value,
-            int>::type = 1>
-      densehash_map_base(Key empty_key, Key deleted_key, Key upper_empty_key, Key upper_deleted_key,
-                             KeySpaceSelector selector = KeySpaceSelector(),
-                             const mxx::comm& _comm) :  Base(_comm),
+      densehash_map_base(const mxx::comm& _comm) :  Base(_comm),
                              key_to_rank(_comm.size()),
-                             c(empty_key, deleted_key, upper_empty_key, upper_deleted_key, selector),
                              local_changed(false) {}
-
-
 
       // ================ local overrides
 
@@ -1168,6 +1153,15 @@ namespace dsc  // distributed std container
     public:
 
       virtual ~densehash_map_base() {};
+
+      void reserve_keys(Key const & empty_key, Key const & deleted_key) {
+    	  c.reserve_keys(empty_key, deleted_key);
+      }
+
+      void reserve_upper_keys(Key const & empty_key, Key const & deleted_key, const LowerKeySpaceSelector & _splitter = LowerKeySpaceSelector()) {
+    	  c.reserve_upper_keys(empty_key, deleted_key, _splitter);
+      }
+
 
       /// returns the local storage.  please use sparingly.
       local_container_type& get_local_container() { return c; }
@@ -1366,9 +1360,9 @@ namespace dsc  // distributed std container
 
           BL_BENCH_END(erase, "erase", keys.size());
           if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
-            count = this->c.erase(keys.begin(), keys.end(), pred);
+            this->c.erase(keys.begin(), keys.end(), pred);
           } else {
-            count = this->c.erase(keys.begin(), keys.end());
+            this->c.erase(keys.begin(), keys.end());
           }
 
           BL_BENCH_REPORT_MPI_NAMED(erase, "base_hashmap:erase", this->comm);
@@ -1523,17 +1517,8 @@ namespace dsc  // distributed std container
 
     public:
 
-      template <typename KeySpaceSelector = LowerKeySpaceSelector,
-          typename ::std::enable_if<::std::is_same<KeySpaceSelector, ::fsc::TruePredicate>::value,
-            int>::type = 1>
-      densehash_map(Key empty_key, Key deleted_key, const mxx::comm& _comm) : Base(empty_key, deleted_key, _comm) {}
 
-      template <typename KeySpaceSelector = LowerKeySpaceSelector,
-          typename ::std::enable_if<!::std::is_same<KeySpaceSelector, ::fsc::TruePredicate>::value,
-            int>::type = 1>
-      densehash_map(Key empty_key, Key deleted_key, Key upper_empty_key, Key upper_deleted_key,
-                             KeySpaceSelector selector = KeySpaceSelector(),
-                             const mxx::comm& _comm) : Base(empty_key, deleted_key, upper_empty_key, upper_deleted_key, selector, _comm) {}
+      densehash_map(const mxx::comm& _comm) : Base(_comm) {};
 
 
       virtual ~densehash_map() {};
@@ -1721,17 +1706,9 @@ namespace dsc  // distributed std container
 
     public:
 
-      template <typename KeySpaceSelector = LowerKeySpaceSelector,
-          typename ::std::enable_if<::std::is_same<KeySpaceSelector, ::fsc::TruePredicate>::value,
-            int>::type = 1>
-      densehash_multimap(Key empty_key, Key deleted_key, const mxx::comm& _comm) : Base(empty_key, deleted_key, _comm), local_unique_count(0) {}
 
-      template <typename KeySpaceSelector = LowerKeySpaceSelector,
-          typename ::std::enable_if<!::std::is_same<KeySpaceSelector, ::fsc::TruePredicate>::value,
-            int>::type = 1>
-      densehash_multimap(Key empty_key, Key deleted_key, Key upper_empty_key, Key upper_deleted_key,
-                             KeySpaceSelector selector = KeySpaceSelector(),
-                             const mxx::comm& _comm) : Base(empty_key, deleted_key, upper_empty_key, upper_deleted_key, selector, _comm), local_unique_count(0) {}
+      densehash_multimap(const mxx::comm& _comm) : Base(_comm), local_unique_count(0) {}
+
 
       virtual ~densehash_multimap() {}
 
@@ -1989,7 +1966,7 @@ namespace dsc  // distributed std container
           this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
-            auto result = temp.insert(*it);
+            auto result = this->c.insert(*it);
             if (!(result.second)) {
               // failed insertion - means an entry is already there, so reduce
               result.first->second = r(result.first->second, it->second);
@@ -2014,7 +1991,7 @@ namespace dsc  // distributed std container
 
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) {
-              auto result = temp.insert(*it);
+              auto result = this->c.insert(*it);
               if (!(result.second)) {
                 // failed insertion - means an entry is already there, so reduce
                 result.first->second = r(result.first->second, it->second);
@@ -2064,17 +2041,8 @@ namespace dsc  // distributed std container
 
     public:
 
-      template <typename KeySpaceSelector = LowerKeySpaceSelector,
-          typename ::std::enable_if<::std::is_same<KeySpaceSelector, ::fsc::TruePredicate>::value,
-            int>::type = 1>
-      reduction_densehash_map(Key empty_key, Key deleted_key, const mxx::comm& _comm) : Base(empty_key, deleted_key, _comm) {}
+      reduction_densehash_map( const mxx::comm& _comm) : Base(_comm) {}
 
-      template <typename KeySpaceSelector = LowerKeySpaceSelector,
-          typename ::std::enable_if<!::std::is_same<KeySpaceSelector, ::fsc::TruePredicate>::value,
-            int>::type = 1>
-      reduction_densehash_map(Key empty_key, Key deleted_key, Key upper_empty_key, Key upper_deleted_key,
-                             KeySpaceSelector selector = KeySpaceSelector(),
-                             const mxx::comm& _comm) : Base(empty_key, deleted_key, upper_empty_key, upper_deleted_key, selector, _comm) {}
 
       virtual ~reduction_densehash_map() {};
 
@@ -2168,7 +2136,7 @@ namespace dsc  // distributed std container
     typename Key, typename T,
     template <typename> class MapParams,
     typename LowerKeySpaceSelector = ::fsc::TruePredicate,
-    class Alloc = ::std::allocator< ::std::pair<const Key, T>
+    class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class counting_densehash_map : public reduction_densehash_map<Key, T, MapParams, LowerKeySpaceSelector, ::std::plus<T>, Alloc> {
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
@@ -2196,17 +2164,8 @@ namespace dsc  // distributed std container
       using difference_type       = typename local_container_type::difference_type;
 
 
-      template <typename KeySpaceSelector = LowerKeySpaceSelector,
-          typename ::std::enable_if<::std::is_same<KeySpaceSelector, ::fsc::TruePredicate>::value,
-            int>::type = 1>
-      counting_densehash_map(Key empty_key, Key deleted_key, const mxx::comm& _comm) : Base(empty_key, deleted_key, _comm) {}
 
-      template <typename KeySpaceSelector = LowerKeySpaceSelector,
-          typename ::std::enable_if<!::std::is_same<KeySpaceSelector, ::fsc::TruePredicate>::value,
-            int>::type = 1>
-      counting_densehash_map(Key empty_key, Key deleted_key, Key upper_empty_key, Key upper_deleted_key,
-                             KeySpaceSelector selector = KeySpaceSelector(),
-                             const mxx::comm& _comm) : Base(empty_key, deleted_key, upper_empty_key, upper_deleted_key, selector, _comm) {}
+      counting_densehash_map(const mxx::comm& _comm) : Base(_comm) {}
 
 
       virtual ~counting_densehash_map() {};

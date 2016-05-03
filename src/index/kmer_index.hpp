@@ -75,6 +75,7 @@
 #include "containers/distributed_unordered_map.hpp"
 #include "containers/distributed_sorted_map.hpp"
 #include "containers/distributed_map.hpp"
+#include "containers/distributed_densehash_map.hpp"
 
 #include "io/sequence_iterator.hpp"
 #include "io/sequence_id_iterator.hpp"
