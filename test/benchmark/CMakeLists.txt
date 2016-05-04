@@ -137,11 +137,13 @@ foreach(store SINGLE CANONICAL BIMOLECULE)
     foreach(k 15 21 31 63 95)  # 31 already compiled for fastq.
         # count maps.  note SORTED PATH ignores hash but uses transformation
         add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} SORTED COUNT IDEN FARM FARM)
-        add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} UNORDERED COUNT IDEN FARM FARM)
+#        add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} UNORDERED COUNT IDEN FARM FARM)
+     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} DENSEHASH COUNT IDEN FARM FARM)
         
         # position maps.  note SORTED PATH ignores hash but uses transformation
         add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} SORTED POS IDEN FARM FARM)
-        add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} COMPACTVEC POS IDEN FARM FARM)
+    #    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} COMPACTVEC POS IDEN FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} DENSEHASH POS IDEN FARM FARM)
     endforeach(k)
   endforeach(format)
 endforeach(store)
