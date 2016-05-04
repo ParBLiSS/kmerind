@@ -517,6 +517,16 @@ int main(int argc, char** argv) {
 
   BL_BENCH_INIT(test);
 
+  if (comm.rank() == 0) printf("reading query %s via posix\n", queryname.c_str());
+  BL_BENCH_START(test);
+  auto query = readForQuery_posix<IndexType>(queryname, comm);
+  BL_BENCH_COLLECTIVE_END(test, "read_query", query.size(), comm);
+
+  BL_BENCH_START(test);
+  sample(query, query.size() / sample_ratio, comm.rank(), comm);
+  BL_BENCH_COLLECTIVE_END(test, "sample", query.size(), comm);
+
+
   {
 	  ::std::vector<typename IndexType::TupleType> temp;
 
@@ -555,15 +565,6 @@ int main(int argc, char** argv) {
   }
 
   {
-	  if (comm.rank() == 0) printf("reading query %s via posix\n", queryname.c_str());
-	  BL_BENCH_START(test);
-	  auto query = readForQuery_posix<IndexType>(queryname, comm);
-	  BL_BENCH_COLLECTIVE_END(test, "read_query", query.size(), comm);
-
-	  BL_BENCH_START(test);
-	  sample(query, query.size() / sample_ratio, comm.rank(), comm);
-	  BL_BENCH_COLLECTIVE_END(test, "sample", query.size(), comm);
-
 
 	  {
 		  auto lquery = query;
