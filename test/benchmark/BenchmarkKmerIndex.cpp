@@ -572,7 +572,7 @@ int main(int argc, char** argv) {
 		  auto counts = idx.count(lquery);
 		  BL_BENCH_COLLECTIVE_END(test, "count", counts.size(), comm);
 	  }
-#ifndef pCompare
+#if defined(pCompare)
 	  {
 		  auto lquery = query;
 		  BL_BENCH_START(test);
