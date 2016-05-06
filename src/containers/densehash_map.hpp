@@ -303,6 +303,11 @@ class densehash_map {
 						 {
     	reserve_keys(empty_key, deleted_key);
     	reserve_upper_keys(upper_empty_key, upper_deleted_key, _splitter);
+
+    	lower_map.max_load_factor(0.7);
+    	lower_map.min_load_factor(0.3);
+      upper_map.max_load_factor(0.7);
+      upper_map.min_load_factor(0.3);
     };
 
     template<class InputIt>
@@ -419,12 +424,14 @@ class densehash_map {
     }
 
     void resize(size_t const n) {
-      lower_map.resize(n/2);
-      upper_map.resize(n/2);
+      lower_map.resize(static_cast<float>(n) / 2.0 / lower_map.max_load_factor() );
+      upper_map.resize(static_cast<float>(n) / 2.0 / upper_map.max_load_factor() );
+
     }
 
     /// rehash for new count number of BUCKETS.  iterators are invalidated.
     void rehash(size_type count) {
+      this->resize(count);
     }
 
     /// bucket count.  same as underlying buckets
@@ -443,10 +450,10 @@ class densehash_map {
 
         InputIt middle = partition_input(first, last);
 
-        lower_map.resize(lower_map.size() + ::std::distance(first, middle));
+        lower_map.resize(static_cast<float>(lower_map.size() + ::std::distance(first, middle)) / 2.0 / lower_map.max_load_factor() ) ;
         lower_map.insert(first, middle);
 
-        upper_map.resize(upper_map.size() + ::std::distance(middle, last));
+        upper_map.resize(static_cast<float>(upper_map.size() + ::std::distance(middle, last)) / 2.0 / upper_map.max_load_factor()) ;
         upper_map.insert(middle, last);
     }
 
@@ -632,6 +639,10 @@ class densehash_map<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
                        const Allocator& alloc = Allocator()) :
                          map(bucket_count, hash, equal, alloc) {
     	reserve_keys(empty_key, deleted_key);
+
+      map.max_load_factor(0.7);
+      map.min_load_factor(0.3);
+
     };
 
     template<class InputIt>
@@ -731,11 +742,12 @@ class densehash_map<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
     }
 
     void resize(size_t const n) {
-      map.resize(n);
+      map.resize(static_cast<float>(n) / map.max_load_factor());
     }
 
     /// rehash for new count number of BUCKETS.  iterators are invalidated.
     void rehash(size_type count) {
+      this->resize(count);
     }
 
     /// bucket count.  same as underlying buckets
@@ -751,7 +763,7 @@ class densehash_map<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
     // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n) but pays the random access and mem realloc cost
     template <class InputIt>
     void insert(InputIt first, InputIt last) {
-      map.resize(map.size() + std::distance(first, last));
+      this->resize(map.size() + std::distance(first, last));
 
       map.insert(first, last);
     }
@@ -1168,6 +1180,11 @@ class densehash_multimap {
                        const Allocator& alloc = Allocator()) :
                          lower_map(bucket_count / 2, hash, equal, alloc),
                          upper_map(bucket_count / 2, hash, equal, alloc), s(0UL) {
+      lower_map.max_load_factor(0.8);
+      lower_map.min_load_factor(0.35);
+      upper_map.max_load_factor(0.8);
+      upper_map.min_load_factor(0.35);
+
     };
 
     densehash_multimap(Key empty_key, Key deleted_key,
@@ -1177,8 +1194,7 @@ class densehash_multimap {
                        const Hash& hash = Hash(),
                        const Equal& equal = Equal(),
                        const Allocator& alloc = Allocator()) :
-                         lower_map(bucket_count / 2, hash, equal, alloc),
-                         upper_map(bucket_count / 2, hash, equal, alloc), s(0UL) {
+                         densehash_multimap(bucket_count / 2, hash, equal, alloc) {
     	reserve_keys(empty_key, deleted_key);
     	reserve_upper_keys(upper_empty_key, upper_deleted_key, _splitter);
     };
@@ -1297,13 +1313,12 @@ class densehash_multimap {
     }
 
     void resize(size_t const n) {
-      lower_map.resize(n/2);
-      upper_map.resize(n/2);
+      lower_map.resize(static_cast<float>(n) / 2.0 / lower_map.max_load_factor());
+      upper_map.resize(static_cast<float>(n) / 2.0 / lower_map.max_load_factor());
     }
 
     void rehash(size_type count) {
-      lower_map.resize(count / 2);
-      upper_map.resize(count / 2);
+      this->resize(count);
     }
 
     /// bucket count.  same as underlying buckets
@@ -1329,7 +1344,9 @@ class densehash_multimap {
 
         auto middle = partition_input(first, last);
 
+        lower_map.resize(static_cast<float>(lower_map.size() + std::distance(first, middle)) / lower_map.max_load_factor());
         insert_impl(first, middle, lower_map);
+        upper_map.resize(static_cast<float>(upper_map.size() + std::distance(first, middle)) / upper_map.max_load_factor());
         insert_impl(middle, last, upper_map);
 
         // TODO: compact
@@ -1481,14 +1498,17 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
                        const Hash& hash = Hash(),
                        const Equal& equal = Equal(),
                        const Allocator& alloc = Allocator()) :
-                         map(bucket_count, hash, equal, alloc), s(0UL) {};
+                         map(bucket_count, hash, equal, alloc), s(0UL) {
+      map.max_load_factor(0.8);
+      map.min_load_factor(0.35);
+    };
 
     densehash_multimap(Key empty_key, Key deleted_key,
                        size_type bucket_count = 128,
                        const Hash& hash = Hash(),
                        const Equal& equal = Equal(),
                        const Allocator& alloc = Allocator()) :
-                         map(bucket_count, hash, equal, alloc), s(0UL) {
+                         densehash_multimap(bucket_count, hash, equal, alloc) {
     	reserve_keys(empty_key, deleted_key);
     };
 
@@ -1582,11 +1602,11 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
     }
 
     void resize(size_t const n) {
-      map.resize(n);
+      map.resize(static_cast<float>(n) / map.max_load_factor());
     }
 
     void rehash(size_type count) {
-      map.resize(count);
+      this->resize(count);
     }
 
     /// bucket count.  same as underlying buckets
@@ -1616,6 +1636,7 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
         // reserve but do not yet copy in.  we will have random access to check if already exist,
         // so don't copying in does not save a whole lot.
         vec1.reserve(vec1.size() + std::distance(first, last));
+        this->resize(vec1.size() + std::distance(first, last));
 
         // iterator over all and insert into map.
         std::pair<typename supercontainer_type::iterator, bool> insert_result;
