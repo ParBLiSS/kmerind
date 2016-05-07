@@ -665,7 +665,7 @@ class densehash_map<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
         map.set_deleted_key(deleted_key);
     }
     void reserve_upper_keys(Key const & empty_key, Key const & deleted_key, const ::fsc::TruePredicate & _splitter = fsc::TruePredicate()) {
-    	printf("reserve_upper_keys no-op\n");
+    	//printf("reserve_upper_keys no-op\n");
     }
 
 
