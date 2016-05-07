@@ -304,10 +304,10 @@ class densehash_map {
     	reserve_keys(empty_key, deleted_key);
     	reserve_upper_keys(upper_empty_key, upper_deleted_key, _splitter);
 
-    	lower_map.max_load_factor(0.7);
-    	lower_map.min_load_factor(0.3);
-      upper_map.max_load_factor(0.7);
-      upper_map.min_load_factor(0.3);
+//    	lower_map.max_load_factor(0.8);
+//    	lower_map.min_load_factor(0.0);
+//      upper_map.max_load_factor(0.8);
+//      upper_map.min_load_factor(0.0);
     };
 
     template<class InputIt>
@@ -450,10 +450,10 @@ class densehash_map {
 
         InputIt middle = partition_input(first, last);
 
-        lower_map.resize(static_cast<float>(lower_map.size() + ::std::distance(first, middle)) / 2.0 / lower_map.max_load_factor() ) ;
+        lower_map.resize(static_cast<float>(lower_map.size() + ::std::distance(first, middle)) / lower_map.max_load_factor() ) ;
         lower_map.insert(first, middle);
 
-        upper_map.resize(static_cast<float>(upper_map.size() + ::std::distance(middle, last)) / 2.0 / upper_map.max_load_factor()) ;
+        upper_map.resize(static_cast<float>(upper_map.size() + ::std::distance(middle, last)) / upper_map.max_load_factor()) ;
         upper_map.insert(middle, last);
     }
 
@@ -640,8 +640,8 @@ class densehash_map<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
                          map(bucket_count, hash, equal, alloc) {
     	reserve_keys(empty_key, deleted_key);
 
-      map.max_load_factor(0.7);
-      map.min_load_factor(0.3);
+//      map.max_load_factor(0.8);
+//      map.min_load_factor(0.0);
 
     };
 
@@ -1180,10 +1180,10 @@ class densehash_multimap {
                        const Allocator& alloc = Allocator()) :
                          lower_map(bucket_count / 2, hash, equal, alloc),
                          upper_map(bucket_count / 2, hash, equal, alloc), s(0UL) {
-      lower_map.max_load_factor(0.8);
-      lower_map.min_load_factor(0.35);
-      upper_map.max_load_factor(0.8);
-      upper_map.min_load_factor(0.35);
+//      lower_map.max_load_factor(0.8);
+//      lower_map.min_load_factor(0.0);
+//      upper_map.max_load_factor(0.8);
+//      upper_map.min_load_factor(0.0);
 
     };
 
@@ -1499,8 +1499,8 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
                        const Equal& equal = Equal(),
                        const Allocator& alloc = Allocator()) :
                          map(bucket_count, hash, equal, alloc), s(0UL) {
-      map.max_load_factor(0.8);
-      map.min_load_factor(0.35);
+//      map.max_load_factor(0.8);
+//      map.min_load_factor(0.0);
     };
 
     densehash_multimap(Key empty_key, Key deleted_key,

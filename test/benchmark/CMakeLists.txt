@@ -114,7 +114,7 @@ foreach(dna 4 5 16)
     
     # position maps.  note SORTED PATH ignores hash but uses transformation
     add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} SORTED POS IDEN FARM FARM)
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} COMPACTVEC POS IDEN FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} UNORDERED POS IDEN FARM FARM)
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} DENSEHASH POS IDEN FARM FARM)
   endforeach(store)
   
@@ -123,7 +123,7 @@ foreach(dna 4 5 16)
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE UNORDERED COUNT ${disttrans} FARM FARM)
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE DENSEHASH COUNT ${disttrans} FARM FARM)
     
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE COMPACTVEC POS ${disttrans} FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE UNORDERED POS ${disttrans} FARM FARM)
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE DENSEHASH POS ${disttrans} FARM FARM)
   endforeach(disttrans)
 
@@ -169,8 +169,9 @@ foreach(store SINGLE BIMOLECULE)
   add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED COUNT IDEN FARM FARM)
   
   add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED POS IDEN FARM FARM)
-  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} UNORDERED POS IDEN FARM FARM)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} VEC POS IDEN FARM FARM)
+  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} COMPACTVEC POS IDEN FARM FARM)
+  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
 endforeach(store)
 
 #=====================  6  targets
@@ -187,7 +188,7 @@ endforeach(hash)
 foreach(hash IDEN STD MURMUR)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE UNORDERED COUNT IDEN FARM ${hash})
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH COUNT IDEN FARM ${hash})
-  foreach(map VEC COMPACTVEC UNORDERED DENSEHASH) 
+  foreach(map VEC COMPACTVEC UNORDERED DENSEHASH HASHEDVEC) 
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE ${map} POS IDEN FARM ${hash})
   endforeach(map)
 endforeach(hash)  
