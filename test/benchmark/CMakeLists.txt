@@ -103,33 +103,24 @@ endfunction(add_hashmap_target)
 # vary alphabet, which affects kmer transformations and has impact on type of backend containers.
 # test all 3 kmerstores at the default hash and transforms. with different types of maps.
 
-foreach(dna 4 5 16)
   
   # base set. - vary alphabet and kmer store, then check count and pos for sorted vs hashed.
   foreach(store SINGLE CANONICAL BIMOLECULE)
   
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} UNORDERED COUNT IDEN FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} UNORDERED POS IDEN FARM FARM)
+
+foreach(dna 4 5 16)
     # count maps.  note SORTED PATH ignores hash but uses transformation
     add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} SORTED COUNT IDEN FARM FARM)
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} UNORDERED COUNT IDEN FARM FARM)
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} DENSEHASH COUNT IDEN FARM FARM)
     
     # position maps.  note SORTED PATH ignores hash but uses transformation
     add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} SORTED POS IDEN FARM FARM)
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} UNORDERED POS IDEN FARM FARM)
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} DENSEHASH POS IDEN FARM FARM)
+endforeach(dna)
   endforeach(store)
   
-  # then add for SINGLE strand store, different distribution transforms for COUNT and POS
-  foreach(disttrans XOR LEX)
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE UNORDERED COUNT ${disttrans} FARM FARM)
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE DENSEHASH COUNT ${disttrans} FARM FARM)
-    
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE UNORDERED POS ${disttrans} FARM FARM)
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE DENSEHASH POS ${disttrans} FARM FARM)
-  endforeach(disttrans)
-
-endforeach(dna)
-
 #=================  108 targets, varying K
 #vary K, fix Alphabet, and map types.  see effect on count and position (map vs multimap), and different kmerstores
 # do it for fastA and fastQ
@@ -166,18 +157,23 @@ endforeach(store)
     
 #================== 8 targets - slow backends, or potentially no advantage
 # store model changes the collision characteristics, so study these...
-foreach(store SINGLE BIMOLECULE) 
-  add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED COUNT IDEN FARM FARM)
+foreach(store SINGLE BIMOLECULE CANONICAL) 
+#  add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED COUNT IDEN FARM FARM)
   
-  add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED POS IDEN FARM FARM)
+#  add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED POS IDEN FARM FARM)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} VEC POS IDEN FARM FARM)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} COMPACTVEC POS IDEN FARM FARM)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
 endforeach(store)
 
+#   then add for SINGLE strand store, different distribution transforms for COUNT and POS
+foreach(disttrans XOR LEX)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH COUNT ${disttrans} FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH POS ${disttrans} FARM FARM)
+endforeach(disttrans)
+
 #=====================  6  targets
 # vary distribution hash method.  use SINGLE to reduce collision due to lex_less.
-
 foreach(hash IDEN STD MURMUR)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH COUNT IDEN ${hash} FARM)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH POS IDEN ${hash} FARM)
@@ -185,7 +181,6 @@ endforeach(hash)
 
 #=====================  18  targets
 # vary storage hash method. use SINGLE to reduce collision due to lex_less.
-
 foreach(hash IDEN STD MURMUR)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE UNORDERED COUNT IDEN FARM ${hash})
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH COUNT IDEN FARM ${hash})
