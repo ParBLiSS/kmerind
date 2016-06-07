@@ -606,7 +606,13 @@ else(ENABLE_MEMUSE_BENCHMARK)
   SET(BL_BENCHMARK_MEM 0)
 endif(ENABLE_MEMUSE_BENCHMARK)
 
-  
+CMAKE_DEPENDENT_OPTION(ENABLE_KMER_BENCHMARK "Enable Kmer index Benchmarks" OFF
+                        "ENABLE_BENCHMARKING" OFF)
+if (ENABLE_KMER_BENCHMARK)
+  SET(BL_KMER_BENCHMARK 1)
+else(ENABLE_KMER_BENCHMARK)
+  SET(BL_KMER_BENCHMARK 0)
+endif(ENABLE_KMER_BENCHMARK)
   
 # Check if the user want to build test applications
 CMAKE_DEPENDENT_OPTION(BUILD_TEST_APPLICATIONS "Inform whether test applications should be built" ON

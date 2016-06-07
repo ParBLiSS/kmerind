@@ -14,6 +14,7 @@ endif()
 
 if (BL_BENCHMARK)
 
+if (BL_KMER_BENCHMARKS)
 # available params:
 
 
@@ -253,9 +254,9 @@ foreach(store BIMOLECULE SINGLE)
 endforeach(store)
 
 #==================
+endif(BL_KMER_BENCHMARKS)
 
-
-endif()
+endif(BL_BENCHMARKS)
 
 if (BUILD_TEST_APPLICATIONS)
 
@@ -362,9 +363,9 @@ target_link_libraries(chrono_vs_time ${EXTRA_LIBS} -lrt)
 if (Boost_FOUND)
 	add_executable(cust_alloc test_custom_allocator.cpp)
 	target_link_libraries(cust_alloc ${EXTRA_LIBS})
-endif()
+endif(Boost_FOUND)
 
-endif()
+endif(BUILD_TEST_APPLICATIONS)
 
 
 # EXECUTABLES
