@@ -89,6 +89,7 @@
 #define COMPACTVEC 44
 #define HASHEDVEC 45
 #define UNORDERED 46
+#define DENSEHASH 47
 
 #define SINGLE 51
 #define CANONICAL 52
@@ -145,7 +146,7 @@ using CountType = uint32_t;
 
 //----- get them all. may not use subsequently.
 
-// distribution trasnforms
+// distribution transforms
 #if (pDistTrans == LEX)
 	template <typename KM>
 	using DistTrans = bliss::kmer::transform::lex_less<KM>;
@@ -238,6 +239,19 @@ using CountType = uint32_t;
 
 
 #else  // hashmap
+		struct MSBSplitter {
+		    template <typename Kmer>
+		    bool operator()(Kmer const & kmer) const {
+		      return (kmer.getData()[Kmer::nWords - 1] & ~(~(static_cast<typename Kmer::KmerWordType>(0)) >> 2)) > 0;
+		    }
+
+		    template <typename Kmer, typename V>
+		    bool operator()(std::pair<Kmer, V> const & x) const {
+		      return (x.first.getData()[Kmer::nWords - 1] & ~(~(static_cast<typename Kmer::KmerWordType>(0)) >> 2)) > 0;
+		    }
+		};
+
+
   // choose a MapParam based on type of map and kmer model (canonical, original, bimolecule)
   #if (pKmerStore == SINGLE)  // single stranded
     template <typename Key>
@@ -249,6 +263,14 @@ using CountType = uint32_t;
     template <typename Key>
     using MapParams = ::bliss::index::kmer::BimoleculeHashMapParams<Key, DistHash, StoreHash>;
   #endif
+
+	#if (pDNA == 5) || (pKmerStore == CANONICAL)
+	using Splitter = ::fsc::TruePredicate;
+	#else
+	using Splitter = typename ::std::conditional<(KmerType::nBits == (KmerType::nWords * sizeof(typename KmerType::KmerWordType) * 8)),
+			MSBSplitter, ::fsc::TruePredicate>::type;
+	#endif
+
 
   // DEFINE THE MAP TYPE base on the type of data to be stored.
   #if (pINDEX == POS) || (pINDEX == POSQUAL)  // multimap
@@ -265,10 +287,18 @@ using CountType = uint32_t;
     #elif (pMAP == HASHEDVEC)
       using MapType = ::dsc::unordered_multimap_hashvec<
           KmerType, ValType, MapParams>;
+    #elif (pMAP == DENSEHASH)
+      using MapType = ::dsc::densehash_multimap<
+          KmerType, ValType, MapParams, Splitter>;
     #endif
   #elif (pINDEX == COUNT)  // map
-    using MapType = ::dsc::counting_unordered_map<
+    #if (pMAP == DENSEHASH)
+      using MapType = ::dsc::counting_densehash_map<
+        KmerType, ValType, MapParams, Splitter>;
+    #else
+      using MapType = ::dsc::counting_unordered_map<
         KmerType, ValType, MapParams>;
+    #endif
   #endif
 
 
@@ -466,7 +496,36 @@ int main(int argc, char** argv) {
 
   IndexType idx(comm);
 
+#if (pMAP == DENSEHASH)
+  KmerType empty_key = ::bliss::kmer::hash::sparsehash::empty_key<KmerType>::generate();
+  KmerType deleted_key = ::bliss::kmer::hash::sparsehash::deleted_key<KmerType>::generate();
+
+  	idx.get_map().reserve_keys(empty_key, deleted_key);
+
+  	// upper key is negation of lower keys
+  	KmerType upper_empty_key = empty_key;
+  	KmerType upper_deleted_key = deleted_key;
+  	for (size_t i = 0; i < KmerType::nWords; ++i) {
+  		upper_empty_key.getDataRef()[i] = ~(upper_empty_key.getDataRef()[i]);
+  		upper_deleted_key.getDataRef()[i] = ~(upper_deleted_key.getDataRef()[i]);
+  	}
+
+  	idx.get_map().reserve_upper_keys(upper_empty_key, upper_deleted_key, Splitter());
+
+
+#endif
+
   BL_BENCH_INIT(test);
+
+  if (comm.rank() == 0) printf("reading query %s via posix\n", queryname.c_str());
+  BL_BENCH_START(test);
+  auto query = readForQuery_posix<IndexType>(queryname, comm);
+  BL_BENCH_COLLECTIVE_END(test, "read_query", query.size(), comm);
+
+  BL_BENCH_START(test);
+  sample(query, query.size() / sample_ratio, comm.rank(), comm);
+  BL_BENCH_COLLECTIVE_END(test, "sample", query.size(), comm);
+
 
   {
 	  ::std::vector<typename IndexType::TupleType> temp;
@@ -506,15 +565,6 @@ int main(int argc, char** argv) {
   }
 
   {
-	  if (comm.rank() == 0) printf("reading query %s via posix\n", queryname.c_str());
-	  BL_BENCH_START(test);
-	  auto query = readForQuery_posix<IndexType>(queryname, comm);
-	  BL_BENCH_COLLECTIVE_END(test, "read_query", query.size(), comm);
-
-	  BL_BENCH_START(test);
-	  sample(query, query.size() / sample_ratio, comm.rank(), comm);
-	  BL_BENCH_COLLECTIVE_END(test, "sample", query.size(), comm);
-
 
 	  {
 		  auto lquery = query;
@@ -522,7 +572,7 @@ int main(int argc, char** argv) {
 		  auto counts = idx.count(lquery);
 		  BL_BENCH_COLLECTIVE_END(test, "count", counts.size(), comm);
 	  }
-#ifndef pCompare
+#if defined(pCompare)
 	  {
 		  auto lquery = query;
 		  BL_BENCH_START(test);

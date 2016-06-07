@@ -94,9 +94,9 @@ function(add_hashmap_target file prefix parser dna k store map index disttrans d
 
 endfunction(add_hashmap_target)
 
-foreach(store SINGLE CANONICAL BIMOLECULE)
-	add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
-endforeach(store)
+#foreach(store SINGLE CANONICAL BIMOLECULE)
+#	add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
+#endforeach(store)
 
 #================= 36 + 12 targets
 # vary alphabet, which affects kmer transformations and has impact on type of backend containers.
@@ -110,72 +110,57 @@ foreach(dna 4 5 16)
     # count maps.  note SORTED PATH ignores hash but uses transformation
     add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} SORTED COUNT IDEN FARM FARM)
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} UNORDERED COUNT IDEN FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} DENSEHASH COUNT IDEN FARM FARM)
     
     # position maps.  note SORTED PATH ignores hash but uses transformation
     add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} SORTED POS IDEN FARM FARM)
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} COMPACTVEC POS IDEN FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} UNORDERED POS IDEN FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 ${store} DENSEHASH POS IDEN FARM FARM)
   endforeach(store)
   
   # then add for SINGLE strand store, different distribution transforms for COUNT and POS
   foreach(disttrans XOR LEX)
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE UNORDERED COUNT ${disttrans} FARM FARM)
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE COMPACTVEC POS ${disttrans} FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE DENSEHASH COUNT ${disttrans} FARM FARM)
+    
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE UNORDERED POS ${disttrans} FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ ${dna} 31 SINGLE DENSEHASH POS ${disttrans} FARM FARM)
   endforeach(disttrans)
 
 endforeach(dna)
 
-#=================  60 targets for FASTA
+#=================  108 targets, varying K
 #vary K, fix Alphabet, and map types.  see effect on count and position (map vs multimap), and different kmerstores
-# do it for fastA
+# do it for fastA and fastQ
 
 foreach(store SINGLE CANONICAL BIMOLECULE)
 
-  foreach(format FASTA)
-    foreach(k 15 21 31 63 95)  # 31 already compiled for fastq.
-        # count maps.  note SORTED PATH ignores hash but uses transformation
-        add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} SORTED COUNT IDEN FARM FARM)
-        add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} UNORDERED COUNT IDEN FARM FARM)
-        
-        # position maps.  note SORTED PATH ignores hash but uses transformation
-        add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} SORTED POS IDEN FARM FARM)
-        add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} COMPACTVEC POS IDEN FARM FARM)
-    endforeach(k)
-  endforeach(format)
-endforeach(store)
+	  foreach(format FASTA FASTQ)
+	    foreach(k 15 21 63 95) 
+	        # count maps.  note SORTED PATH ignores hash but uses transformation
+	        add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} SORTED COUNT IDEN FARM FARM)
+	     	add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} DENSEHASH COUNT IDEN FARM FARM)
+	        
+	        # position maps.  note SORTED PATH ignores hash but uses transformation
+	        add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} SORTED POS IDEN FARM FARM)
+	    	add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex ${format} 4 ${k} ${store} DENSEHASH POS IDEN FARM FARM)
+	    endforeach(k)
+	  endforeach(format)
 
-#=================  60 targets for FASTQ varying K.
-#vary K, fix Alphabet, and map types.  see effect on count and position (map vs multimap), and different kmerstores
-# do it for fastA
-
-foreach(store SINGLE CANONICAL BIMOLECULE)
-  foreach(map SORTED UNORDERED)
-
-    foreach(k 15 21 31 63 95)  # 31 already compiled for fastq.
-        # count maps.  note SORTED PATH ignores hash but uses transformation
-		add_executable(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
-		SET_TARGET_PROPERTIES(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
-	    	 	PROPERTIES COMPILE_FLAGS 
-		     "-DpPARSER=FASTQ -DpDNA=4 -DpK=${k} -DpKmerStore=${store} -DpMAP=${map} -DpINDEX=COUNT")
-		target_link_libraries(testKmerIndex-COUNTQ-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
-	   ${EXTRA_LIBS})
-	   
-	    # count maps.  note SORTED PATH ignores hash but uses transformation
-		add_executable(testKmerIndex-COUNTA-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
-		SET_TARGET_PROPERTIES(testKmerIndex-COUNTA-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
-	    	 	PROPERTIES COMPILE_FLAGS 
-		     "-DpPARSER=FASTA -DpDNA=4 -DpK=${k} -DpKmerStore=${store} -DpMAP=${map} -DpINDEX=COUNT")
-		target_link_libraries(testKmerIndex-COUNTA-a4-k${k}-${store}-${map}-COUNT-dtXXXX-dhYYYY-shZZZZ
-	   ${EXTRA_LIBS})
-       
-    endforeach(k)
-  endforeach(map)
+	        # count maps.  note SORTED PATH ignores hash but uses transformation
+	        add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTA 4 31 ${store} SORTED COUNT IDEN FARM FARM)
+	     	add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTA 4 31 ${store} DENSEHASH COUNT IDEN FARM FARM)
+	        
+	        # position maps.  note SORTED PATH ignores hash but uses transformation
+	        add_sortedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTA 4 31 ${store} SORTED POS IDEN FARM FARM)
+	    	add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTA 4 31 ${store} DENSEHASH POS IDEN FARM FARM)
 
 endforeach(store)
-  
+
 
 #==================  1 target  quality map.  Single to assess quality effect.
 # pos quality maps.. 
-    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE COMPACTVEC POSQUAL IDEN FARM FARM)
+    add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH POSQUAL IDEN FARM FARM)
 
     
 #================== 8 targets - slow backends, or potentially no advantage
@@ -184,24 +169,26 @@ foreach(store SINGLE BIMOLECULE)
   add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED COUNT IDEN FARM FARM)
   
   add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED POS IDEN FARM FARM)
-  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} UNORDERED POS IDEN FARM FARM)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} VEC POS IDEN FARM FARM)
+  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} COMPACTVEC POS IDEN FARM FARM)
+  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
 endforeach(store)
 
 #=====================  6  targets
 # vary distribution hash method.  use SINGLE to reduce collision due to lex_less.
 
 foreach(hash IDEN STD MURMUR)
-  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE UNORDERED COUNT IDEN ${hash} FARM)
-  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE COMPACTVEC POS IDEN ${hash} FARM)
+  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH COUNT IDEN ${hash} FARM)
+  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH POS IDEN ${hash} FARM)
 endforeach(hash)  
 
-#=====================  12  targets
+#=====================  18  targets
 # vary storage hash method. use SINGLE to reduce collision due to lex_less.
 
 foreach(hash IDEN STD MURMUR)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE UNORDERED COUNT IDEN FARM ${hash})
-  foreach(map VEC COMPACTVEC UNORDERED) 
+  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH COUNT IDEN FARM ${hash})
+  foreach(map VEC COMPACTVEC UNORDERED DENSEHASH HASHEDVEC) 
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE ${map} POS IDEN FARM ${hash})
   endforeach(map)
 endforeach(hash)  
@@ -234,18 +221,18 @@ foreach(store BIMOLECULE SINGLE)
   #target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-ORDERED-POS-dtIDEN-dhFARM-shZZZZ
   # ${EXTRA_LIBS})
   
-  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
-  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM
+  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-POS-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-POS-dtIDEN-dhFARM-shFARM
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=COMPACTVEC -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCompare")
-  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-COMPACTVEC-POS-dtIDEN-dhFARM-shFARM
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=DENSEHASH -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCompare")
+  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-POS-dtIDEN-dhFARM-shFARM
    ${EXTRA_LIBS})
 
-  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
-  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtXXXX-dhYYYY-shZZZZ
+  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-COUNT-dtXXXX-dhYYYY-shZZZZ
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=UNORDERED -DpINDEX=COUNT -DpCompare")
-  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-UNORDERED-COUNT-dtXXXX-dhYYYY-shZZZZ
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=DENSEHASH -DpINDEX=COUNT -DpCompare")
+  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-COUNT-dtXXXX-dhYYYY-shZZZZ
    ${EXTRA_LIBS})
 
 
@@ -379,3 +366,8 @@ endif()
 
 endif()
 
+
+# EXECUTABLES
+include_directories("${EXT_PROJECTS_DIR}/tommyds")
+add_executable(benchmark_hashtables BenchmarkHashTables.cpp)
+target_link_libraries(benchmark_hashtables ${EXTRA_LIBS})

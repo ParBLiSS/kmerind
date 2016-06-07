@@ -91,6 +91,7 @@ using allocator = std::allocator<T>;
   template <typename Key,
   typename T,
   typename Hash = ::std::hash<Key>,
+  typename Comparator = ::std::less<Key>,
   typename Equal = ::std::equal_to<Key>,
   typename Allocator =
       ::std::scoped_allocator_adaptor<::fsc::allocator<::std::pair<const Key, ::std::vector<T, ::fsc::allocator<T> > > >,
@@ -99,6 +100,24 @@ using allocator = std::allocator<T>;
   class unordered_compact_vecmap {
 
     protected:
+      struct Less {
+        Comparator l;
+
+        inline bool operator()(Key const &x, Key const &y ) {
+          return l(x, y);
+        }
+
+        template <typename V>
+        inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) {
+          return l(x.first, y.first);
+        }
+        template <typename V>
+        inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) {
+          return l(x.first, y.first);
+        }
+      };
+
+
       using subcontainer_type = ::std::vector<T, ::std::allocator<T> >;
       using supercontainer_type =
           ::std::unordered_map<Key, subcontainer_type, Hash, Equal, Allocator >;
@@ -478,7 +497,7 @@ using allocator = std::allocator<T>;
                        const Hash& hash = Hash(),
                        const Equal& equal = Equal(),
                        const Allocator& alloc = Allocator()) :
-                       ::fsc::unordered_compact_vecmap<Key, T, Hash, Equal, Allocator>(load_factor,
+                       unordered_compact_vecmap(load_factor,
                                                                                ::std::max(bucket_count, static_cast<size_type>(::std::distance(first, last))),
                                                                                 hash, equal, alloc) {
           this->insert(first, last);
@@ -587,56 +606,96 @@ using allocator = std::allocator<T>;
           s += std::distance(first, last);
       }
 
-      /// inserting sorted range
+
       template <class InputIt>
       void insert_sorted(InputIt first, InputIt last) {
-    	  //size_t after = 0;
+          size_t ss = std::distance(first, last);
 
-    	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
-    	  key_equal eq;
-    	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
-    	    return !(eq(x.first, y.first));
-    	  };
+          if (ss == 0) return;
 
-    	  size_t ss;
-    	  InputIt start = first;
-    	  InputIt end = ::std::adjacent_find(start, last, key_neq);
-    	  if (end != last) ++end;
+          map.reserve(map.size() + ss);
 
-    	  while (end != last) {
-    		  // get current size.
-    		  ss = map[start->first].size();
-    		  map[start->first].reserve(ss + std::distance(start, end));
+          Less less;
+          std::sort(first, last, less);
 
-    		  // copy the range
-    		  std::transform(start, end, std::back_inserter(map[start->first]),
-    				  [](InputValueType const & x){
-    			  return x.second;
-    		  });
-    		  //after = std::max(after, map[start->first].size());
+          using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
 
-    		  // advance the pointers
-    		  start = end;
-    		  end = ::std::adjacent_find(start, last, key_neq);
-    		  if (end != last) ++end;
-    	  }
-    	  // can have end at last, because start is at last-1.  need to copy the last part.,
-    	  if (start != last) {
-				// end is at last.
-			  ss = map[start->first].size();
-			  map[start->first].reserve(ss + std::distance(start, end));
+          InputIt start = first;
+          auto key = start->first;
+          for (auto it = start, max = last; it != max;) {
+            start = it;
+            key = start->first;
 
-			  // copy the range
-			  std::transform(start, end, std::back_inserter(map[start->first]),
-				  [](InputValueType const & x){
-				return x.second;
-			  });
-    		  //after = std::max(after, map[start->first].size());
+            // find the last of the entries with same key
+            it = std::adjacent_find(it, max, less);
 
-    	  }
+            if (it != max) {
+              // not last entry, so advance 1.
+              ++it;
+            }
 
-    	  s += std::distance(first, last);
+            ss = std::distance(start, it);
+            map[key].reserve(map[key].size() + ss);
+            std::transform(start, it, std::back_inserter(map[key]),
+                 [](InputValueType const & x){
+                    return x.second;
+                    });
+
+            s += ss;
+          }
       }
+
+//
+//      /// inserting sorted range
+//      template <class InputIt>
+//      void insert_sorted(InputIt first, InputIt last) {
+//    	  //size_t after = 0;
+//
+//    	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
+//    	  key_equal eq;
+//    	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
+//    	    return !(eq(x.first, y.first));
+//    	  };
+//
+//    	  size_t ss;
+//    	  InputIt start = first;
+//    	  InputIt end = ::std::adjacent_find(start, last, key_neq);
+//    	  if (end != last) ++end;
+//
+//    	  while (end != last) {
+//    		  // get current size.
+//    		  ss = map[start->first].size();
+//    		  map[start->first].reserve(ss + std::distance(start, end));
+//
+//    		  // copy the range
+//    		  std::transform(start, end, std::back_inserter(map[start->first]),
+//    				  [](InputValueType const & x){
+//    			  return x.second;
+//    		  });
+//    		  //after = std::max(after, map[start->first].size());
+//
+//    		  // advance the pointers
+//    		  start = end;
+//    		  end = ::std::adjacent_find(start, last, key_neq);
+//    		  if (end != last) ++end;
+//    	  }
+//    	  // can have end at last, because start is at last-1.  need to copy the last part.,
+//    	  if (start != last) {
+//				// end is at last.
+//			  ss = map[start->first].size();
+//			  map[start->first].reserve(ss + std::distance(start, end));
+//
+//			  // copy the range
+//			  std::transform(start, end, std::back_inserter(map[start->first]),
+//				  [](InputValueType const & x){
+//				return x.second;
+//			  });
+//    		  //after = std::max(after, map[start->first].size());
+//
+//    	  }
+//
+//    	  s += std::distance(first, last);
+//      }
 
       template <typename Pred>
       size_t erase(const key_type& key, Pred const & pred) {
@@ -780,11 +839,30 @@ using allocator = std::allocator<T>;
   template <typename Key,
   typename T,
   typename Hash = ::std::hash<Key>,
+  typename Comparator = ::std::less<Key>,
   typename Equal = ::std::equal_to<Key>,
   typename Allocator = ::fsc::allocator<::std::pair<Key, T> > >
   class unordered_vecmap {
 
     protected:
+      struct Less {
+        Comparator l;
+
+        inline bool operator()(Key const &x, Key const &y ) {
+          return l(x, y);
+        }
+
+        template <typename V>
+        inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) {
+          return l(x.first, y.first);
+        }
+        template <typename V>
+        inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) {
+          return l(x.first, y.first);
+        }
+      };
+
+
       using subcontainer_type = ::std::vector<::std::pair<Key, T>, ::std::allocator<::std::pair<Key, T> > >;
       using superallocator_type = ::fsc::allocator<::std::pair<const Key, subcontainer_type > >;
       using supercontainer_type =
@@ -1122,245 +1200,6 @@ using allocator = std::allocator<T>;
           }
       };
 
-#if 0
-      // OLD.  inconsistent with new impl and may be incorrect.
-      template<typename V>
-      class concat_iter :
-    public ::std::iterator<
-    typename ::std::random_access_iterator_tag,
-    V
-    >
-      {
-        protected:
-          using subiterator_type = typename ::std::conditional<::std::is_const<V>::value,
-              typename subcontainer_type::const_iterator, typename subcontainer_type::iterator>::type;
-          using superiterator_type = typename ::std::conditional<::std::is_const<V>::value,
-              typename supercontainer_type::const_iterator, typename supercontainer_type::iterator>::type;
-          using type = concat_iter<V>;
-
-          using inner_value_type = typename ::std::iterator_traits<subiterator_type>::value_type;
-
-        public:
-          template <typename KK, typename TT, typename HH, typename EE, typename AA, typename OutputIterator>
-          OutputIterator
-          copy(typename ::fsc::unordered_vecmap<KK, TT, HH, EE, AA>::template concat_iter<V> first,
-               typename ::fsc::unordered_vecmap<KK, TT, HH, EE, AA>::template concat_iter<V> last, OutputIterator result);
-
-
-        protected:
-          /// the current position in the ranges list
-          superiterator_type curr_iter;
-          superiterator_type end_iter;
-
-          /// the current iterator position in the range of interest.
-          subiterator_type curr_pos;
-
-
-        public:
-          using difference_type = typename ::std::iterator_traits<subiterator_type>::difference_type;
-
-
-          /// constructor for start concatenating iterator using copy semantic
-          concat_iter(superiterator_type _iter, superiterator_type _end) : curr_iter(_iter), end_iter(_end) {
-            if (_iter != _end) curr_pos = _iter->second.begin();
-          };
-          concat_iter(superiterator_type _iter, superiterator_type _end, subiterator_type _pos) :
-            curr_iter(_iter), end_iter(_end), curr_pos(_pos) {};
-
-          /// constructor for end concat iterator.  _end refers to end of supercontainer.
-          concat_iter(superiterator_type _end) : curr_iter(_end), end_iter(_end) {};
-
-
-          // note that explicit keyword cannot be on copy and move constructors else the constructors are not defined/found.
-
-          // copy constructor, assignment operator, move constructor, assignment operator should
-          // should be default since the member vars are simple.
-
-          bool at_end() const {
-            if (curr_iter == end_iter) return true;
-
-            auto next_iter = curr_iter; ++next_iter;
-            if ((next_iter == end_iter) && (curr_pos == curr_iter->second.end())) {
-              return true;
-            }
-
-            return false;
-          }
-
-
-          /**
-           * @brief increment:  move to the next position in the concatenating iterator, which may cross range boundaries.
-           * @return
-           */
-          type& operator++()
-            {
-            // if at end, return
-            if (curr_iter == end_iter) return *this;
-
-            // check to see if we are at end of subcontainer.  if so, move to next dereferenceable position.
-            // end of a subcontainer is treated as same position as beginning of next subcontainer.
-            while (curr_pos == curr_iter->second.end()) {
-              ++curr_iter;
-              // again check if we are at end.  else go to beginning of next
-              if (curr_iter == end_iter) return *this;
-              else curr_pos = curr_iter->second.begin();
-            }
-
-            // now increment.
-            ++curr_pos;
-
-            // and check again that we are at a dereferenceable position.
-            // end of a subcontainer is treated as same position as beginning of next subcontainer.
-            while (curr_pos == curr_iter->second.end()) {
-              ++curr_iter;
-              // again check if we are at end.  else go to beginning of next
-              if (curr_iter == end_iter) return *this;
-              else curr_pos = curr_iter->second.begin();
-            }
-
-            return *this;
-            }
-
-          /**
-           * post increment.  make a copy then increment that.
-           */
-          type operator++(int)
-          {
-            type output(*this);
-            this->operator++();
-            return output;
-          }
-
-          //=== input iterator specific
-
-          /// comparison operator
-          inline bool operator==(const type& rhs) const
-            {
-            if (at_end() && rhs.at_end()) return true;
-            if (at_end() || rhs.at_end()) return false;
-
-            return ((curr_iter == rhs.curr_iter) && (curr_pos == rhs.curr_pos));
-            }s
-
-          /// comparison operator
-          inline bool operator!=(const type& rhs) const
-            {
-            return !(this->operator==(rhs));
-            }
-
-
-
-          template <
-              typename VV = V,
-              typename IV = inner_value_type,
-              typename = typename ::std::enable_if<::std::is_constructible<VV, IV>::value>::type>
-          inline V operator*() const {
-            return *curr_pos;
-          }
-
-          /*=== NOT output iterator.  this is a map, does not make sense to change the  */
-          /* content via iterator.                                                      */
-
-
-          //=== NOT full forward iterator - no default constructor
-
-          //=== NOT bidirectional iterator - no decrement because map produces forward iterator only.
-
-          //=== NOT full random access iterator - only have +, += but not -. -=.  no comparison operators. have offset dereference operator [].
-
-          /**
-           * @brief     Advances this iterator by `n` positions.
-           *            used by std::advance when randomaccess iterator.
-           * @param n   The number of positions to advance.
-           * @return    A reference to this after advancing.
-           */
-          type& operator+=(difference_type n)
-          {
-            // ::std::advance will use this or the ++ operator.
-            if (n < 0) throw ::std::logic_error("::fsc::unordered_vecmap::iterator does not support decrement.");
-            if (n == 0) return *this;  // nothing to add.
-
-            difference_type curr_dist;
-            while ((!at_end()) && (n > 0)) {
-              curr_dist = ::std::distance(curr_pos, curr_iter->second.end());
-              if (curr_dist > n) {
-                ::std::advance(curr_pos, n);
-                n = 0;
-              } else { // if (curr_dist <= n)
-                n -= curr_dist;
-                ++(curr_iter);
-                if (curr_iter != end_iter) curr_pos = (curr_iter)->second.begin();
-              }
-            }
-            return *this;
-          }
-
-
-          /**
-           * @brief     Advances a copy of this iterator by `n` positions.
-           *
-           * @param n   The number of positions to advance.
-           * @return    The advanced iterator.
-           */
-          type operator+(difference_type n)
-          {
-            // reduced to += operator
-            type output(*this);
-            output += n;
-            return output;
-          }
-
-          /**
-           * @brief     Advances a copy of the `right` iterator by `n` positions.
-           *
-           * @param n   The number of positions to advance.
-           * @return    The advanced iterator.
-           */
-          friend type operator+(difference_type n, const type& right)
-          {
-            // reduced to + operator
-            return right + n;
-          }
-
-          /**
-           * @brief     Returns the n'th element as seen from the current iterator
-           *            position.
-           *
-           * @param n   The offset.
-           *
-           * @return    The element at offset `n` from the current position.
-           */
-          V operator[](difference_type n)
-          {
-            // reduce to the following:
-            return *(*this + n);
-          }
-
-          /// difference between 2 iterators.  used by std::distance.
-          friend difference_type operator-(const type& last, const type& first) {
-            difference_type n = 0;
-            type it = first;
-
-            // iterate until both are in the same subcontainer, or first is at end.
-            while (!it.at_end() && (it.curr_iter != last.curr_iter)) {
-              n += ::std::distance(it.curr_pos, it.curr_iter->second.end());
-              ++(it.curr_iter);
-              if (it.curr_iter != it.end_iter) it.curr_pos = (it.curr_iter)->second.begin();
-            }
-
-            // both are at same place (including end)
-            if (it == last) return n;
-
-            // if first is at its end, and first != last, then last is not reachable.
-            if (it.at_end()) return ::std::numeric_limits<difference_type>::lowest();
-
-            // first is not at end, and first != last, then last is in same container as first.
-            n += ::std::distance(it.curr_pos, (last.curr_iter == last.end_iter) ? last.curr_iter->second.begin() : last.curr_pos);
-
-            return n;
-          }
-      };
-#endif
 
       supercontainer_type map;
       size_t s;
@@ -1399,7 +1238,7 @@ using allocator = std::allocator<T>;
                          const Hash& hash = Hash(),
                          const Equal& equal = Equal(),
                          const Allocator& alloc = Allocator()) :
-                         ::fsc::unordered_vecmap<Key, T, Hash, Equal, Allocator>(load_factor, bucket_count, hash, equal, alloc) {
+                         unordered_vecmap(load_factor, bucket_count, hash, equal, alloc) {
           this->insert(first, last);
       };
 
@@ -1499,58 +1338,51 @@ using allocator = std::allocator<T>;
       template <class InputIt>
       void insert(InputIt first, InputIt last) {
     	  //size_t after = 0;
-
+        //  size_t count = 0;
           for (; first != last; ++first) {
 
             map[first->first].emplace_back(::std::forward<value_type>(*first));
+
+            //++count;
             //after = std::max(after, map[first->first].size());
           }
           s += std::distance(first, last);
+          //s += count;
       }
 
-      /// inserting sorted range
       template <class InputIt>
       void insert_sorted(InputIt first, InputIt last) {
-    	  //size_t after = 0;
+          size_t ss = std::distance(first, last);
 
-    	  using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
-    	  key_equal eq;
-    	  auto key_neq = [&eq](InputValueType const & x, InputValueType const & y) {
-    		return !(eq(x.first, y.first));
-    	  };
+          if (ss == 0) return;
 
-    	  size_t ss;
-    	  InputIt start = first;
-    	  InputIt end = ::std::adjacent_find(start, last, key_neq);
-    	  if (end != last) ++end;
+          map.reserve(map.size() + ss);
 
-    	  while (end != last) {
-    		  // get current size.
-    		  ss = map[start->first].size();
-    		  map[start->first].reserve(ss + std::distance(start, end));
+          Less less;
+          std::sort(first, last, less);
 
-    		  // copy the range
-    		  std::copy(start, end, std::back_inserter(map[start->first]));
-    		  //after = std::max(after, map[start->first].size());
+          InputIt start = first;
+          auto key = start->first;
+          for (auto it = start, max = last; it != max;) {
+            start = it;
+            key = start->first;
 
-    		  // advance the pointers
-    		  start = end;
-    		  end = ::std::adjacent_find(start, last, key_neq);
-    		  if (end != last) ++end;
-    	  }
-    	  // can have end at last, because start is at last-1.  need to copy the last part.,
-    	  if (start != last) {
-			  // get current size.
-			  ss = map[start->first].size();
-			  map[start->first].reserve(ss + std::distance(start, end));
-    		  //after = std::max(after, map[start->first].size());
+            // find the last of the entries with same key
+            it = std::adjacent_find(it, max, less);
 
-			  // copy the range
-			  std::copy(start, end, std::back_inserter(map[start->first]));
-    	  }
+            if (it != max) {
+              // not last entry, so advance 1.
+              ++it;
+            }
 
-    	  s += std::distance(first, last);
+            ss = std::distance(start, it);
+            map[key].reserve(map[key].size() + ss);
+            std::copy(start, it, std::back_inserter(map[key]));
+
+            s += ss;
+          }
       }
+
 
       template <typename Pred>
       size_t erase(const key_type& key, Pred const & pred) {

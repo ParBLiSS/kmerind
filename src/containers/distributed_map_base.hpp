@@ -30,7 +30,7 @@
 #include <iterator>
 #include <vector>
 #include <unordered_set>
-#include "containers/container_utils.hpp"
+#include "containers/dsc_container_utils.hpp"
 #include <mxx/collective.hpp>
 
 #include "utils/benchmark_utils.hpp"
@@ -70,12 +70,6 @@ namespace dsc
 //      }
 //  };
 //
-  struct TruePredicate {
-      template <typename T>
-      bool operator()(T const & x) const { return true; }
-      template <typename Iter>
-      bool operator()(Iter b, Iter e) const { return true; }
-  };
 
   /**
    * @brief parameter pack for distributed map
@@ -120,6 +114,20 @@ namespace dsc
 	  using StorageTransformedFunction = StoreTransFunc<Key, StoreFunc, StoreTrans>;
 	  using StorageTransformedEqual = ::fsc::TransformedComparator<Key, StoreEqual, StoreTrans>;
   };
+
+  template <typename Key,
+        template <typename> class InputTrans,
+        template <typename> class DistTrans,
+        template <typename> class DistHash,
+        template <typename> class DistEqual,
+        template <typename> class StoreTrans,
+        template <typename> class StoreHash,
+        template <typename> class StoreEqual
+        >
+  using HashMapParams = ::dsc::DistributedMapParams<
+      Key, InputTrans, DistTrans, DistHash, DistEqual, StoreTrans, StoreHash, StoreEqual,
+      ::fsc::TransformedHash, ::fsc::TransformedHash>;
+
 
   /**
    * KeyTransformParams should be an alias of a specialization of DistributedMapParams.  see subclass for example.

@@ -15,7 +15,7 @@
  */
 
 /**
- * @file    distributed_unordered_map.hpp
+ * @file    distributed_densehash_map.hpp
  * @ingroup index
  * @author  Tony Pan <tpan7@gatech.edu>
  * @brief   Implements the distributed_multimap, distributed map, and distributed_reduction_map
@@ -39,11 +39,10 @@
 
  */
 
-#ifndef BLISS_DISTRIBUTED_UNORDERED_MAP_HPP
-#define BLISS_DISTRIBUTED_UNORDERED_MAP_HPP
+#ifndef BLISS_DISTRIBUTED_DENSEHASH_MAP_HPP
+#define BLISS_DISTRIBUTED_DENSEHASH_MAP_HPP
 
 
-#include <unordered_map>  // local storage hash table  // for multimap
 #include <utility> 			  // for std::pair
 
 //#include <sparsehash/dense_hash_map>  // not a multimap, where we need it most.
@@ -60,6 +59,7 @@
 #include <mxx/algos.hpp> // for bucketing
 
 #include "containers/distributed_map_base.hpp"
+#include "containers/densehash_map.hpp"
 
 #include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
@@ -71,6 +71,8 @@
 namespace dsc  // distributed std container
 {
 
+  struct PartialKeySpace {};
+  struct FullKeySpace {};
 
 	// =================
 	// NOTE: when using this, need to further alias so that only Key param remains.
@@ -129,18 +131,16 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-  template <typename, typename, typename, typename, typename...> class Container,
-  template <typename> class MapParams,
-  class Alloc = ::std::allocator< ::std::pair<const Key, T> >
+    template <typename, typename, typename, typename, typename...> class Container,
+    template <typename> class MapParams,
+    typename LowerKeySpaceSelector = ::fsc::TruePredicate,
+    class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class unordered_map_base :
+  class densehash_map_base :
 		  public ::dsc::map_base<Key, T, MapParams, Alloc> {
 
     protected:
       using Base = ::dsc::map_base<Key, T, MapParams, Alloc>;
-
-//      using TransformedHash = ::fsc::TransformedHash<Key, Hash<Key, false>, KeyTransform>;
-//      TransformedHash hash;
 
       struct KeyToRank {
           typename Base::DistTransformedFunc proc_trans_hash;
@@ -201,14 +201,14 @@ namespace dsc  // distributed std container
 
 
 
-
     public:
       using local_container_type = Container<Key, T,
+          LowerKeySpaceSelector,
     		  typename Base::StoreTransformedFunc,
     		  typename Base::StoreTransformedEqual,
     		  Alloc>;
 
-      // std::unordered_multimap public members.
+      // std::densehash_multimap public members.
       using key_type              = typename local_container_type::key_type;
       using mapped_type           = typename local_container_type::mapped_type;
       using value_type            = typename local_container_type::value_type;
@@ -251,69 +251,28 @@ namespace dsc  // distributed std container
           // no filter by range AND elemenet for now.
       } count_element;
 
-      struct LocalErase {
-          /// Return how much was KEPT.
-          template<class DB, typename Query, class OutputIter>
-          size_t operator()(DB &db, Query const &v, OutputIter &) {
-              size_t before = db.size();
-              db.erase(v);
-              return before - db.size();
-          }
-          /// Return how much was KEPT.
-          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
-          size_t operator()(DB &db, Query const &v, OutputIter &,
-                            Predicate const & pred) {
-              auto range = (const_cast<DB const &>(db)).equal_range(v);
-
-              // check range first.  then erase.  only removed iterators are invalidated.
-              // order of remaining elements preserved.  true for map/multimap, unordered or not.
-              size_t count = 0;
-              auto tmp = range.first;
-              if (pred(range.first, range.second)) { // operator to decide if range matches.
-                for (auto it = range.first; it != range.second;) {
-                  if (pred(*it)) {
-                    // advance, then remove.
-                    tmp = it;  ++it;
-                    // remove.
-                    db.erase(tmp);  // erase entry at 1 iterator position. (not by value).
-                    ++count;
-                  } else {
-                    // keep.  so just advance
-                    ++it;
-                  }
-                }
-              }
-
-              return count;
-          }
-          // no filter by range AND elemenet for now.
-      } erase_element;
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed densehash_multimap.
        * @param first
        * @param last
        */
-      template <class InputIterator>
-      size_t local_insert(InputIterator first, InputIterator last) {
-    	  BL_BENCH_INIT(local_insert);
+      template <typename KT>
+      size_t local_insert(std::vector<KT> & input) {
+          BL_BENCH_INIT(local_insert);
 
     	  BL_BENCH_START(local_insert);
-          this->local_reserve(c.size() + ::std::distance(first, last));  // before branching, because reserve calls collective "empty()"
+          this->local_reserve(c.size() + input.size());  // before branching, because reserve calls collective "empty()"
           BL_BENCH_END(local_insert, "reserve", this->c.size());
 
-          if (first == last) return 0;
 
           size_t before = c.size();
 
           BL_BENCH_START(local_insert);
-          for (auto it = first; it != last; ++it) {
-            c.emplace(*it);
-          }
-          BL_BENCH_END(local_insert, "emplace", this->c.size());
+          this->c.insert(input);
+          BL_BENCH_END(local_insert, "insert", this->c.size());
 
           if (c.size() != before) local_changed = true;
-
 
           BL_BENCH_REPORT_MPI_NAMED(local_insert, "base_hashmap:local_insert", this->comm);
 
@@ -322,27 +281,22 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.  example use: stop inserting if more than x entries.
+       * @brief insert new elements in the distributed densehash_multimap.  example use: stop inserting if more than x entries.
        * @param first
        * @param last
        */
-      template <class InputIterator, class Predicate>
-      size_t local_insert(InputIterator first, InputIterator last, Predicate const &pred) {
+      template <class KT, class Predicate>
+      size_t local_insert(std::vector<KT> & input, Predicate const &pred) {
 
-          auto new_end = std::partition(first, last, pred);
-//
-//          this->local_reserve(c.size() + ::std::distance(first, last));   // before branching, because reserve calls collective "empty()"
-//
-          if (first == last) return 0;
+          if (input.size() == 0) return 0;
+
+          auto new_end = std::partition(input.begin(), input.end(), pred);
+          input.erase(new_end, input.end());
 
           size_t before = c.size();
 
-          this->local_insert(first, new_end);
-//
-//          for (auto it = first; it != last; ++it) {
-//            if (pred(*it)) c.emplace(*it);
-//          }
-//
+          this->local_insert(input);
+
           if (c.size() != before) local_changed = true;
 
           return c.size() - before;
@@ -353,7 +307,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed densehash_multimap.
        * @param keys  content will be changed and reordered
        * @param last
        */
@@ -364,13 +318,13 @@ namespace dsc  // distributed std container
           ::std::vector<::std::pair<Key, T> > results;
 
           if (::dsc::empty(keys, this->comm)) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_a2a", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_a2a", this->comm);
             return results;
           }
 
 
           if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_a2a", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_a2a", this->comm);
             return results;
           }
 
@@ -455,7 +409,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed densehash_multimap.
        *
        * why this version that uses isend and irecv?  because all2all version requires all result data to be in memory.
        * this one can do it one source process at a time.
@@ -470,13 +424,13 @@ namespace dsc  // distributed std container
           ::std::vector<::std::pair<Key, T> > results;
 
           if (::dsc::empty(keys, this->comm)) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_overlap", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_overlap", this->comm);
             return results;
           }
 
 
           if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_overlap", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_overlap", this->comm);
             return results;
           }
 
@@ -645,7 +599,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed densehash_multimap.
        * @param keys  content will be changed and reordered
        * @param last
        */
@@ -656,12 +610,12 @@ namespace dsc  // distributed std container
           ::std::vector<::std::pair<Key, T> > results;
 
           if (::dsc::empty(keys, this->comm)) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find", this->comm);
             return results;
           }
 
           if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find", this->comm);
             return results;
           }
 
@@ -761,7 +715,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief find elements with the specified keys in the distributed unordered_multimap.
+       * @brief find elements with the specified keys in the distributed densehash_multimap.
        *
        * why this version that uses isend and irecv?  because all2all version requires all result data to be in memory.
        * this one can do it one source process at a time.
@@ -776,12 +730,12 @@ namespace dsc  // distributed std container
           ::std::vector<::std::pair<Key, T> > results;
 
           if (::dsc::empty(keys, this->comm)) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_sendrecv", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_sendrecv", this->comm);
             return results;
           }
 
           if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_sendrecv", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_sendrecv", this->comm);
             return results;
           }
 
@@ -940,7 +894,7 @@ namespace dsc  // distributed std container
 
 
 //      /**
-//       * @brief find elements with the specified keys in the distributed unordered_multimap.
+//       * @brief find elements with the specified keys in the distributed densehash_multimap.
 //       *
 //       * why this version that uses isend and irecv?  because all2all version requires all result data to be in memory.
 //       * this one can do it one source process at a time.
@@ -955,11 +909,11 @@ namespace dsc  // distributed std container
 //          ::std::vector<::std::pair<Key, T> > results;
 //
 //      if (::dsc::empty(keys, this->comm)) {
-//        BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_irecv", this->comm);
+//        BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_irecv", this->comm);
 //        return results;
 //      }
 //          if (this->empty()) {
-//            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_irecv", this->comm);
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_irecv", this->comm);
 //            return results;
 //          }
 //
@@ -1179,119 +1133,48 @@ namespace dsc  // distributed std container
           return results;
       }
 
-      template <class LocalErase, typename Predicate = ::fsc::TruePredicate>
-      size_t erase(LocalErase & erase_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) {
-          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
-          size_t before = this->c.size();
-          BL_BENCH_INIT(erase);
-
-          if (::dsc::empty(keys, this->comm)) {
-            BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
-            return 0;
-          }
-
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
-            return 0;
-          }
-
-          BL_BENCH_START(erase);
-          this->transform_input(keys);
-          BL_BENCH_END(erase, "transform_intput", keys.size());
-
-          if (this->comm.size() > 1) {
-
-            BL_BENCH_START(erase);
-            auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
-            BLISS_UNUSED(recv_counts);
-            BL_BENCH_END(erase, "dist_query", keys.size());
-
-            // don't try to run unique further - have to use a set so might as well just have erase_element handle it.
-            sorted_input = false;
-          }
-
-          BL_BENCH_START(erase);
-          // then call local remove.
-          ::fsc::unique(keys, sorted_input,
-                                                  typename Base::StoreTransformedFunc(),
-                                                  typename Base::StoreTransformedEqual());
-          BL_BENCH_END(erase, "unique", keys.size());
-
-
-          BL_BENCH_START(erase);
-          // then call local remove.
-          auto dummy_iter = keys.end();  // process requires a reference.
-          QueryProcessor::process(this->c, keys.begin(), keys.end(), dummy_iter, erase_element, sorted_input, pred);
-          BL_BENCH_END(erase, "erase", keys.size());
-
-          BL_BENCH_REPORT_MPI_NAMED(erase, "base_hashmap:erase", this->comm);
-
-          if (before != this->c.size()) local_changed = true;
-
-          return before - this->c.size();
-      }
-
-
-      template <class LocalErase, typename Predicate = ::fsc::TruePredicate>
-      size_t erase(LocalErase & erase_element, Predicate const& pred = Predicate()) {
-          size_t count = 0;
-
-          if (this->local_empty()) return 0;
-
-
-          if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
-
-            auto keys = this->keys();  // already unique
-
-            auto dummy_iter = keys.end();  // process requires a reference.
-            count = QueryProcessor::process(c, keys.begin(), keys.end(), dummy_iter, erase_element, false, pred);
-          } else {
-            count = this->local_size();
-            this->local_clear();
-          }
-
-          if (count > 0) local_changed = true;
-
-          if (this->comm.size() > 1) this->comm.barrier();
-
-          return count;
-      }
-
-      unordered_map_base(const mxx::comm& _comm) : Base(_comm),
-          key_to_rank(_comm.size()), local_changed(false) {}
-
+      densehash_map_base(const mxx::comm& _comm) :  Base(_comm),
+                             key_to_rank(_comm.size()),
+                             local_changed(false) {}
 
       // ================ local overrides
 
-      /// clears the unordered_map
+      /// clears the densehash_map
       virtual void local_clear() noexcept {
         c.clear();
       }
 
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       virtual void local_reserve( size_t n) {
-        size_t buckets = std::ceil(static_cast<float>(n) / this->c.max_load_factor());
-
-        if (this->c.bucket_count() < buckets) this->c.rehash(buckets);
+        c.resize(n); 
       }
 
 
 
     public:
 
-      virtual ~unordered_map_base() {};
+      virtual ~densehash_map_base() {};
+
+      void reserve_keys(Key const & empty_key, Key const & deleted_key) {
+    	  c.reserve_keys(empty_key, deleted_key);
+      }
+
+      void reserve_upper_keys(Key const & empty_key, Key const & deleted_key, const LowerKeySpaceSelector & _splitter = LowerKeySpaceSelector()) {
+    	  c.reserve_upper_keys(empty_key, deleted_key, _splitter);
+      }
+
 
       /// returns the local storage.  please use sparingly.
       local_container_type& get_local_container() { return c; }
 
-      const_iterator cbegin() const
-      {
-        return c.cbegin();
-      }
-
-      const_iterator cend() const {
-        return c.cend();
-      }
+//      const_iterator cbegin() const
+//      {
+//        return c.cbegin();
+//      }
+//
+//      const_iterator cend() const {
+//        return c.cend();
+//      }
 
       using Base::size;
       using Base::unique_size;
@@ -1302,27 +1185,19 @@ namespace dsc  // distributed std container
       virtual void to_vector(std::vector<std::pair<Key, T> > & result) const {
         result.clear();
         if (c.empty()) return;
-        result.reserve(c.size());
-        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(result);
-        ::std::copy(c.begin(), c.end(), emplace_iter);
+        c.to_vector(result);
       }
       /// extract the unique keys of a map.
       virtual void keys(std::vector<Key> & result) const {
         result.clear();
         if (c.empty()) return;
-
-        typename Base::template UniqueKeySetUtilityType<Key> temp(c.size());
-        auto end = c.end();
-        for (auto it = c.begin(); it != end; ++it) {
-          temp.emplace((*it).first);
-        }
-        result.assign(temp.begin(), temp.end());
+        c.keys(result);
       }
 
 
 
       /**
-       * @brief count elements with the specified keys in the distributed unordered_multimap.
+       * @brief count elements with the specified keys in the distributed densehash_multimap.
        * @param first
        * @param last
        */
@@ -1333,12 +1208,12 @@ namespace dsc  // distributed std container
           ::std::vector<::std::pair<Key, size_type> > results;
 
           if (::dsc::empty(keys, this->comm)) {
-            BL_BENCH_REPORT_MPI_NAMED(count, "base_unordered_map:count", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(count, "base_densehash_map:count", this->comm);
             return results;
           }
 
           if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(count, "base_unordered_map:count", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(count, "base_densehash_map:count", this->comm);
             return results;
           }
 
@@ -1437,18 +1312,91 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief erase elements with the specified keys in the distributed unordered_multimap.
+       * @brief erase elements with the specified keys in the distributed densehash_multimap.
        * @param first
        * @param last
        */
       template <class Predicate = ::fsc::TruePredicate>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
-          return this->erase(erase_element, keys, sorted_input, pred);
+          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
+          size_t before = this->c.size();
+
+          BL_BENCH_INIT(erase);
+
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(erase, "base_densehash_map:erase", this->comm);
+            return 0;
+          }
+
+          if (this->empty()) {
+            BL_BENCH_REPORT_MPI_NAMED(erase, "base_densehash_map:erase", this->comm);
+            return 0;
+          }
+
+          BL_BENCH_START(erase);
+          this->transform_input(keys);
+          BL_BENCH_END(erase, "transform_intput", keys.size());
+
+          if (this->comm.size() > 1) {
+
+            BL_BENCH_START(erase);
+            auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
+            BLISS_UNUSED(recv_counts);
+            BL_BENCH_END(erase, "dist_query", keys.size());
+
+            // don't try to run unique further - have to use a set so might as well just have erase_element handle it.
+            sorted_input = false;
+          }
+
+          BL_BENCH_START(erase);
+          // then call local remove.
+          ::fsc::unique(keys, sorted_input,
+                                                  typename Base::StoreTransformedFunc(),
+                                                  typename Base::StoreTransformedEqual());
+          BL_BENCH_END(erase, "unique", keys.size());
+
+
+          BL_BENCH_START(erase);
+
+
+          BL_BENCH_END(erase, "erase", keys.size());
+          if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
+            this->c.erase(keys.begin(), keys.end(), pred);
+          } else {
+            this->c.erase(keys.begin(), keys.end());
+          }
+
+          BL_BENCH_REPORT_MPI_NAMED(erase, "base_hashmap:erase", this->comm);
+
+          if (before != this->c.size()) local_changed = true;
+
+          return before - this->c.size();
       }
+
+
       template <typename Predicate = ::fsc::TruePredicate>
       size_t erase(Predicate const & pred = Predicate()) {
-        return this->erase(erase_element, pred);
+
+        size_t count = 0;
+
+        if (this->local_empty()) return 0;
+
+
+        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
+          count = this->c.erase(pred);
+
+        } else {
+          count = this->local_size();
+          this->local_clear();
+        }
+
+        if (count > 0) local_changed = true;
+
+        if (this->comm.size() > 1) this->comm.barrier();
+
+        return count;
       }
+
 
       // ================  overrides
 
@@ -1468,10 +1416,8 @@ namespace dsc  // distributed std container
 
       /// get size of local container
       virtual size_t local_unique_size() const {
-        return this->local_size();
+        return this->c.unique_size();
       }
-
-
 
   };
 
@@ -1502,17 +1448,18 @@ namespace dsc  // distributed std container
    */
   template<typename Key, typename T,
   	  template <typename> class MapParams,
+      typename LowerKeySpaceSelector = ::fsc::TruePredicate,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class unordered_map : public unordered_map_base<Key, T, ::std::unordered_map, MapParams, Alloc> {
+  class densehash_map : public densehash_map_base<Key, T, ::fsc::densehash_map, MapParams, LowerKeySpaceSelector, Alloc> {
     protected:
-      using Base = unordered_map_base<Key, T, ::std::unordered_map, MapParams, Alloc>;
+      using Base = densehash_map_base<Key, T, ::fsc::densehash_map, MapParams, LowerKeySpaceSelector, Alloc>;
 
 
     public:
       using local_container_type = typename Base::local_container_type;
 
-      // std::unordered_multimap public members.
+      // std::densehash_multimap public members.
       using key_type              = typename local_container_type::key_type;
       using mapped_type           = typename local_container_type::mapped_type;
       using value_type            = typename local_container_type::value_type;
@@ -1534,10 +1481,10 @@ namespace dsc  // distributed std container
         // unfiltered.
         template<class DB, typename Query, class OutputIter>
         size_t operator()(DB &db, Query const &v, OutputIter &output) const {
-            auto iter = db.find(v);
+            auto iters = db.equal_range(v);
 
-            if (iter != db.end()) {
-              *output = *iter;
+            if (iters.first != iters.second) {
+              *output = *(iters.first);
               ++output;
               return 1;
             }  // no insert if can't find it.
@@ -1547,17 +1494,15 @@ namespace dsc  // distributed std container
         template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
         size_t operator()(DB &db, Query const &v, OutputIter &output,
                           Predicate const& pred) const {
-            auto iter = db.find(v);
+            auto iters = db.equal_range(v);
 
-            // add the output entry.
-            auto next = iter;  ++next;
-            if (iter != db.end()) {
-              if (pred(iter, next) && pred(*iter)) {
-                *output = *iter;
-                ++output;
-                return 1;
-              }
-            }
+            if ((iters.first != iters.second) &&
+                pred(iters.first, iters.second) &&
+                pred(*(iters.first)) ) {
+              *output = *(iters.first);
+              ++output;
+              return 1;
+            }  // no insert if can't find it.
             return 0;
         }
         // no filter by range AND elemenet for now.
@@ -1573,9 +1518,11 @@ namespace dsc  // distributed std container
 
     public:
 
-      unordered_map(const mxx::comm& _comm) : Base(_comm) {}
 
-      virtual ~unordered_map() {};
+      densehash_map(const mxx::comm& _comm) : Base(_comm) {};
+
+
+      virtual ~densehash_map() {};
 
       using Base::count;
       using Base::erase;
@@ -1611,7 +1558,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed densehash_multimap.
        * @param first
        * @param last
        */
@@ -1644,9 +1591,9 @@ namespace dsc  // distributed std container
         // local compute part.  called by the communicator.
         size_t count = 0;
         if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
-          count = this->Base::local_insert(input.begin(), input.end(), pred);
+          count = this->Base::local_insert(input, pred);
         else
-          count = this->Base::local_insert(input.begin(), input.end());
+          count = this->Base::local_insert(input);
         BL_BENCH_END(insert, "insert", this->c.size());
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "hashmap:insert", this->comm);
@@ -1689,17 +1636,18 @@ namespace dsc  // distributed std container
    */
   template<typename Key, typename T,
   template <typename> class MapParams,
+  typename LowerKeySpaceSelector = ::fsc::TruePredicate,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class unordered_multimap : public unordered_map_base<Key, T, ::std::unordered_multimap, MapParams, Alloc> {
+  class densehash_multimap : public densehash_map_base<Key, T, ::fsc::densehash_multimap, MapParams, LowerKeySpaceSelector, Alloc> {
     protected:
-      using Base = unordered_map_base<Key, T, ::std::unordered_multimap, MapParams, Alloc>;
+      using Base = densehash_map_base<Key, T, ::fsc::densehash_multimap, MapParams, LowerKeySpaceSelector, Alloc>;
 
 
     public:
       using local_container_type = typename Base::local_container_type;
 
-      // std::unordered_multimap public members.
+      // std::densehash_multimap public members.
       using key_type              = typename local_container_type::key_type;
       using mapped_type           = typename local_container_type::mapped_type;
       using value_type            = typename local_container_type::value_type;
@@ -1760,9 +1708,10 @@ namespace dsc  // distributed std container
     public:
 
 
-      unordered_multimap(const mxx::comm& _comm) : Base(_comm), local_unique_count(0) {}
+      densehash_multimap(const mxx::comm& _comm) : Base(_comm), local_unique_count(0) {}
 
-      virtual ~unordered_multimap() {}
+
+      virtual ~densehash_multimap() {}
 
       using Base::count;
       using Base::erase;
@@ -1799,7 +1748,7 @@ namespace dsc  // distributed std container
       /// access the current the multiplicity.  only multimap needs to override this.
       virtual float get_multiplicity() const {
         // multimaps would add a collective function to change the multiplicity
-        if (this->comm.rank() == 0) printf("rank %d unordered_multimap get_multiplicity called\n", this->comm.rank());
+        if (this->comm.rank() == 0) printf("rank %d densehash_multimap get_multiplicity called\n", this->comm.rank());
 
 
         // one approach is to add up the number of repeats for the key of each entry, then divide by total count.
@@ -1887,7 +1836,7 @@ namespace dsc  // distributed std container
 
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed densehash_multimap.
        * @param first
        * @param last
        */
@@ -1926,9 +1875,9 @@ namespace dsc  // distributed std container
         // local compute part.  called by the communicator.
         size_t count = 0;
         if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
-          count = this->Base::local_insert(input.begin(), input.end(), pred);
+          count = this->Base::local_insert(input, pred);
         else
-          count = this->Base::local_insert(input.begin(), input.end());
+          count = this->Base::local_insert(input);
         BL_BENCH_END(insert, "insert", this->c.size());
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "hash_multimap:insert", this->comm);
@@ -1938,17 +1887,7 @@ namespace dsc  // distributed std container
 
       /// get the size of unique keys in the current local container.
       virtual size_t local_unique_size() const {
-        if (this->local_changed) {
-
-          typename Base::template UniqueKeySetUtilityType<Key> unique_set(this->c.size());
-          for (auto it = this->c.begin(), max = this->c.end(); it != max; ++it) {
-            unique_set.emplace(it->first);
-          }
-          local_unique_count = unique_set.size();
-
-          this->local_changed = false;
-        }
-        return local_unique_count;
+        return this->c.unique_size();
       }
   };
 
@@ -1984,19 +1923,20 @@ namespace dsc  // distributed std container
    */
   template<typename Key, typename T,
   template <typename> class MapParams,
+  typename LowerKeySpaceSelector = ::fsc::TruePredicate,
   typename Reduc = ::std::plus<T>,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class reduction_unordered_map : public unordered_map<Key, T, MapParams, Alloc> {
+  class reduction_densehash_map : public densehash_map<Key, T, MapParams, LowerKeySpaceSelector, Alloc> {
       static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     protected:
-      using Base = unordered_map<Key, T, MapParams, Alloc>;
+      using Base = densehash_map<Key, T, MapParams, LowerKeySpaceSelector, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
 
-      // std::unordered_multimap public members.
+      // std::densehash_multimap public members.
       using key_type              = typename local_container_type::key_type;
       using mapped_type           = typename local_container_type::mapped_type;
       using value_type            = typename local_container_type::value_type;
@@ -2016,7 +1956,7 @@ namespace dsc  // distributed std container
       Reduc r;
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed densehash_multimap.
        * @param first
        * @param last
        */
@@ -2027,9 +1967,11 @@ namespace dsc  // distributed std container
           this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
-            if (this->c.find(it->first) == this->c.end()) this->c.emplace(*it);
-            else
-              this->c.at(it->first) = r(this->c.at(it->first), it->second);
+            auto result = this->c.insert(*it);
+            if (!(result.second)) {
+              // failed insertion - means an entry is already there, so reduce
+              result.first->second = r(result.first->second, it->second);
+            }
           }
 
           if (this->c.size() != before) this->local_changed = true;
@@ -2038,7 +1980,7 @@ namespace dsc  // distributed std container
       }
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed densehash_multimap.
        * @param first
        * @param last
        */
@@ -2050,9 +1992,11 @@ namespace dsc  // distributed std container
 
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) {
-              if (this->c.find(it->first) == this->c.end()) this->c.emplace(*it);
-              else
-                this->c.at(it->first) = r(this->c.at(it->first), it->second);
+              auto result = this->c.insert(*it);
+              if (!(result.second)) {
+                // failed insertion - means an entry is already there, so reduce
+                result.first->second = r(result.first->second, it->second);
+              }
             }
           }
 
@@ -2062,8 +2006,8 @@ namespace dsc  // distributed std container
 
       }
 
-      /// local reduction via a copy of local container type (i.e. unordered_map).
-      /// this takes quite a bit of memory due to use of unordered_map, but is significantly faster than sorting.
+      /// local reduction via a copy of local container type (i.e. densehash_map).
+      /// this takes quite a bit of memory due to use of densehash_map, but is significantly faster than sorting.
       virtual void local_reduction(::std::vector<::std::pair<Key, T> >& input, bool & sorted_input) {
 
         if (input.size() == 0) return;
@@ -2076,19 +2020,18 @@ namespace dsc  // distributed std container
         BL_BENCH_END(reduce_tuple, "reserve", input.size());
 
         BL_BENCH_START(reduce_tuple);
-        Key k;
-        T v;
-        auto end = input.end();
-        for (auto it = input.begin(); it != end; ++it) {
-          k = it->first;
-          v = it->second;
-          if (temp.find(k) == temp.end()) temp.emplace(k, v);  // don't rely on initialization to set T to 0.
-          else temp.at(k) = r(temp.at(k), v);
+        for (auto it = input.begin(), max = input.end(); it != max; ++it) {
+          auto result = temp.insert(*it);
+          if (!(result.second)) {
+            // failed insertion - means an entry is already there, so reduce
+            result.first->second = r(result.first->second, it->second);
+          }
         }
         BL_BENCH_END(reduce_tuple, "reduce", temp.size());
 
         BL_BENCH_START(reduce_tuple);
-        input.assign(temp.begin(), temp.end());
+        input.clear();
+        temp.to_vector().swap(input);
         BL_BENCH_END(reduce_tuple, "copy", input.size());
 
         //local_container_type().swap(temp);   // doing the swap to clear helps?
@@ -2099,10 +2042,10 @@ namespace dsc  // distributed std container
 
     public:
 
+      reduction_densehash_map( const mxx::comm& _comm) : Base(_comm) {}
 
-      reduction_unordered_map(const mxx::comm& _comm) : Base(_comm) {}
 
-      virtual ~reduction_unordered_map() {};
+      virtual ~reduction_densehash_map() {};
 
       using Base::count;
       using Base::find;
@@ -2110,7 +2053,7 @@ namespace dsc  // distributed std container
       using Base::unique_size;
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed densehash_multimap.
        * @param first
        * @param last
        */
@@ -2165,11 +2108,11 @@ namespace dsc  // distributed std container
 
   /**
    * @brief  distributed unordered counting map following std unordered map's interface.  Insertion applies the binary reduction operator between the existing and inserted element (in that order).
-   * @details   This class is modeled after the std::unordered_map, but allows a binary reduction operator to be used during insertion.
+   * @details   This class is modeled after the std::densehash_map, but allows a binary reduction operator to be used during insertion.
    *
    *         the reduction operator is not assumed to be associative.  The operator is called with parameters existing element, then new element to insert.
    *
-   *         it has as much of the same methods of std::unordered_map as possible.  however, all methods consider the fact
+   *         it has as much of the same methods of std::densehash_map as possible.  however, all methods consider the fact
    *         that the data are in distributed memory space, so to access the data, "communication" is needed.
    *
    *         Note that "communication" is a weak concept here meaning that we are accessing a different local container.
@@ -2190,20 +2133,22 @@ namespace dsc  // distributed std container
    * @tparam Equal   default to ::std::equal_to<Key>   equal function for the local storage.
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
-  template<typename Key, typename T,
-  template <typename> class MapParams,
-  class Alloc = ::std::allocator< ::std::pair<const Key, T> >
+  template<
+    typename Key, typename T,
+    template <typename> class MapParams,
+    typename LowerKeySpaceSelector = ::fsc::TruePredicate,
+    class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class counting_unordered_map : public reduction_unordered_map<Key, T, MapParams, ::std::plus<T>, Alloc> {
+  class counting_densehash_map : public reduction_densehash_map<Key, T, MapParams, LowerKeySpaceSelector, ::std::plus<T>, Alloc> {
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
 
     protected:
-      using Base = reduction_unordered_map<Key, T, MapParams, ::std::plus<T>, Alloc>;
+      using Base = reduction_densehash_map<Key, T, MapParams, LowerKeySpaceSelector, ::std::plus<T>, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
 
-      // std::unordered_multimap public members.
+      // std::densehash_multimap public members.
       using key_type              = typename local_container_type::key_type;
       using mapped_type           = typename local_container_type::mapped_type;
       using value_type            = typename local_container_type::value_type;
@@ -2221,9 +2166,10 @@ namespace dsc  // distributed std container
 
 
 
-      counting_unordered_map(const mxx::comm& _comm) : Base(_comm) {}
+      counting_densehash_map(const mxx::comm& _comm) : Base(_comm) {}
 
-      virtual ~counting_unordered_map() {};
+
+      virtual ~counting_densehash_map() {};
 
       using Base::insert;
       using Base::count;
@@ -2232,7 +2178,7 @@ namespace dsc  // distributed std container
       using Base::unique_size;
 
       /**
-       * @brief insert new elements in the distributed unordered_multimap.
+       * @brief insert new elements in the distributed densehash_multimap.
        * @param first
        * @param last
        */
@@ -2242,7 +2188,7 @@ namespace dsc  // distributed std container
         BL_BENCH_INIT(insert);
 
         if (::dsc::empty(input, this->comm)) {
-          BL_BENCH_REPORT_MPI_NAMED(insert, "count_hashmap:insert", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(insert, "count_densehash_map:insert", this->comm);
           return 0;
         }
 
@@ -2285,17 +2231,15 @@ namespace dsc  // distributed std container
         ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
 
 
-        BL_BENCH_REPORT_MPI_NAMED(insert, "count_hashmap:insert_key", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "count_densehash_map:insert_key", this->comm);
 
         return count;
 
       }
-
-
   };
 
 
 } /* namespace dsc */
 
 
-#endif // BLISS_DISTRIBUTED_UNORDERED_MAP_HPP
+#endif // BLISS_DISTRIBUTED_DENSEHASH_MAP_HPP

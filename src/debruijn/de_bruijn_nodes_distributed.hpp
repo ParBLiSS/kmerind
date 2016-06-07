@@ -225,7 +225,7 @@ namespace bliss{
 				* @param first
 				* @param last
 				*/
-			   template <typename InputEdgeType, typename Predicate = ::dsc::TruePredicate>
+			   template <typename InputEdgeType, typename Predicate = ::fsc::TruePredicate>
 			   size_t insert(std::vector<::std::pair<Key, InputEdgeType> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
 				 // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 				 BL_BENCH_INIT(insert);
@@ -250,7 +250,7 @@ namespace bliss{
 				 BL_BENCH_START(insert);
 				 // local compute part.  called by the communicator.
 				 size_t count = 0;
-				 if (!::std::is_same<Predicate, ::dsc::TruePredicate>::value)
+				 if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
 				   count = this->local_insert(input.begin(), input.end(), pred);
 				 else
 				   count = this->local_insert(input.begin(), input.end());
