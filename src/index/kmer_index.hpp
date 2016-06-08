@@ -720,7 +720,7 @@ public:
 		m = this->map.get_multiplicity();
 		BL_BENCH_END(insert, "multiplicity", m);
 #else
-		auto result = this->map.get_multiplicity()();
+		auto result = this->map.get_multiplicity();
 		BLISS_UNUSED(result);
 #endif
 		BL_BENCH_REPORT_MPI_NAMED(insert, "index:insert", this->comm);
