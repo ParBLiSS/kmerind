@@ -1181,7 +1181,7 @@ namespace dsc  // distributed std container
       }
 
       template <class LocalErase, typename Predicate = ::fsc::TruePredicate>
-      size_t erase(LocalErase & erase_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) {
+      size_t erase(LocalErase & erase_element, ::std::vector<Key>& keys, bool sorted_input, Predicate const& pred) {
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           size_t before = this->c.size();
           BL_BENCH_INIT(erase);
@@ -1233,8 +1233,8 @@ namespace dsc  // distributed std container
       }
 
 
-      template <class LocalErase, typename Predicate = ::fsc::TruePredicate>
-      size_t erase(LocalErase & erase_element, Predicate const& pred = Predicate()) {
+      template <class LocalErase, typename Predicate>
+      size_t erase(LocalErase & erase_element, Predicate const& pred) {
           size_t count = 0;
 
           if (this->local_empty()) return 0;
@@ -1446,7 +1446,7 @@ namespace dsc  // distributed std container
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
           return this->erase(erase_element, keys, sorted_input, pred);
       }
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate>
       size_t erase(Predicate const & pred = Predicate()) {
         return this->erase(erase_element, pred);
       }
@@ -1724,7 +1724,7 @@ namespace dsc  // distributed std container
 
 
 
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate>
       size_t erase(Predicate const & pred = Predicate()) {
         if (std::is_same<Predicate, ::fsc::TruePredicate>::value) {
           size_t s = this->c.size();
@@ -2094,7 +2094,7 @@ namespace dsc  // distributed std container
       }
 
 
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate>
       size_t erase(Predicate const & pred = Predicate()) {
         return Base::erase(erase_element, pred);
       }
@@ -2464,7 +2464,7 @@ namespace dsc  // distributed std container
       }
 
 
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate>
       size_t erase(Predicate const & pred = Predicate()) {
         return Base::erase(erase_element, pred);
       }

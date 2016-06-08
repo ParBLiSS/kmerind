@@ -1794,7 +1794,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         return before - c.size();
       }
 
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate>
       size_t erase(Predicate const & pred = Predicate()) {
 
         if (this->local_empty()) return 0;

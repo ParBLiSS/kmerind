@@ -615,14 +615,14 @@ using allocator = std::allocator<T>;
 
           map.reserve(map.size() + ss);
 
-          Less less;
+          Less less = Less();
           std::sort(first, last, less);
 
           using InputValueType = typename ::std::iterator_traits<InputIt>::value_type;
 
           InputIt start = first;
           auto key = start->first;
-          for (auto it = start, max = last; it != max;) {
+          for (InputIt it = start, max = last; it != max;) {
             start = it;
             key = start->first;
 
@@ -766,7 +766,7 @@ using allocator = std::allocator<T>;
 
       size_type get_max_multiplicity() const {
         size_type max_multiplicity = map.cbegin()->second.size();
-    	  for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+    	  for (auto it = map.cbegin(); it != map.cend(); ++it) {
     		  max_multiplicity = ::std::max(max_multiplicity, it->second.size());
     	  }
     	  return max_multiplicity;
@@ -1358,12 +1358,12 @@ using allocator = std::allocator<T>;
 
           map.reserve(map.size() + ss);
 
-          Less less;
+          Less less = Less();
           std::sort(first, last, less);
 
           InputIt start = first;
           auto key = start->first;
-          for (auto it = start, max = last; it != max;) {
+          for (InputIt it = start, max = last; it != max;) {
             start = it;
             key = start->first;
 
@@ -1449,7 +1449,7 @@ using allocator = std::allocator<T>;
 
       size_type get_max_multiplicity() const {
         size_type max_multiplicity = map.cbegin()->second.size();
-        for (auto it = map.cbegin(), max = map.cend(); it != max; ++it) {
+        for (auto it = map.cbegin(); it != map.cend(); ++it) {
           max_multiplicity = ::std::max(max_multiplicity, it->second.size());
         }
         return max_multiplicity;

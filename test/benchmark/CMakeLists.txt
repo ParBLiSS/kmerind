@@ -10,11 +10,11 @@ add_executable(test_omp_patterns test_omp_patterns.cpp)
 target_link_libraries(test_omp_patterns ${EXTRA_LIBS})
 
 
-endif()
+endif(ENABLE_TESTING)
 
 if (BL_BENCHMARK)
 
-if (BL_KMER_BENCHMARKS)
+if (BL_KMER_BENCHMARK)
 # available params:
 
 
@@ -249,9 +249,9 @@ foreach(store BIMOLECULE SINGLE)
 endforeach(store)
 
 #==================
-endif(BL_KMER_BENCHMARKS)
+endif(BL_KMER_BENCHMARK)
 
-endif(BL_BENCHMARKS)
+endif(BL_BENCHMARK)
 
 if (BUILD_TEST_APPLICATIONS)
 

@@ -1374,7 +1374,7 @@ namespace dsc  // distributed std container
       }
 
 
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate>
       size_t erase(Predicate const & pred = Predicate()) {
 
         size_t count = 0;
@@ -2020,7 +2020,8 @@ namespace dsc  // distributed std container
         BL_BENCH_END(reduce_tuple, "reserve", input.size());
 
         BL_BENCH_START(reduce_tuple);
-        for (auto it = input.begin(), max = input.end(); it != max; ++it) {
+        auto max = input.end();
+        for (auto it = input.begin(); it != max; ++it) {
           auto result = temp.insert(*it);
           if (!(result.second)) {
             // failed insertion - means an entry is already there, so reduce

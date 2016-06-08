@@ -1351,7 +1351,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
       }
 
 
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate>
       size_t erase(Predicate const & pred = Predicate()) {
 
     	  size_t count = 0;

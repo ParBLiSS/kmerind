@@ -29,8 +29,7 @@ set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
 # below 2 lines are only for cmake < 2.8.10
    execute_process(
-     COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE
-BLISS_CXX_COMPILER_VERSION)
+     COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE BLISS_CXX_COMPILER_VERSION)
   if(BLISS_CXX_COMPILER_VERSION VERSION_LESS "16.0")
     message(FATAL_ERROR "Intel (icpc) compiler version 16.0 or later is required.")
   endif()
@@ -379,7 +378,7 @@ else(OPENMP_FOUND)
 	  	set(OpenMP_C_FLAGS "-fopenmp=libomp")
 	  	set(OpenMP_CXX_FLAGS "-fopenmp=libomp")
 	  	
-   	    set(CLANG_OPENMP_HOME "${CLANG_COMPILER_DIR}/../blah" CACHE PATH "Path to Clang OpenMP root directory.")
+   	    set(CLANG_OPENMP_HOME "${CLANG_COMPILER_DIR}/.." CACHE PATH "Path to Clang OpenMP root directory.  Ideally, same as clang home.")
    	    include_directories(${CLANG_OPENMP_HOME}/include)  # clang uses gcc headers, but can't find all gcc headers by itself.  this is for omp.h
    	    link_directories(${CLANG_OPENMP_HOME}/lib)
    	

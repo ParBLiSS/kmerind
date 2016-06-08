@@ -101,7 +101,7 @@ namespace fsc {  // fast standard container
 
 
 
-
+// key values span entire key space.
 template <typename Key,
 typename T,
 typename LowerKeySpaceSelector,
@@ -261,7 +261,7 @@ class densehash_map {
 
     template <typename InputIt>
     InputIt partition_input(InputIt first, InputIt last) {
-    	return ::std::partition(first, last, splitter);
+    	return ::std::stable_partition(first, last, splitter);
     }
 
   public:
@@ -373,10 +373,10 @@ class densehash_map {
       ks.clear();
       ks.reserve(size());
 
-      for (auto it = lower_map.begin(), max = lower_map.end(); it != max; ++it) {
+      for (auto it = lower_map.begin(); it != lower_map.end(); ++it) {
         ks.emplace_back(it->first);
       }
-      for (auto it = upper_map.begin(), max = upper_map.end(); it != max; ++it) {
+      for (auto it = upper_map.begin(); it != upper_map.end(); ++it) {
         ks.emplace_back(it->first);
       }
 
@@ -394,14 +394,13 @@ class densehash_map {
       vs.clear();
       vs.reserve(size());
 
-      for (auto it = lower_map.begin(), max = lower_map.end(); it != max; ++it) {
+      for (auto it = lower_map.begin(); it != lower_map.end(); ++it) {
         vs.emplace_back(*it);
       }
-      for (auto it = upper_map.begin(), max = upper_map.end(); it != max; ++it) {
+      for (auto it = upper_map.begin(); it != upper_map.end(); ++it) {
         vs.emplace_back(*it);
       }
 
-      return vs;
     }
 
 
@@ -590,6 +589,7 @@ class densehash_map {
 };
 
 
+// Key values does not span entire key space.
 template <typename Key,
 typename T,
 typename Hash,
@@ -704,7 +704,7 @@ class densehash_map<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
       ks.clear();
       ks.reserve(size());
 
-      for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+      for (auto it = map.begin(); it != map.end(); ++it) {
         ks.emplace_back(it->first);
       }
     }
@@ -720,7 +720,7 @@ class densehash_map<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
       vs.clear();
       vs.reserve(size());
 
-      for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+     for (auto it = map.begin(); it != map.end(); ++it) {
         vs.emplace_back(*it);
       }
     }
@@ -903,7 +903,7 @@ class densehash_multimap {
 
     template <typename InputIt>
     InputIt partition_input(InputIt first, InputIt last) {
-      return ::std::partition(first, last, splitter);
+      return ::std::stable_partition(first, last, splitter);
     }
 
   public:
@@ -940,7 +940,7 @@ class densehash_multimap {
         std::pair<typename supercontainer_type::iterator, bool> insert_result;
         Key k;
         int64_t idx;
-        for (auto it = first, max = last; it != max; ++it) {
+        for (InputIt it = first, max = last; it != max; ++it) {
           k = it->first;
 
           // try inserting
@@ -1077,7 +1077,8 @@ class densehash_multimap {
 
 
       // mark for erasure
-      for (auto iter = map.begin(), max = map.end(); iter != max; ++iter) {
+      auto max = map.end();
+      for (auto iter = map.begin(); iter != max; ++iter) {
         idx = iter->second;
 
         if (idx < 0) {
@@ -1244,10 +1245,10 @@ class densehash_multimap {
       ks.clear();
       ks.reserve(size());
 
-      for (auto it = lower_map.begin(), max = lower_map.end(); it != max; ++it) {
+      for (auto it = lower_map.begin(); it != lower_map.end(); ++it) {
         ks.emplace_back(it->first);
       }
-      for (auto it = upper_map.begin(), max = upper_map.end(); it != max; ++it) {
+      for (auto it = upper_map.begin(); it != upper_map.end(); ++it) {
         ks.emplace_back(it->first);
       }
 
@@ -1265,29 +1266,28 @@ class densehash_multimap {
       vs.clear();
       vs.reserve(size());
 
-      subcontainer_type & vec;
-      for (auto it = lower_map.begin(), max = lower_map.end(); it != max; ++it) {
+      for (auto it = lower_map.begin(); it != lower_map.end(); ++it) {
         if (it->second < 0) {
-          vec = vecX[it->second & ::std::numeric_limits<int64_t>::max()];
-          for (auto it2 = vec.begin(), max2 = vec.end(); it2 != max2; ++it2) {
+          auto it2 = vecX[it->second & ::std::numeric_limits<int64_t>::max()].begin();
+          auto max2 = vecX[it->second & ::std::numeric_limits<int64_t>::max()].end();
+          for (; it2 != max2; ++it2) {
             vs.emplace_back(*it2);
           }
         } else {  // singleton
           vs.emplace_back(vec1[it->second]);
         }
       }
-      for (auto it = upper_map.begin(), max = upper_map.end(); it != max; ++it) {
+      for (auto it = upper_map.begin(); it != upper_map.end(); ++it) {
         if (it->second < 0) {
-          vec = vecX[it->second & ::std::numeric_limits<int64_t>::max()];
-          for (auto it2 = vec.begin(), max2 = vec.end(); it2 != max2; ++it2) {
+          auto it2 = vecX[it->second & ::std::numeric_limits<int64_t>::max()].begin();
+          auto max2 = vecX[it->second & ::std::numeric_limits<int64_t>::max()].end();
+          for (; it2 != max2; ++it2) {
             vs.emplace_back(*it2);
           }
         } else {  // singleton
           vs.emplace_back(vec1[it->second]);
         }
       }
-
-      return vs;
     }
 
 
@@ -1551,7 +1551,7 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
       ks.clear();
       ks.reserve(size());
 
-      for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+      for (auto it = map.begin(); it != map.end(); ++it) {
         ks.emplace_back(it->first);
       }
     }
@@ -1568,10 +1568,11 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
       vs.reserve(size());
 
       int64_t idx;
-      for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+      for (auto it = map.begin(); it != map.end(); ++it) {
         if (it->second < 0) {
           idx = it->second & ::std::numeric_limits<int64_t>::max();
-          for (auto it2 = vecX[idx].begin(), max2 = vecX[idx].end(); it2 != max2; ++it2) {
+          auto max2 = vecX[idx].end();
+          for (auto it2 = vecX[idx].begin(); it2 != max2; ++it2) {
             vs.emplace_back(*it2);
           }
         } else {  // singleton
@@ -1642,7 +1643,7 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
         std::pair<typename supercontainer_type::iterator, bool> insert_result;
         Key k;
         int64_t idx;
-        for (auto it = first, max = last; it != max; ++it) {
+        for (InputIt it = first, max = last; it != max; ++it) {
           k = it->first;
 
           // try inserting
@@ -1852,7 +1853,8 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
 
 
       // mark for erasure
-      for (auto iter = map.begin(), max = map.end(); iter != max; ++iter) {
+      auto  max = map.end();
+      for (auto iter = map.begin(); iter != max; ++iter) {
         idx = iter->second;
 
         if (idx < 0) {
@@ -1956,7 +1958,7 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
 
 
   /**
-   * uncompacted version of the vecmap
+   * uncompacted version of the vecmap.  DEPRECATED AND NOT USED....
    *
    * internally has a single vector, sorted by (hash(key) % buckets) then by hash(key) then by key
    * insert into back of vector.   when insert, when map load_factor may trigger a rehash, we manually resort the vector and rebuild the map.
@@ -2345,7 +2347,8 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
         auto curr = temp.begin();
         auto prev = map.begin();
         // for each map entry, copy content over.  the range iterators in map are moved to temp
-        for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+        auto max = map.end();
+        for (auto it = map.begin(); it != max; ++it) {
           // copy over the content
           it->second.second = std::copy(it->second.first, it->second.second, curr);
 
@@ -2375,7 +2378,7 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
             return;
           }
 
-        Less less;
+        Less less = Less();
 
         auto compacted_it = vec.begin();
         auto key = compacted_it->first;
@@ -2385,7 +2388,8 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
         size_t i = 0;
 
         // go through all elements in vec, copy to beginning,
-        for (auto it = vec.begin(), max = vec.end(); it != max; ++i) {
+        auto max = vec.end();
+        for (auto it = vec.begin(); it != max; ++i) {
           // get the current key
           key = it->first;
           // find the map entry
@@ -2433,11 +2437,12 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
         if (vec.size() == 0) return;
 
         map.resize(map.size() + vec.size());
-        Less less;
+        Less less = Less();
 
         auto first = vec.begin();
         auto key = first->first;
-        for (auto it = vec.begin(), max = vec.end(); it != max;) {
+        auto max = vec.end();
+        for (auto it = vec.begin(); it != max;) {
           first = it;
           key = first->first;
 
@@ -2586,12 +2591,14 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
 
           size_t prev_size = vec.size();
 
-          // copy it in.
+          // copy it in.  g++ 4.8.x has non-compliance to c++11 s.t. vec.insert returns void instead of iterator.
+          // so compute the iterator directly.
           vec.reserve(prev_size + std::distance(first, last));
-          auto middle = vec.insert(vec.end(), first, last);
+          vec.insert(vec.end(), first, last);
 
-          Less less;
+          Less less = Less();
           // sort the new part
+          typename subcontainer_type::iterator middle = vec.begin() + prev_size;
           std::sort(middle, vec.end(), less);
 
           // merge with previous
@@ -2609,7 +2616,7 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
         if (vec.empty()) {
           vec.swap(input);
 
-          Less less;
+          Less less = Less();
           // sort the new part
           std::sort(vec.begin(), vec.end(), less);
 
@@ -2684,8 +2691,6 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
         if (this->size() == 0) return 0;
 
         size_t before = this->size();
-
-        bool erased = false;
 
         auto new_end = ::std::remove_if(vec.begin(), vec.end(), pred);
         vec.erase(new_end, vec.end());

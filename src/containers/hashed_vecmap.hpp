@@ -481,7 +481,8 @@ namespace fsc {  // fast standard container
         auto curr = temp.begin();
         auto prev = map.begin();
         // for each map entry, copy content over.  the range iterators in map are moved to temp
-        for (auto it = map.begin(), max = map.end(); it != max; ++it) {
+        auto max = map.end();
+        for (auto it = map.begin(); it != max; ++it) {
           // copy over the content
           it->second.second = std::copy(it->second.first, it->second.second, curr);
 
@@ -511,7 +512,7 @@ namespace fsc {  // fast standard container
             return;
           }
 
-        Less less;
+        Less less = Less();
 
         auto compacted_it = vec.begin();
         auto key = compacted_it->first;
@@ -521,7 +522,8 @@ namespace fsc {  // fast standard container
         size_t i = 0;
 
         // go through all elements in vec, copy to beginning,
-        for (auto it = vec.begin(), max = vec.end(); it != max; ++i) {
+        auto max = vec.end();
+        for (auto it = vec.begin(); it != max; ++i) {
           // get the current key
           key = it->first;
           // find the map entry
@@ -569,11 +571,12 @@ namespace fsc {  // fast standard container
         if (vec.size() == 0) return;
 
         map.reserve(vec.size());
-        Less less;
+        Less less = Less();
 
         auto first = vec.begin();
         auto key = first->first;
-        for (auto it = vec.begin(), max = vec.end(); it != max;) {
+        auto max = vec.end();
+        for (auto it = vec.begin(); it != max;) {
           first = it;
           key = first->first;
 
@@ -716,10 +719,11 @@ namespace fsc {  // fast standard container
 
           // copy it in.
           vec.reserve(prev_size + std::distance(first, last));
-          auto middle = vec.insert(vec.end(), first, last);
+          vec.insert(vec.end(), first, last);
 
-          Less less;
+          Less less = Less();
           // sort the new part
+          typename subcontainer_type::iterator middle = vec.begin() + prev_size;
           std::sort(middle, vec.end(), less);
 
           // merge with previous
@@ -737,7 +741,7 @@ namespace fsc {  // fast standard container
         if (vec.empty()) {
           vec.swap(input);
 
-          Less less;
+          Less less = Less();
           // sort the new part
           std::sort(vec.begin(), vec.end(), less);
 
@@ -812,8 +816,6 @@ namespace fsc {  // fast standard container
         if (this->size() == 0) return 0;
 
         size_t before = this->size();
-
-        bool erased = false;
 
         auto new_end = ::std::remove_if(vec.begin(), vec.end(), pred);
         vec.erase(new_end, vec.end());

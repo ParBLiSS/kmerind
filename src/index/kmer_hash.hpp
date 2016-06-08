@@ -209,7 +209,7 @@ namespace bliss {
         protected:
           unsigned int bits;
         public:
-          static const unsigned int default_init_value = KMER::nBits < 64U ? KMER::nBits : 64U;
+          static constexpr unsigned int default_init_value = (KMER::nBits < 64U) ? KMER::nBits : 64U;
 
           /// constructor
           identity(const unsigned int prefix_bits = default_init_value) : bits(prefix_bits) {
