@@ -146,7 +146,7 @@ before_script:
     - export SRC_DIR=`pwd`
     # compile sparsehash
     - cd ext/sparsehash
-    - ./configure
+    - ./configure CXXFLAGS=-std=c++11
     - make
     - cd $SRC_DIR
     # prepare build kmerind
