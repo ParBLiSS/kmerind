@@ -144,6 +144,11 @@ before_script:
     - $CXX --version
     - mpiexec --version
     - export SRC_DIR=`pwd`
+    # compile sparsehash
+    - cd ext/sparsehash
+    - ./configure
+    - make
+    - cd $SRC_DIR
     # prepare build kmerind
     - mkdir build
     - cd build
