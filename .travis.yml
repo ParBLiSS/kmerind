@@ -165,14 +165,14 @@ script:
     # run tests.
     - ./test/test-mpi-bliss-io-fastq_loader
     - make test 
-    - ./bin/testKmerIndex_read
-    - mpiexec -np 4 ./bin/testKmerIndex_read
-    - ./bin/testKmerIndex_read_fasta
-    - mpiexec -np 4 ./bin/testKmerIndex_read_fasta
+    # - ./bin/testKmerIndex_read
+    # - mpiexec -np 4 ./bin/testKmerIndex_read
+    # - ./bin/testKmerIndex_read_fasta
+    # - mpiexec -np 4 ./bin/testKmerIndex_read_fasta
     - ./bin/test_de_bruijn_graph_construction
     - mpiexec -np 4 ./bin/test_de_bruijn_graph_construction
-    - ./bin/testKmerIndex_ST2
-    - mpiexec -np 4 ./bin/testKmerIndex_ST2
+    # - ./bin/testKmerIndex_ST2
+    # - mpiexec -np 4 ./bin/testKmerIndex_ST2
 
 after_success:
   # only collect coverage if compiled with gcc
