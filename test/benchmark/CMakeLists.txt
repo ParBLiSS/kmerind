@@ -12,9 +12,6 @@ target_link_libraries(test_omp_patterns ${EXTRA_LIBS})
 
 endif(ENABLE_TESTING)
 
-if (BL_BENCHMARK)
-
-if (BL_KMER_BENCHMARK)
 # available params:
 
 
@@ -94,6 +91,12 @@ function(add_hashmap_target file prefix parser dna k store map index disttrans d
 
 
 endfunction(add_hashmap_target)
+
+
+if (BL_BENCHMARK)
+
+if (BL_KMER_BENCHMARK)
+
 
 #foreach(store SINGLE CANONICAL BIMOLECULE)
 #	add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
@@ -224,19 +227,19 @@ foreach(store BIMOLECULE SINGLE)
   target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-POS-dtIDEN-dhFARM-shFARM
    ${EXTRA_LIBS})
 
-  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
-  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-COUNT-dtXXXX-dhYYYY-shZZZZ
+  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-COUNT-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-COUNT-dtIDEN-dhFARM-shFARM
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=DENSEHASH -DpINDEX=COUNT -DpCompare")
-  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-COUNT-dtXXXX-dhYYYY-shZZZZ
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=DENSEHASH -DpINDEX=COUNT -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCompare")
+  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-DENSEHASH-COUNT-dtIDEN-dhFARM-shFARM
    ${EXTRA_LIBS})
 
 
-  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtIDEN-dhFARM-shFARM BenchmarkKmerIndex.cpp)
-  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtIDEN-dhFARM-shFARM
+  add_executable(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtXXXX-dhYYYY-shZZZZ
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=SORTED -DpINDEX=POS -DpDistTrans=IDEN -DpDistHash=FARM -DpStoreHash=FARM -DpCompare")
-  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtIDEN-dhFARM-shFARM
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=${store} -DpMAP=SORTED -DpINDEX=POS -DpCompare")
+  target_link_libraries(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-POS-dtXXXX-dhYYYY-shZZZZ
    ${EXTRA_LIBS})
 
   add_executable(testKmerIndex-COMPQ-a4-k31-${store}-SORTED-COUNT-dtXXXX-dhYYYY-shZZZZ BenchmarkKmerIndex.cpp)
@@ -251,9 +254,33 @@ endforeach(store)
 #==================
 endif(BL_KMER_BENCHMARK)
 
+
+# EXECUTABLES
+include_directories("${EXT_PROJECTS_DIR}/tommyds")
+add_executable(benchmark_hashtables BenchmarkHashTables.cpp)
+target_link_libraries(benchmark_hashtables ${EXTRA_LIBS})
+
+
 endif(BL_BENCHMARK)
 
 if (BUILD_TEST_APPLICATIONS)
+
+
+  add_executable(testKmerIndex-fastq BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-fastq
+     PROPERTIES COMPILE_FLAGS 
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=BIMOLECULE -DpMAP=DENSEHASH -DpINDEX=POSQUAL -DpDistTrans=IDEN -DpDistHash=MURMUR -DpStoreHash=FARM -DpCompare")
+  target_link_libraries(testKmerIndex-fastq
+   ${EXTRA_LIBS})
+
+  add_executable(testKmerIndex-fasta BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-fasta
+     PROPERTIES COMPILE_FLAGS 
+     "-DpPARSER=FASTA -DpDNA=5 -DpK=63 -DpKmerStore=CANONICAL -DpMAP=SORTED -DpINDEX=COUNT -DpCompare")
+  target_link_libraries(testKmerIndex-fasta
+   ${EXTRA_LIBS})
+
+
 
 add_executable(testFASTQ_load BenchmarkFileLoader.cpp)
 SET_TARGET_PROPERTIES(testFASTQ_load PROPERTIES COMPILE_FLAGS -DUSE_FASTQ_PARSER)
@@ -360,10 +387,9 @@ if (Boost_FOUND)
 	target_link_libraries(cust_alloc ${EXTRA_LIBS})
 endif(Boost_FOUND)
 
+
+
+
+
 endif(BUILD_TEST_APPLICATIONS)
 
-
-# EXECUTABLES
-include_directories("${EXT_PROJECTS_DIR}/tommyds")
-add_executable(benchmark_hashtables BenchmarkHashTables.cpp)
-target_link_libraries(benchmark_hashtables ${EXTRA_LIBS})
