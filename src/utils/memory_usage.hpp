@@ -45,6 +45,7 @@
 #include <string>
 #include <algorithm>  // std::min
 #include <sstream>
+#include <cmath>  // std::sqrt
 
 #include <io/io_exception.hpp>
 #include <mxx/reduction.hpp>
