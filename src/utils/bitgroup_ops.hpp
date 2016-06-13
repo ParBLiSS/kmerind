@@ -1417,8 +1417,10 @@ namespace bliss {
 
         __m256i v1 = (SHIFT < 128) ? _mm256_alignr_epi8(hi, val, 8) :  // shift by 8
         //  else shift > 128
-                   //_mm256_permute4x64_epi64(hi, 0xFD); // permute and shift hi right more.  3 3 3 1 -> 0xFD   latency = 3
-                   _mm256_alignr_epi8(hi, val, 24);    // latency of 1
+//                   _mm256_permute4x64_epi64(hi, 0xFD); // permute and shift hi right more.  3 3 3 1 -> 0xFD   latency = 3
+                   //_mm256_alignr_epi8(zero, hi, 8);    // latency of 1  this is correct, but for consistency, use below
+            _mm256_srli_si256(hi, 8);  // shift high to right by 8 bytes more, total 24 bytes.  latency 1.
+
     // if shift < 128, v1 is 0 A B C.  else v1 is 0 0 0 A
 
         constexpr uint8_t bit64_shift = SHIFT & 0x3F;        // shift within the 64 bit block
@@ -1530,8 +1532,9 @@ namespace bliss {
 
 		__m256i v1 = (SHIFT < 128) ? _mm256_alignr_epi8(val, lo, 8) :  // left shift val 8 bytes
 				//  else shift > 128
-//									 _mm256_permute4x64_epi64(lo, 0x80); // left shift lo 8 bytes.  2 0 0 0 -> 0x80 (3rd element move to 4th pos.  latency 3
-		    _mm256_alignr_epi8(val, lo, 24);   // latency 1
+		    //_mm256_permute4x64_epi64(lo, 0x80); // left shift lo 8 bytes.  2 0 0 0 -> 0x80 (3rd element move to 4th pos.  latency 3
+		    //_mm256_alignr_epi8(lo, zero, 8);   // left shift by 24 bytes.  combine lo and zero then shift by 8.  latency 1
+		    _mm256_slli_si256(lo, 8);  // left shift by 8 bytes within the lane to get effect of shift by 24 bytes total.  latency 1
 		// if shift < 128, v1 is B C D 0.  else v1 is D 0 0 0
 
         constexpr uint8_t bit64_shift = SHIFT & 0x3F;        // shift within the 64 bit block

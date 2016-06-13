@@ -213,7 +213,7 @@ class BitReverseTransformTest : public ::testing::Test {
     bool is_reverse(data_type (&in)[data_size], data_type (&out)[data_size])  {
       BitReverseTestHelper<BIT_GROUP_SIZE> helper;
 
-      // shift input left by padbits
+      // shift output left by padbits
       using SIMD = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(sizeof(data_type) * data_size), bliss::utils::bit_ops::BITREV_SWAR>;
 
       data_type tmp[data_size];
@@ -224,6 +224,20 @@ class BitReverseTransformTest : public ::testing::Test {
       data_type tmp2[data_size];
       memcpy(tmp2, in, sizeof(data_type) * data_size);
       tmp2[data_size - 1] &= (::std::numeric_limits<data_type>::max() >> pad_bits);
+
+//      std::cout << "tmp(in) (MSB to LSB): ";
+//      for (int64_t j = data_size - 1; j >= 0; --j) {
+//        std::cout << std::hex << std::setw(2 * sizeof(data_type)) << std::setfill('0') << static_cast<size_t>(tmp2[j]) << " ";
+//      }
+//      std::cout << std::endl;
+//
+//      std::cout << "tmp(out) (MSB to LSB): ";
+//      for (int64_t j = data_size - 1; j >= 0; --j) {
+//        std::cout << std::hex << std::setw(2 * sizeof(data_type)) << std::setfill('0') << static_cast<size_t>(tmp[j]) << " ";
+//
+//      }
+//      std::cout << std::endl;
+
 
       // then compare normally.
       return helper.is_reverse(reinterpret_cast<uint8_t const *>(tmp), reinterpret_cast<uint8_t const *>(tmp2), (sizeof(data_type) * data_size));
@@ -273,7 +287,7 @@ class BitReverseTransformTest : public ::testing::Test {
           }
           std::cout << std::endl;
 
-          printf("array size = %lu, sizeof(datatype) = %lu, bits = %u, SIMD = %u, k = %u\n", data_size, sizeof(data_type), BITS, MAX_SIMD_TYPE::SIMDVal, k);
+          printf("array size = %lu, sizeof(datatype) = %lu, bits = %u, pad_bits = %u, SIMD = %u, input_offset = %u\n", data_size, sizeof(data_type), BITS, pad_bits, MAX_SIMD_TYPE::SIMDVal, k);
         }
 
         ASSERT_TRUE(same);
