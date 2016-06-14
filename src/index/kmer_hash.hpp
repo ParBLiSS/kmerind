@@ -323,7 +323,7 @@ namespace bliss {
 					  (KM::nBits < (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
       		  static inline KMER generate() {
       			  KMER em(true); // create an empty one
-      			  em.getDataRef()[KM::nWords - 1] = ~(~(static_cast<typename KM::KmerWordType>(0)) >> 1);
+      			  em.getDataRef()[KM::nWords - 1] = static_cast<typename KM::KmerWordType>(~(::std::numeric_limits<typename KM::KmerWordType>::max() >> 1));
       			  return em;
       		  }
 
@@ -335,12 +335,12 @@ namespace bliss {
       		  static inline KMER generate() {
       			  KMER em; // create an empty one
       			  for (size_t i = 0; i < KM::nWords; ++i) {
-      				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
+      				  em.getDataRef()[i] = ::std::numeric_limits<typename KM::KmerWordType>::max();
       			  }
       			  return em;
       		  }
 
-      		  /// kmer empty key for DNA, full kmer.  111111111111110
+      		  /// kmer empty key for DNA16, full kmer.  111111111111110
       		  template <typename KM = KMER,
       				  typename std::enable_if<
 					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value &&
@@ -348,9 +348,9 @@ namespace bliss {
       		  static inline KMER generate() {
       			  KMER em; // create an empty one
       			  for (size_t i = 1; i < KM::nWords; ++i) {
-      				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
+      				  em.getDataRef()[i] = ::std::numeric_limits<typename KM::KmerWordType>::max();
       			  }
-      			  em.getDataRef()[0] = ~(static_cast<typename KM::KmerWordType>(0)) << 1;  // all 1s is its own complement and maps to N, so is a possible value
+      			  em.getDataRef()[0] = ::std::numeric_limits<typename KM::KmerWordType>::max() ^ 0x1;  // all 1s is its own complement and maps to N, so is a possible value
       			  return em;
       		  }
 
@@ -369,15 +369,15 @@ namespace bliss {
       			  return em;
       		  }
 
-      		  /// kmer empty key for DNA, unfull kmer 110000000
+      		  /// kmer empty key for DNA or DNA16, unfull kmer 110000000
       		  template <typename KM = KMER,
       				  typename std::enable_if<
 					  (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
 					  	::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value) &&
-					  (KM::nBits < (KM::nWords * sizeof(typename KM::KmerWordType) * 8)), int>::type = 0>
+					  ((KM::nWords * sizeof(typename KM::KmerWordType) * 8 - KM::nBits) > 1), int>::type = 0>
       		  static inline KMER generate() {
       			  KMER em(true); // create an empty one
-      			  em.getDataRef()[KM::nWords - 1] = ~(~(static_cast<typename KM::KmerWordType>(0)) >> 2);
+      			  em.getDataRef()[KM::nWords - 1] = static_cast<typename KM::KmerWordType>(~(::std::numeric_limits<typename KM::KmerWordType>::max() >> 2));
       			  return em;
       		  }
 
@@ -389,14 +389,14 @@ namespace bliss {
       		  static inline KMER generate() {
       			  KMER em; // create an empty one
       			  for (size_t i = 1; i < KM::nWords; ++i) {
-      				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
+      				  em.getDataRef()[i] = ::std::numeric_limits<typename KM::KmerWordType>::max();
       			  }
-      			 em.getDataRef()[0] = ~(static_cast<typename KM::KmerWordType>(0)) << 1;
+      			 em.getDataRef()[0] = ::std::numeric_limits<typename KM::KmerWordType>::max() ^ 0x1;
       			  return em;
       		  }
 
 
-      		  /// kmer empty key for DNA, full kmer.  111111111111100
+      		  /// kmer empty key for DNA16, full kmer.  111111111111100
       		  template <typename KM = KMER,
       				  typename std::enable_if<
 					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value &&
@@ -404,12 +404,11 @@ namespace bliss {
       		  static inline KMER generate() {
       			  KMER em; // create an empty one
       			  for (size_t i = 1; i < KM::nWords; ++i) {
-      				  em.getDataRef()[i] = ~(static_cast<typename KM::KmerWordType>(0));
+      				  em.getDataRef()[i] = ::std::numeric_limits<typename KM::KmerWordType>::max();
       			  }
-      			 em.getDataRef()[0] = ~(static_cast<typename KM::KmerWordType>(0)) << 2;
+      			 em.getDataRef()[0] = ::std::numeric_limits<typename KM::KmerWordType>::max() ^ 0x11;
       			  return em;
       		  }
-
 
       	  };
 
@@ -417,6 +416,98 @@ namespace bliss {
       	  // for less_greater, we can use the negation of these keys for DNA and DNA16, full kmer.
 
 
+
+      	  /// special equal_to just for sparsehash.  do not transform keys (MSB not 00) for partial DNA and DNA16 kmers
+      	  template <typename Kmer, template <typename> class Transform, bool forLower>
+      	  struct transformed_equal_to {
+      	      std::equal_to<Kmer> comp;
+      	      Transform<Kmer> trans;
+
+      	      // 110000000
+      	      static constexpr typename Kmer::KmerWordType highmask =
+      	          static_cast<typename Kmer::KmerWordType>(~(::std::numeric_limits<typename Kmer::KmerWordType>::max() >> 2));
+
+      	      TransformedComparator(Comparator<Kmer> const & _cmp = Comparator<Kmer>(),
+      	          Transform<Kmer> const &_trans = Transform<Kmer>()) : comp(_cmp), trans(_trans) {};
+
+      	      // TODO: short circuit more ...
+
+      	      /// single or canonical (no transform), then compare raw values.  all k-mers are compared.
+      	      template <typename KM = Kmer,
+      	          typename std::enable_if<::std::is_same<Transform<KM>, ::bliss::kmer::transform::identity<KM> >::value, int>::type = 0>
+      	      inline bool operator()(Kmer const & x, Kmer const & y) const {
+      	        return comp(x, y);
+      	      }
+
+      	      /// DNA or DNA16, partial k-mer (using unused bits), bimolecule (not identity transform).  keys are outside of input k-mer space
+      	      template <typename KM = Kmer,
+                  typename std::enable_if<
+                  (!::std::is_same<Transform<Kmer>, ::bliss::kmer::transform::identity<Kmer> >::value) &&
+                      (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
+                      ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value) &&
+                       ((KM::nWords * sizeof(typename KM::KmerWordType) * 8 - KM::nBits) > 1), int>::type = 0>
+      	      inline bool operator()(Kmer const & x, Kmer const & y) const {
+      	        typename KM::KmerWordType x_key_bits = (x.getData()[KM::nWords - 1] & highmask);
+      	        typename KM::KmerWordType y_key_bits = (y.getData()[KM::nWords - 1] & highmask);
+      	        return (x_key_bits != y_key_bits) ?
+      	            false :   // one key, one value.
+      	            (x_key_bits > 0) ? comp(x, y) :   // compare keys
+      	                comp(trans(x), trans(y));     // compare values
+      	      }
+
+              /// comparator for DNA6, bimolecule (not identity transform).  keys are outside of input k-mer space
+              template <typename KM = Kmer,
+                  typename std::enable_if<
+                  (!::std::is_same<Transform<Kmer>, ::bliss::kmer::transform::identity<Kmer> >::value) &&
+                  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA6>::value, int>::type = 0>
+              inline bool operator()(Kmer const & x, Kmer const & y) const {
+                typename KM::KmerWordType x_key_bits = (x.getData()[0] & 0x111);
+                typename KM::KmerWordType y_key_bits = (y.getData()[0] & 0x111);
+                bool x_is_key = (x_key_bits == 0x101) || (x_key_bits == 0x010);
+                bool y_is_key = (y_key_bits == 0x101) || (y_key_bits == 0x010);
+                return (x_is_key != y_is_key) ? false :   // one key, one value
+                  x_is_key ? comp(x, y) : comp(trans(x), trans(y));
+              }
+
+
+      	      /// comparator for full DNA/DNA16 k-mers.  keys are inside input k-mer space.  compare explitictly.
+              template <typename KM = Kmer,
+                  typename std::enable_if<
+                  (!::std::is_same<Transform<Kmer>, ::bliss::kmer::transform::identity<Kmer> >::value) &&
+                      (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
+                      ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value) &&
+                       ((KM::nWords * sizeof(typename KM::KmerWordType) * 8 - KM::nBits) <= 1), int>::type = 0>
+              inline bool operator()(Kmer const & x, Kmer const & y) const {
+
+                return comp(trans(x), trans(y));
+              }
+
+
+      	      template<typename V>
+      	      inline bool operator()(::std::pair<Kmer, V> const & x, Kmer const & y) const {
+      	        return this->operator()(x.first, y);
+      	      }
+      	      template<typename V>
+      	      inline bool operator()(::std::pair<const Kmer, V> const & x, Kmer const & y) const {
+      	        return this->operator()(x.first, y);
+      	      }
+      	      template<typename V>
+      	      inline bool operator()(Kmer const & x, ::std::pair<Kmer, V> const & y) const {
+      	        return this->operator()(x, y.first);
+      	      }
+      	      template<typename V>
+      	      inline bool operator()(Kmer const & x, ::std::pair<const Kmer, V> const & y) const {
+      	        return this->operator()(x, y.first);
+      	      }
+      	      template<typename V>
+      	      inline bool operator()(::std::pair<Kmer, V> const & x, ::std::pair<Kmer, V> const & y) const {
+      	        return this->operator()(x.first, y.first);
+      	      }
+      	      template<typename V>
+      	      inline bool operator()(::std::pair<const Kmer, V> const & x, ::std::pair<const Kmer, V> const & y) const {
+      	        return this->operator()(x.first, y.first);
+      	      }
+      	  };
 
 
 

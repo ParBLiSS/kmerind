@@ -688,6 +688,7 @@ namespace bliss
      */
     KMER_INLINE bool operator==(const Kmer& rhs) const
     {
+      // MUST COMPARE ALL BITS, INCLUDING UNUSED
     	return ::bliss::utils::bit_ops::equal<WORD_TYPE, nWords>(data, rhs.data);
     }
 

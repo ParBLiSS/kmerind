@@ -41,6 +41,19 @@ namespace fsc {
   };
 
 
+  // identity transform
+  template <typename Key>
+  struct identity {
+      inline Key operator()(Key const & x) const {
+        return x;
+      }
+      template <typename VAL>
+      inline ::std::pair<Key, VAL> operator()(std::pair<Key, VAL> & x) const {
+        return x;
+      }
+  };
+
+
 //template <typename T>
 //struct IdentityTransform {
 //    inline T operator()(T const& v) const {return v;};
@@ -53,7 +66,7 @@ namespace fsc {
       Transform<Key> trans;
 
       TransformedHash(Hash<Key> const & _hash = Hash<Key>(),
-    		  Transform<Key> const _trans = Transform<Key>()) : h(_hash), trans(_trans) {};
+    		  Transform<Key> const &_trans = Transform<Key>()) : h(_hash), trans(_trans) {};
 
       inline uint64_t operator()(Key const& k) const {
         return h(trans(k));
@@ -69,26 +82,27 @@ namespace fsc {
   };
 
 
-//  template <typename Key, template <typename> class Hash>
-//  struct TransformedHash<Key, Hash, IdentityTransform> {
-//      Hash<Key> h;
-//
-//      TransformedHash(Hash<Key> const & _hash = Hash<Key>(),
-//    		  IdentityTransform<Key> const &_trans = IdentityTransform<Key>()) : h(_hash) {};
-//
-//      inline uint64_t operator()(Key const& k) const {
-//        return h(k);
-//      }
-//      template<typename V>
-//      inline uint64_t operator()(::std::pair<Key, V> const& x) const {
-//        return this->operator()(x.first);
-//      }
-//      template<typename V>
-//      inline uint64_t operator()(::std::pair<const Key, V> const& x) const {
-//        return this->operator()(x.first);
-//      }
-//  };
-//
+  template <typename Key, template <typename> class Predicate, template <typename> class Transform>
+  struct TransformedPredicate {
+      Predicate<Key> p;
+      Transform<Key> trans;
+
+      TransformedPredicate(Predicate<Key> const & _pred = Predicate<Key>(),
+    		  Transform<Key> const &_trans = Transform<Key>()) : p(_pred), trans(_trans) {};
+
+      inline bool operator()(Key const& k) const {
+        return p(trans(k));
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const& x) const {
+        return this->operator()(x.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const& x) const {
+        return this->operator()(x.first);
+      }
+  };
+
 
   template <typename Key, template <typename> class Comparator, template <typename> class Transform>
   struct TransformedComparator {
@@ -126,51 +140,6 @@ namespace fsc {
         return this->operator()(x.first, y.first);
       }
   };
-
-//  template <typename Key, template <typename> class Comparator>
-//  struct TransformedComparator<Key, Comparator, IdentityTransform> {
-//      Comparator<Key> comp;
-//
-//      TransformedComparator(Comparator<Key> const & cmp = Comparator<Key>(),
-//    		  IdentityTransform<Key> const &_trans = IdentityTransform<Key>()) : comp(cmp) {};
-//
-//      inline bool operator()(Key const & x, Key const & y) const {
-//        return comp(x, y);
-//      }
-//      template<typename V>
-//      inline bool operator()(::std::pair<Key, V> const & x, Key const & y) const {
-//        return this->operator()(x.first, y);
-//      }
-//      template<typename V>
-//      inline bool operator()(::std::pair<const Key, V> const & x, Key const & y) const {
-//        return this->operator()(x.first, y);
-//      }
-//      template<typename V>
-//      inline bool operator()(Key const & x, ::std::pair<Key, V> const & y) const {
-//        return this->operator()(x, y.first);
-//      }
-//      template<typename V>
-//      inline bool operator()(Key const & x, ::std::pair<const Key, V> const & y) const {
-//        return this->operator()(x, y.first);
-//      }
-//      template<typename V>
-//      inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) const {
-//        return this->operator()(x.first, y.first);
-//      }
-//      template<typename V>
-//      inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) const {
-//        return this->operator()(x.first, y.first);
-//      }
-//  };
-
-
-//  template <typename Key, typename Less = ::std::less<Key> >
-//  struct Greater {
-//      Less lt;
-//      inline bool operator()(Key const &x, Key const &y) const {
-//        return lt(y, x);
-//      }
-//  };
 
 
 
