@@ -50,6 +50,9 @@ namespace fsc {  // fast standard container
 
 namespace sparsehash {
 
+	// ==========
+	// sparsehash specific functors, not specific to key type.
+
   template <typename Key, template <typename> class Comparator, template <typename> class Transform>
   struct threshold {
 
@@ -68,7 +71,7 @@ namespace sparsehash {
     };
 
 
-  /// special equal_to operator with knowledge of the deleted and empty keys.
+  /// special comparison operator with knowledge of the deleted and empty keys.
   template <typename Key, template <typename> class Comparator, template <typename> class Transform>
   struct compare {
       Comparator<Key> comp;
@@ -77,19 +80,24 @@ namespace sparsehash {
       mutable Key empty;
       mutable Key deleted;
 
-      compare(Key const & em, Key const & del) : empty(em), deleted(del) {
-      }
-      compare(compare && other) : empty(other.empty), deleted(other.deleted) {
-      }
-      compare & operator=(compare && other) {
+      //====  since dense hash table makes copies of equal operators left and right
+      // we need these constructors and assignment operators.
+      // also, note that there is no default constructor since the keys need to be set.
+
+      compare() = delete;
+
+      compare(Key const & em, Key const & del) : empty(em), deleted(del) {}
+
+      compare(compare  const & other) : empty(other.empty), deleted(other.deleted) {}
+      compare(compare && other) : empty(other.empty), deleted(other.deleted) {}
+
+      compare & operator=(compare  const & other) {
     		  empty = other.empty;
     		  deleted = other.deleted;
 
     		  return *this;
       }
-      compare(compare  const & other) : empty(other.empty), deleted(other.deleted) {
-      }
-      compare & operator=(compare  const & other) {
+      compare & operator=(compare && other) {
     		  empty = other.empty;
     		  deleted = other.deleted;
 
@@ -98,22 +106,12 @@ namespace sparsehash {
 
 
       inline bool is_key(Key const & x) const {
-        return comp(x, empty) || comp(x, deleted);
+        return (x == empty) || (x == deleted);  // not using comp because it may not be equal comparator.
       }
 
+      /// comparison.  if key, don't transform them
       inline bool operator()(Key const & x, Key const & y) const {
-        bool x_is_key = is_key(x);
-        bool y_is_key = is_key(y);
-
-//        std::cout << " x " << x << std::endl;
-//        std::cout << " y " << y << std::endl;
-//        std::cout << " empty " << empty << std::endl;
-//        std::cout << " deleted " << deleted << std::endl;
-//        std::cout << " x is empty ? " <<  ((x == empty) ? "y" : "n")  << " x is deleted ? " <<  (comp(x, deleted) ? "y" : "n") << std::endl;
-//        std::cout << " y is empty ? " <<  (comp(y, empty) ? "y" : "n")  << " y is deleted ? " <<  (comp(y, deleted) ? "y" : "n") << std::endl;
-//        std::cout << " x y same ? " <<  (comp(x, y) ? "y" : "n")  << " trans x y same ? " <<  (comp(trans(x), trans(y)) ? "y" : "n") << std::endl;
-
-        return (x_is_key != y_is_key) ? false : (x_is_key) ? comp(x, y) : comp(trans(x), trans(y));
+        return comp((is_key(x) ? x : trans(x)), (is_key(y) ? y : trans(y)));
       }
 
       template<typename V>
@@ -141,6 +139,198 @@ namespace sparsehash {
         return this->operator()(x.first, y.first);
       }
   };
+
+  /// special comparison operator for sparsehash.  specialized for equal_to operator..
+  template <typename Key, template <typename> class Transform>
+  struct compare<Key, ::std::equal_to, Transform> {
+      Transform<Key> trans;
+
+      mutable Key empty;
+      mutable Key deleted;
+
+      //====  since dense hash table makes copies of equal operators left and right
+      // we need these constructors and assignment operators.
+      // also, note that there is no default constructor since the keys need to be set.
+
+      compare() = delete;
+
+      compare(Key const & em, Key const & del) : empty(em), deleted(del) {}
+
+      compare(compare  const & other) : empty(other.empty), deleted(other.deleted) {}
+      compare(compare && other) : empty(other.empty), deleted(other.deleted) {}
+
+      compare & operator=(compare  const & other) {
+    		  empty = other.empty;
+    		  deleted = other.deleted;
+
+    		  return *this;
+      }
+      compare & operator=(compare && other) {
+    		  empty = other.empty;
+    		  deleted = other.deleted;
+
+    		  return *this;
+      }
+
+
+      inline bool is_key(Key const & x) const {
+        return (x == empty) || (x == deleted);  // not using comp because it may not be equal comparator.
+      }
+
+      /// comparison operator.  if key, don't transform them.  also shortcuts some cases
+      inline bool operator()(Key const & x, Key const & y) const {
+        bool x_is_key = is_key(x);
+        bool y_is_key = is_key(y);
+
+//        std::cout << " x " << x << std::endl;
+//        std::cout << " y " << y << std::endl;
+//        std::cout << " empty " << empty << std::endl;
+//        std::cout << " deleted " << deleted << std::endl;
+//        std::cout << " x is empty ? " <<  ((x == empty) ? "y" : "n")  << " x is deleted ? " <<  (comp(x, deleted) ? "y" : "n") << std::endl;
+//        std::cout << " y is empty ? " <<  (comp(y, empty) ? "y" : "n")  << " y is deleted ? " <<  (comp(y, deleted) ? "y" : "n") << std::endl;
+//        std::cout << " x y same ? " <<  (comp(x, y) ? "y" : "n")  << " trans x y same ? " <<  (comp(trans(x), trans(y)) ? "y" : "n") << std::endl;
+
+        return (x_is_key != y_is_key) ? false : (x_is_key) ? (x == y) : (trans(x) == trans(y));
+      }
+
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const & x, Key const & y) const {
+        return this->operator()(x.first, y);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const & x, Key const & y) const {
+        return this->operator()(x.first, y);
+      }
+      template<typename V>
+      inline bool operator()(Key const & x, ::std::pair<Key, V> const & y) const {
+        return this->operator()(x, y.first);
+      }
+      template<typename V>
+      inline bool operator()(Key const & x, ::std::pair<const Key, V> const & y) const {
+        return this->operator()(x, y.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) const {
+        return this->operator()(x.first, y.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) const {
+        return this->operator()(x.first, y.first);
+      }
+  };
+
+
+  /// specialized sparsehash comparator for when there is no transform.
+  template <typename Key, template <typename> class Comparator>
+  struct compare<Key, Comparator, fsc::identity> {
+      Comparator<Key> comp;
+
+      // keys are not transformed.  so no need to treat them specially, and no need to store them.
+
+      //====  since dense hash table makes copies of equal operators left and right
+      // we need these constructors and assignment operators.
+      // also, note that there is no default constructor since the keys need to be set.
+
+      compare() = delete;
+
+      compare(Key const & em, Key const & del) {}
+
+      compare(compare  const & other)  {}
+      compare(compare && other)  {}
+
+      compare & operator=(compare  const & other) {
+    		  return *this;
+      }
+      compare & operator=(compare && other) {
+    		  return *this;
+      }
+
+      inline bool operator()(Key const & x, Key const & y) const {
+        return comp(x, y);
+      }
+
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const & x, Key const & y) const {
+        return this->operator()(x.first, y);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const & x, Key const & y) const {
+        return this->operator()(x.first, y);
+      }
+      template<typename V>
+      inline bool operator()(Key const & x, ::std::pair<Key, V> const & y) const {
+        return this->operator()(x, y.first);
+      }
+      template<typename V>
+      inline bool operator()(Key const & x, ::std::pair<const Key, V> const & y) const {
+        return this->operator()(x, y.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) const {
+        return this->operator()(x.first, y.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) const {
+        return this->operator()(x.first, y.first);
+      }
+  };
+
+  /// special comparison operator for sparsehash.  specialized for equal_to operator AND identity transform, here so that template is not ambiguous for previous 2 definitions.
+  template <typename Key>
+  struct compare<Key, ::std::equal_to, ::fsc::identity> {
+
+      //====  since dense hash table makes copies of equal operators left and right
+      // we need these constructors and assignment operators.
+      // also, note that there is no default constructor since the keys need to be set.
+
+      compare() = delete;
+
+      compare(Key const & em, Key const & del) {}
+
+      compare(compare  const & other) {}
+      compare(compare && other)  {}
+
+      compare & operator=(compare  const & other) {
+    		  return *this;
+      }
+      compare & operator=(compare && other) {
+    		  return *this;
+      }
+
+
+      /// comparison operator.  if key, don't transform them.  also shortcuts some cases
+      inline bool operator()(Key const & x, Key const & y) const {
+        return (x == y);
+      }
+
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const & x, Key const & y) const {
+        return this->operator()(x.first, y);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const & x, Key const & y) const {
+        return this->operator()(x.first, y);
+      }
+      template<typename V>
+      inline bool operator()(Key const & x, ::std::pair<Key, V> const & y) const {
+        return this->operator()(x, y.first);
+      }
+      template<typename V>
+      inline bool operator()(Key const & x, ::std::pair<const Key, V> const & y) const {
+        return this->operator()(x, y.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<Key, V> const & x, ::std::pair<Key, V> const & y) const {
+        return this->operator()(x.first, y.first);
+      }
+      template<typename V>
+      inline bool operator()(::std::pair<const Key, V> const & x, ::std::pair<const Key, V> const & y) const {
+        return this->operator()(x.first, y.first);
+      }
+  };
+
+
+
 }
 
 
@@ -1491,8 +1681,8 @@ class densehash_multimap<Key, T, false, Transform, Hash, Equal, Allocator> {
 protected:
     void reserve_keys(Key const & empty_key, Key const & deleted_key) {
 
-    	std::cout << "empty: " << empty_key << " deleted " << deleted_key << std::endl;
-    	std::cout << "empty: " << map.key_eq().empty << " deleted " << map.key_eq().deleted << std::endl;
+//    	std::cout << "empty: " << empty_key << " deleted " << deleted_key << std::endl;
+//    	std::cout << "empty: " << map.key_eq().empty << " deleted " << map.key_eq().deleted << std::endl;
 
         map.set_empty_key(empty_key);
         map.set_deleted_key(deleted_key);

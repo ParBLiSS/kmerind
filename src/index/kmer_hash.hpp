@@ -293,6 +293,11 @@ namespace bliss {
 
 
       namespace sparsehash {
+      	  //  ===============
+      	  //  Sparse hash specific, kmer related stuff
+
+
+
       	  // sparsehash empty keys and delete keys.  these are kmers that NEVER appears in input data.
       	  // NOTE:  single strand and bimolecule have kmers that can be on either strand.  canonical has a more restricted set.
       	  // so for DNA and DNA16, full k-mer (no padding bits), use a key that's compatible with canonical.
