@@ -45,7 +45,7 @@ class HashedVecMapTest : public ::testing::Test
     ::std::unordered_multimap<T, T> gold;
     ::fsc::hashed_vecmap<T, T> test;
 
-    size_t iters = 10000;
+    size_t iters = 100000;
 
     virtual void SetUp()
     { // generate some inputs

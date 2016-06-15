@@ -131,9 +131,9 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-    template <typename, typename, typename, typename, typename...> class Container,
+    template <typename, typename, bool, template <typename> class, typename, typename...> class Container,
     template <typename> class MapParams,
-    typename LowerKeySpaceSelector = ::fsc::TruePredicate,
+    bool split = false,
     class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class densehash_map_base :
@@ -199,11 +199,14 @@ namespace dsc  // distributed std container
 
       };
 
+      template <K>
+      using StoreTrans = typename MapParams<Key>::template StoreTrans<K>;
 
 
     public:
       using local_container_type = Container<Key, T,
-          LowerKeySpaceSelector,
+          split,
+          StoreTrans,
     		  typename Base::StoreTransformedFunc,
     		  typename Base::StoreTransformedEqual,
     		  Alloc>;

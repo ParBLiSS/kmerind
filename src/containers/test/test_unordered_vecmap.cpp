@@ -38,7 +38,7 @@ class UnorderedCompactVecMapTest : public ::testing::Test
     ::std::unordered_multimap<T, T> gold;
     ::fsc::unordered_compact_vecmap<T, T> test;
 
-    size_t iters = 10000;
+    size_t iters = 100000;
 
     virtual void SetUp()
     { // generate some inputs
@@ -332,7 +332,7 @@ class UnorderedVecMapTest : public ::testing::Test
     ::std::unordered_multimap<T, T> gold;
     ::fsc::unordered_vecmap<T, T> test;
 
-    size_t iters = 10000;
+    size_t iters = 100000;
 
     virtual void SetUp()
     { // generate some inputs

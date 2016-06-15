@@ -48,7 +48,7 @@ namespace fsc {
         return x;
       }
       template <typename VAL>
-      inline ::std::pair<Key, VAL> operator()(std::pair<Key, VAL> & x) const {
+      inline ::std::pair<Key, VAL> operator()(std::pair<Key, VAL> const & x) const {
         return x;
       }
   };

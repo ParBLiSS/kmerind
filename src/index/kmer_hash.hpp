@@ -412,6 +412,50 @@ namespace bliss {
 
       	  };
 
+      	  template <typename KMER>
+      	  struct split_key {
+
+      		  /// kmer empty key for DNA5  11111111111111111111
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA5>::value, int>::type = 0>
+      		  static inline KMER generate() {
+      			  KMER em; // create an empty one
+      			  for (size_t i = 0; i < KM::nWords; ++i) {
+      				  em.getDataRef()[i] = ::std::numeric_limits<typename KM::KmerWordType>::max();
+      			  }
+      			  return em;
+      		  }
+
+      		  /// kmer empty key for DNA or DNA16, unfull kmer 11111111111111111
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
+					  	::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value) &&
+					  ((KM::nWords * sizeof(typename KM::KmerWordType) * 8 - KM::nBits) > 1), int>::type = 0>
+      		  static inline KMER generate() {
+      			  KMER em; // create an empty one
+      			  for (size_t i = 0; i < KM::nWords; ++i) {
+      				  em.getDataRef()[i] = ::std::numeric_limits<typename KM::KmerWordType>::max();
+      			  }
+      			  return em;
+      		  }
+
+      		  /// kmer empty key for DNA, full kmer.  10000000000000
+      		  template <typename KM = KMER,
+      				  typename std::enable_if<
+					  (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
+						::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value)  &&
+					  ((KM::nWords * sizeof(typename KM::KmerWordType) * 8 - KM::nBits) <= 1), int>::type = 0>
+      		  static inline KMER generate() {
+      			  KMER em(true); // create an empty one
+      			  em.getDataRef()[KM::nWords - 1] = static_cast<typename KM::KmerWordType>(~(::std::numeric_limits<typename KM::KmerWordType>::max() >> 1));
+      			  return em;
+      		  }
+
+      	  };
+
+
       	  // this covers the Canonical case when kmer is full and DNA is 2bit or 4 bit, which allows lex_less
       	  // for less_greater, we can use the negation of these keys for DNA and DNA16, full kmer.
 
@@ -427,7 +471,7 @@ namespace bliss {
       	      static constexpr typename Kmer::KmerWordType highmask =
       	          static_cast<typename Kmer::KmerWordType>(~(::std::numeric_limits<typename Kmer::KmerWordType>::max() >> 2));
 
-      	      TransformedComparator(Comparator<Kmer> const & _cmp = Comparator<Kmer>(),
+      	      transformed_equal_to(std::equal_to<Kmer> const & _cmp = std::equal_to<Kmer>(),
       	          Transform<Kmer> const &_trans = Transform<Kmer>()) : comp(_cmp), trans(_trans) {};
 
       	      // TODO: short circuit more ...
