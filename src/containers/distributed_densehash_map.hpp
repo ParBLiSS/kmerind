@@ -70,10 +70,6 @@
 
 namespace dsc  // distributed std container
 {
-
-  struct PartialKeySpace {};
-  struct FullKeySpace {};
-
 	// =================
 	// NOTE: when using this, need to further alias so that only Key param remains.
 	// =================
@@ -199,17 +195,19 @@ namespace dsc  // distributed std container
 
       };
 
-      template <K>
-      using StoreTrans = typename MapParams<Key>::template StoreTrans<K>;
+      template <typename K>
+      using StoreTrans = typename MapParams<Key>::template StorageTransform<K>;
+      template <typename K>
+      using StoreEqual = typename MapParams<Key>::template StorageEqual<K>;
 
 
     public:
       using local_container_type = Container<Key, T,
           split,
           StoreTrans,
-    		  typename Base::StoreTransformedFunc,
-    		  typename Base::StoreTransformedEqual,
-    		  Alloc>;
+		  typename Base::StoreTransformedFunc,
+		  ::fsc::sparsehash::compare<Key, StoreEqual, StoreTrans>,
+		  Alloc>;
 
       // std::densehash_multimap public members.
       using key_type              = typename local_container_type::key_type;
@@ -277,7 +275,7 @@ namespace dsc  // distributed std container
 
           if (c.size() != before) local_changed = true;
 
-          BL_BENCH_REPORT_MPI_NAMED(local_insert, "base_hashmap:local_insert", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(local_insert, "base_densehash:local_insert", this->comm);
 
           //          c.insert(first, last);  // mem usage?
           return c.size() - before;
@@ -405,7 +403,7 @@ namespace dsc  // distributed std container
 
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_a2a", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash:find_a2a", this->comm);
 
           return results;
 
@@ -594,7 +592,7 @@ namespace dsc  // distributed std container
             BL_BENCH_END(find, "local_find", results.size());
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_overlap", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash:find_overlap", this->comm);
 
           return results;
 
@@ -710,7 +708,7 @@ namespace dsc  // distributed std container
 
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash:find", this->comm);
 
           return results;
 
@@ -889,7 +887,7 @@ namespace dsc  // distributed std container
             BL_BENCH_END(find, "local_find", results.size());
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_sendrecv", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash:find_sendrecv", this->comm);
 
           return results;
 
@@ -1100,7 +1098,7 @@ namespace dsc  // distributed std container
 //            BL_BENCH_END(find, "local_find", results.size());
 //          }
 //
-//          BL_BENCH_REPORT_MPI_NAMED(find, "base_hashmap:find_isend", this->comm);
+//          BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash:find_isend", this->comm);
 //
 //          return results;
 //
@@ -1136,9 +1134,23 @@ namespace dsc  // distributed std container
           return results;
       }
 
-      densehash_map_base(const mxx::comm& _comm) :  Base(_comm),
-                             key_to_rank(_comm.size()),
-                             local_changed(false) {}
+
+      template <bool s = split, typename ::std::enable_if<s, int>::type = 0>
+      densehash_map_base(Key const & empty, Key const & deleted, const mxx::comm& _comm,
+    		  Key const & upper_empty, Key const & upper_deleted,
+			  Key const & split_key) :
+			  Base(_comm), key_to_rank(_comm.size()),
+			  c(empty, deleted, upper_empty, upper_deleted, split_key),
+              local_changed(false) {}
+
+      template <bool s = split, typename ::std::enable_if<!s, int>::type = 0>
+      densehash_map_base(Key const & empty, Key const & deleted, const mxx::comm& _comm,
+    		  Key const & upper_empty = Key(), Key const & upper_deleted = Key(),
+			  Key const & split_key = Key()) :
+		  Base(_comm), key_to_rank(_comm.size()),
+		  c(empty, deleted),
+		  local_changed(false) {}
+
 
       // ================ local overrides
 
@@ -1157,14 +1169,6 @@ namespace dsc  // distributed std container
     public:
 
       virtual ~densehash_map_base() {};
-
-      void reserve_keys(Key const & empty_key, Key const & deleted_key) {
-    	  c.reserve_keys(empty_key, deleted_key);
-      }
-
-      void reserve_upper_keys(Key const & empty_key, Key const & deleted_key, const LowerKeySpaceSelector & _splitter = LowerKeySpaceSelector()) {
-    	  c.reserve_upper_keys(empty_key, deleted_key, _splitter);
-      }
 
 
       /// returns the local storage.  please use sparingly.
@@ -1287,7 +1291,7 @@ namespace dsc  // distributed std container
             BL_BENCH_END(count, "local_count", results.size());
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(count, "base_hashmap:count", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(count, "base_densehash:count", this->comm);
 
           return results;
 
@@ -1369,7 +1373,7 @@ namespace dsc  // distributed std container
             this->c.erase(keys.begin(), keys.end());
           }
 
-          BL_BENCH_REPORT_MPI_NAMED(erase, "base_hashmap:erase", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(erase, "base_densehash:erase", this->comm);
 
           if (before != this->c.size()) local_changed = true;
 
@@ -1451,12 +1455,12 @@ namespace dsc  // distributed std container
    */
   template<typename Key, typename T,
   	  template <typename> class MapParams,
-      typename LowerKeySpaceSelector = ::fsc::TruePredicate,
-  class Alloc = ::std::allocator< ::std::pair<const Key, T> >
+      bool split = false,
+	  class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class densehash_map : public densehash_map_base<Key, T, ::fsc::densehash_map, MapParams, LowerKeySpaceSelector, Alloc> {
+  class densehash_map : public densehash_map_base<Key, T, ::fsc::densehash_map, MapParams, split, Alloc> {
     protected:
-      using Base = densehash_map_base<Key, T, ::fsc::densehash_map, MapParams, LowerKeySpaceSelector, Alloc>;
+      using Base = densehash_map_base<Key, T, ::fsc::densehash_map, MapParams, split, Alloc>;
 
 
     public:
@@ -1522,7 +1526,18 @@ namespace dsc  // distributed std container
     public:
 
 
-      densehash_map(const mxx::comm& _comm) : Base(_comm) {};
+      template <bool s = split, typename ::std::enable_if<s, int>::type = 0>
+      densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
+    		  Key const & upper_empty, Key const & upper_deleted,
+			  Key const & split_key) :
+			  Base(empty, deleted, _comm, upper_empty, upper_deleted, split_key) {}
+
+      template <bool s = split, typename ::std::enable_if<!s, int>::type = 0>
+      densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
+    		  Key const & upper_empty = Key(), Key const & upper_deleted = Key(),
+			  Key const & split_key = Key()) :
+	  	  Base(empty, deleted, _comm) {}
+
 
 
       virtual ~densehash_map() {};
@@ -1639,12 +1654,12 @@ namespace dsc  // distributed std container
    */
   template<typename Key, typename T,
   template <typename> class MapParams,
-  typename LowerKeySpaceSelector = ::fsc::TruePredicate,
+  bool split = false,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class densehash_multimap : public densehash_map_base<Key, T, ::fsc::densehash_multimap, MapParams, LowerKeySpaceSelector, Alloc> {
+  class densehash_multimap : public densehash_map_base<Key, T, ::fsc::densehash_multimap, MapParams, split, Alloc> {
     protected:
-      using Base = densehash_map_base<Key, T, ::fsc::densehash_multimap, MapParams, LowerKeySpaceSelector, Alloc>;
+      using Base = densehash_map_base<Key, T, ::fsc::densehash_multimap, MapParams, split, Alloc>;
 
 
     public:
@@ -1711,7 +1726,19 @@ namespace dsc  // distributed std container
     public:
 
 
-      densehash_multimap(const mxx::comm& _comm) : Base(_comm), local_unique_count(0) {}
+      template <bool s = split, typename ::std::enable_if<s, int>::type = 0>
+      densehash_multimap(Key const & empty, Key const & deleted, const mxx::comm& _comm,
+    		  Key const & upper_empty, Key const & upper_deleted,
+			  Key const & split_key) :
+			  Base(empty, deleted, _comm, upper_empty, upper_deleted, split_key),
+			  local_unique_count(0) {}
+
+      template <bool s = split, typename ::std::enable_if<!s, int>::type = 0>
+      densehash_multimap(Key const & empty, Key const & deleted, const mxx::comm& _comm,
+    		  Key const & upper_empty = Key(), Key const & upper_deleted = Key(),
+			  Key const & split_key = Key()) :
+	  	  Base(empty, deleted, _comm), local_unique_count(0) {}
+
 
 
       virtual ~densehash_multimap() {}
@@ -1926,15 +1953,15 @@ namespace dsc  // distributed std container
    */
   template<typename Key, typename T,
   template <typename> class MapParams,
-  typename LowerKeySpaceSelector = ::fsc::TruePredicate,
+  bool split = false,
   typename Reduc = ::std::plus<T>,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class reduction_densehash_map : public densehash_map<Key, T, MapParams, LowerKeySpaceSelector, Alloc> {
+  class reduction_densehash_map : public densehash_map<Key, T, MapParams, split, Alloc> {
       static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     protected:
-      using Base = densehash_map<Key, T, MapParams, LowerKeySpaceSelector, Alloc>;
+      using Base = densehash_map<Key, T, MapParams, split, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -2040,13 +2067,23 @@ namespace dsc  // distributed std container
 
         //local_container_type().swap(temp);   // doing the swap to clear helps?
 
-        BL_BENCH_REPORT_MPI_NAMED(reduce_tuple, "reduction_hashmap:local_reduce", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(reduce_tuple, "reduction_densehash:local_reduce", this->comm);
       }
 
 
     public:
 
-      reduction_densehash_map( const mxx::comm& _comm) : Base(_comm) {}
+      template <bool s = split, typename ::std::enable_if<s, int>::type = 0>
+      reduction_densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
+    		  Key const & upper_empty, Key const & upper_deleted,
+			  Key const & split_key) :
+			  Base(empty, deleted, _comm, upper_empty, upper_deleted, split_key) {}
+
+      template <bool s = split, typename ::std::enable_if<!s, int>::type = 0>
+      reduction_densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
+    		  Key const & upper_empty = Key(), Key const & upper_deleted = Key(),
+			  Key const & split_key = Key()) :
+	  	  Base(empty, deleted, _comm) {}
 
 
       virtual ~reduction_densehash_map() {};
@@ -2067,7 +2104,7 @@ namespace dsc  // distributed std container
         BL_BENCH_INIT(insert);
 
         if (::dsc::empty(input, this->comm)) {
-          BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_hashmap:insert", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_densehash:insert", this->comm);
           return 0;
         }
 
@@ -2099,7 +2136,7 @@ namespace dsc  // distributed std container
           count = this->local_insert(input.begin(), input.end());
         BL_BENCH_END(insert, "local_insert", this->local_size());
 
-        BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_hashmap:insert", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_densehash:insert", this->comm);
 
         return count;
       }
@@ -2140,14 +2177,14 @@ namespace dsc  // distributed std container
   template<
     typename Key, typename T,
     template <typename> class MapParams,
-    typename LowerKeySpaceSelector = ::fsc::TruePredicate,
+    bool split = false,
     class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class counting_densehash_map : public reduction_densehash_map<Key, T, MapParams, LowerKeySpaceSelector, ::std::plus<T>, Alloc> {
+  class counting_densehash_map : public reduction_densehash_map<Key, T, MapParams, split, ::std::plus<T>, Alloc> {
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
 
     protected:
-      using Base = reduction_densehash_map<Key, T, MapParams, LowerKeySpaceSelector, ::std::plus<T>, Alloc>;
+      using Base = reduction_densehash_map<Key, T, MapParams, split, ::std::plus<T>, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -2169,8 +2206,17 @@ namespace dsc  // distributed std container
       using difference_type       = typename local_container_type::difference_type;
 
 
+      template <bool s = split, typename ::std::enable_if<s, int>::type = 0>
+      counting_densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
+    		  Key const & upper_empty, Key const & upper_deleted,
+			  Key const & split_key) :
+			  Base(empty, deleted, _comm, upper_empty, upper_deleted, split_key){}
 
-      counting_densehash_map(const mxx::comm& _comm) : Base(_comm) {}
+      template <bool s = split, typename ::std::enable_if<!s, int>::type = 0>
+      counting_densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
+    		  Key const & upper_empty = Key(), Key const & upper_deleted = Key(),
+			  Key const & split_key = Key()) :
+	  	  Base(empty, deleted, _comm) {}
 
 
       virtual ~counting_densehash_map() {};

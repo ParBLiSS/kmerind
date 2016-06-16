@@ -331,7 +331,26 @@ namespace sparsehash {
 
 
 
-}
+  template <typename Key>
+  struct special_keys {
+	static_assert(::std::is_integral<Key>::value && !::std::is_signed<Key>::value, "example imple only supports unsigned int");
+
+	inline Key generate(uint8_t id = 0) {
+		return ::std::numeric_limits<Key>::max() - id;
+	}
+
+	inline Key invert(Key const &x) {
+		return static_cast<Key>(~x);
+	}
+
+	inline Key get_splitter() {
+		return static_cast<Key>(~(::std::numeric_limits<Key>::max() >> 2));
+	}
+
+	static constexpr bool need_to_split = false;
+  };
+
+}  // namespace sparsehash
 
 
   /**
@@ -388,12 +407,16 @@ namespace sparsehash {
 // key values span entire key space.
 template <typename Key,
 typename T,
-bool split = true,   // for full kmers, set this to true.
+typename SpecialKeys = ::fsc::sparsehash::special_keys<Key>,   // holds keys, split flag  - can specialize for distributed.
 template<typename> class Transform = ::fsc::identity,
 typename Hash =  ::fsc::TransformedHash<Key, ::std::hash, Transform>,
 typename Equal = ::fsc::sparsehash::compare<Key, ::std::equal_to, Transform>,
-typename Allocator = ::std::allocator<::std::pair<const Key, T> > >
+typename Allocator = ::std::allocator<::std::pair<const Key, T> >,
+bool split = SpecialKeys::need_to_split >
 class densehash_map {
+
+	static_assert(SpecialKeys::need_to_split == true, "special keys object indicates that split map should NOT be used.");
+
 
 protected:
     using supercontainer_type =
@@ -401,8 +424,9 @@ protected:
                        Hash, Equal, Allocator >;
 
     using Splitter = ::fsc::sparsehash::threshold<Key, std::less, Transform>;
-
     Splitter splitter;
+
+    SpecialKeys specials;
 
     supercontainer_type lower_map;
     supercontainer_type upper_map;
@@ -441,54 +465,28 @@ protected:
 //    };
 
     //  if multiplicity of dataset is kind of known, can initialize data to that to avoid growing vector on average.
-    densehash_map(Key const & empty_key, Key const & deleted_key,
-    		 	 	   Key const & upper_empty_key, Key const & upper_deleted_key,
-    		 	 	   Key const & split_key,
-             size_type bucket_count = 128,
-                       const Hash& hash = Hash(),
-                       const Equal& equal = Equal(),
-                       const Allocator& alloc = Allocator()) :
-                    	   lower_map(bucket_count / 2, hash, Equal(empty_key, deleted_key), alloc),
-						   upper_map(bucket_count / 2, hash, Equal(upper_empty_key, upper_deleted_key), alloc)
+    densehash_map(size_type bucket_count = 128) :
+	   specials(),
+	   lower_map(bucket_count / 2, Hash(),
+			   Equal(specials.generate(0), specials.generate(1))),
+	   upper_map(bucket_count / 2, Hash(),
+			   Equal(specials.invert(specials.generate(0)), specials.invert(specials.generate(1))))
     {
-
-        reserve_keys(empty_key, deleted_key);
-    	reserve_upper_keys(upper_empty_key, upper_deleted_key);
-    	reserve_split(split_key);
+    	lower_map.set_empty_key(specials.generate(0));
+    	lower_map.set_deleted_key(specials.generate(1));
+    	upper_map.set_empty_key(specials.invert(specials.generate(0)));
+    	upper_map.set_deleted_key(specials.invert(specials.generate(1)));
+    	splitter.upper_bound = specials.get_splitter();
     };
 
     template<class InputIt>
-    densehash_map(InputIt first, InputIt last,
-    		Key const & empty_key, Key const & deleted_key,
-    		    		 	 	   Key const & upper_empty_key, Key const & upper_deleted_key,
-    		    		 	 	 Key const & split_key,
-                       size_type bucket_count = 128,
-                       const Hash& hash = Hash(),
-                       const Equal& equal = Equal(),
-                       const Allocator& alloc = Allocator()) :
-					   densehash_map(empty_key, deleted_key, upper_empty_key, upper_deleted_key,
-							   split_key, std::distance(first, last), hash, equal, alloc) {
-
+    densehash_map(InputIt first, InputIt last) :
+					   densehash_map(std::distance(first, last)) {
     	this->insert(first, last);
     };
 
     virtual ~densehash_map() {};
 
-protected:
-    void reserve_keys(Key const & empty_key, Key const & deleted_key) {
-      lower_map.set_empty_key(empty_key);
-      lower_map.set_deleted_key(deleted_key);
-    }
-
-    void reserve_upper_keys(Key const & empty_key, Key const & deleted_key) {
-      upper_map.set_empty_key(empty_key);
-      upper_map.set_deleted_key(deleted_key);
-    }
-
-    void reserve_split(Key const & split_key) {
-      splitter.upper_bound = split_key;
-    }
-public:
 
 //
 //    iterator begin() {
@@ -738,17 +736,22 @@ public:
 // Key values does not span entire key space.
 template <typename Key,
 typename T,
+typename SpecialKeys,
 template <typename > class Transform,
 typename Hash,
 typename Equal,
-typename Allocator >
-class densehash_map<Key, T, false, Transform, Hash, Equal, Allocator> {
+typename Allocator>
+class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, false> {
+
+	static_assert(SpecialKeys::need_to_split == false, "special keys object indicates that split map should be used.");
 
   protected:
 
     using supercontainer_type =
         ::google::dense_hash_map<Key, T,
                        Hash, Equal, Allocator >;
+
+    SpecialKeys specials;
 
     supercontainer_type map;
 
@@ -779,41 +782,23 @@ class densehash_map<Key, T, false, Transform, Hash, Equal, Allocator> {
 //                         map(bucket_count, hash, equal, alloc) {
 //    };
 
-    densehash_map(Key empty_key, Key deleted_key,
-                   size_type bucket_count = 128,
-                       const Hash& hash = Hash(),
-                       const Equal& equal = Equal(),
-                       const Allocator& alloc = Allocator()) :
-                    	   map(bucket_count, hash, Equal(empty_key, deleted_key), alloc) {
-    	reserve_keys(empty_key, deleted_key);
-    };
+    densehash_map(size_type bucket_count = 128) :
+		   specials(),
+		   map(bucket_count, Hash(),
+				   Equal(specials.generate(0), specials.generate(1)))
+		{
+		map.set_empty_key(specials.generate(0));
+		map.set_deleted_key(specials.generate(1));
+		};
 
     template<class InputIt>
-    densehash_map(InputIt first, InputIt last,
-                      Key empty_key, Key deleted_key,
-                       size_type bucket_count = 128,
-                       const Hash& hash = Hash(),
-                       const Equal& equal = Equal(),
-                       const Allocator& alloc = Allocator()) :
-                       densehash_map(empty_key, deleted_key, std::distance(first, last), hash, equal, alloc) {
-
-        this->insert(first, last);
+    densehash_map(InputIt first, InputIt last) :
+	   densehash_map(std::distance(first, last)) {
+    	this->insert(first, last);
     };
 
     virtual ~densehash_map() {};
 
-protected:
-    void reserve_keys(Key const & empty_key, Key const & deleted_key) {
-    	map.set_empty_key(empty_key);
-        map.set_deleted_key(deleted_key);
-    }
-    void reserve_upper_keys(Key const & empty_key, Key const & deleted_key) {
-    	//printf("reserve_upper_keys no-op\n");
-    }
-    void reserve_split(Key const & split_key) {
-    }
-
-  public:
 
     iterator begin() {
       return map.begin();
@@ -1013,12 +998,15 @@ protected:
  */
 template <typename Key,
 typename T,
-bool split = true,   // for full kmers, set this to true.
+typename SpecialKeys = ::fsc::sparsehash::special_keys<Key>,   // holds keys, split flag  - can specialize for distributed.
 template<typename> class Transform = ::fsc::identity,
 typename Hash = ::fsc::TransformedHash<Key, ::std::hash, Transform>,
 typename Equal = ::fsc::sparsehash::compare<Key, std::equal_to, Transform>,
-typename Allocator = ::std::allocator<::std::pair<const Key, T> > >
+typename Allocator = ::std::allocator<::std::pair<const Key, T> >,
+bool split = SpecialKeys::need_to_split>
 class densehash_multimap {
+
+	static_assert(SpecialKeys::need_to_split == true, "special keys object indicates that split map should NOT be used.");
 
   protected:
 
@@ -1039,8 +1027,9 @@ class densehash_multimap {
                        Hash, Equal, super_allocator_type >;
 
     using Splitter = ::fsc::sparsehash::threshold<Key, std::less, Transform>;
-
     Splitter splitter;
+
+    SpecialKeys specials;
 
     supercontainer_type lower_map;
     supercontainer_type upper_map;
@@ -1334,55 +1323,34 @@ class densehash_multimap {
 //                         upper_map(bucket_count / 2, hash, Equal(), alloc), s(0UL) {
 //    };
 
-    densehash_multimap(Key empty_key, Key deleted_key,
-                             Key upper_empty_key, Key upper_deleted_key,
-                             Key const & split_key,
-                       size_type bucket_count = 128,
-                       const Hash& hash = Hash(),
-                       const Equal& equal = Equal(),
-                       const Allocator& alloc = Allocator()) :
-                    	   lower_map(bucket_count / 2, hash, Equal(empty_key, deleted_key), alloc),
-						   upper_map(bucket_count / 2, hash, Equal(upper_empty_key, upper_deleted_key), alloc), s(0UL) {
-    	reserve_keys(empty_key, deleted_key);
-    	reserve_upper_keys(upper_empty_key, upper_deleted_key);
-      reserve_split(split_key);
 
+    densehash_multimap(size_type bucket_count = 128) :
+	   specials(),
+	   lower_map(bucket_count / 2, Hash(),
+			   Equal(specials.generate(0), specials.generate(1))),
+	   upper_map(bucket_count / 2, Hash(),
+			   Equal(specials.invert(specials.generate(0)), specials.invert(specials.generate(1)))),
+			   s(0UL)
+    {
+    	lower_map.set_empty_key(specials.generate(0));
+    	lower_map.set_deleted_key(specials.generate(1));
+    	upper_map.set_empty_key(specials.invert(specials.generate(0)));
+    	upper_map.set_deleted_key(specials.invert(specials.generate(1)));
+    	splitter.upper_bound = specials.get_splitter();
     };
 
     template<class InputIt>
-    densehash_multimap(InputIt first, InputIt last,
-                      Key empty_key, Key deleted_key,
-                      Key upper_empty_key, Key upper_deleted_key,
-                      Key const & split_key,
-                       size_type bucket_count = 128,
-                       const Hash& hash = Hash(),
-                       const Equal& equal = Equal(),
-                       const Allocator& alloc = Allocator()) :
-                       densehash_multimap(empty_key, deleted_key, upper_empty_key, upper_deleted_key,
-                                          split_key, std::distance(first, last), hash, equal, alloc) {
-        this->insert(first, last);
+    densehash_multimap(InputIt first, InputIt last) :
+					   densehash_multimap(std::distance(first, last)) {
+    	this->insert(first, last);
     };
+
 
     virtual ~densehash_multimap() {
       BL_DEBUG(" split. singles: " << vec1.size() << " multiples: " << vecX.size());
     };
 
-protected:
-    void reserve_keys(Key const & empty_key, Key const & deleted_key) {
-      lower_map.set_empty_key(empty_key);
-      lower_map.set_deleted_key(deleted_key);
-    }
 
-    void reserve_upper_keys(Key const & empty_key, Key const & deleted_key) {
-      upper_map.set_empty_key(empty_key);
-      upper_map.set_deleted_key(deleted_key);
-    }
-
-    void reserve_split(Key const & split_key) {
-      splitter.upper_bound = split_key;
-    }
-
-public:
     // TODO: begin and end iterator accessors.
 
 
@@ -1594,11 +1562,14 @@ public:
  */
 template <typename Key,
 typename T,
+typename SpecialKeys,
 template <typename > class Transform ,
 typename Hash ,
 typename Equal,
 typename Allocator>
-class densehash_multimap<Key, T, false, Transform, Hash, Equal, Allocator> {
+class densehash_multimap<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, false> {
+
+	static_assert(SpecialKeys::need_to_split == false, "special keys object indicates that split map should be used.");
 
   protected:
 
@@ -1621,6 +1592,9 @@ class densehash_multimap<Key, T, false, Transform, Hash, Equal, Allocator> {
     subcontainer_type vec1;
     using vector_allocator_type = typename Allocator::template rebind< subcontainer_type >::other;
     std::vector<subcontainer_type, vector_allocator_type> vecX;
+
+    SpecialKeys specials;
+
     supercontainer_type map;
     size_t s;
 
@@ -1652,50 +1626,26 @@ class densehash_multimap<Key, T, false, Transform, Hash, Equal, Allocator> {
 //                         s(0UL) {
 //    };
 
-    densehash_multimap(Key empty_key, Key deleted_key,
-                       size_type bucket_count = 128,
-                       const Hash& hash = Hash(),
-                       const Equal& equal = Equal(),
-                       const Allocator& alloc = Allocator()) :
-                       	map(bucket_count, hash, Equal(empty_key, deleted_key), alloc), s(0UL) {
-    	reserve_keys(empty_key, deleted_key);
-    };
+    densehash_multimap(size_type bucket_count = 128) :
+		   specials(),
+		   map(bucket_count, Hash(),
+				   Equal(specials.generate(0), specials.generate(1))), s(0UL)
+		{
+		map.set_empty_key(specials.generate(0));
+		map.set_deleted_key(specials.generate(1));
+		};
 
     template<class InputIt>
-    densehash_multimap(InputIt first, InputIt last,
-                      Key empty_key, Key deleted_key,
-                       size_type bucket_count = 128,
-                       const Hash& hash = Hash(),
-                       const Equal& equal = Equal(),
-                       const Allocator& alloc = Allocator()) :
-                       densehash_multimap(empty_key, deleted_key,
-                                          std::distance(first, last), hash, equal, alloc) {
-        this->insert(first, last);
+    densehash_multimap(InputIt first, InputIt last) :
+	   densehash_multimap(std::distance(first, last)) {
+    	this->insert(first, last);
     };
+
 
     virtual ~densehash_multimap() {
       BL_DEBUG(" unsplit. singles: " << vec1.size() << " multiples: " << vecX.size());
     };
 
-
-protected:
-    void reserve_keys(Key const & empty_key, Key const & deleted_key) {
-
-//    	std::cout << "empty: " << empty_key << " deleted " << deleted_key << std::endl;
-//    	std::cout << "empty: " << map.key_eq().empty << " deleted " << map.key_eq().deleted << std::endl;
-
-        map.set_empty_key(empty_key);
-        map.set_deleted_key(deleted_key);
-    }
-
-    void reserve_upper_keys(Key const & empty_key, Key const & deleted_key, const ::fsc::TruePredicate & _splitter = fsc::TruePredicate()) {
-    	//printf("reserve_upper_keys no-op\n");
-    }
-
-    void reserve_split(Key const & split_key) {
-    }
-
-public:
 
     // TODO: begin and end iterator accessors.
     std::vector<Key> keys() const  {

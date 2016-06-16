@@ -264,12 +264,13 @@ using CountType = uint32_t;
     using MapParams = ::bliss::index::kmer::BimoleculeHashMapParams<Key, DistHash, StoreHash>;
   #endif
 
-	#if (pDNA == 5) || (pKmerStore == CANONICAL)
-	using Splitter = ::fsc::TruePredicate;
-	#else
-	using Splitter = typename ::std::conditional<(KmerType::nBits == (KmerType::nWords * sizeof(typename KmerType::KmerWordType) * 8)),
-			MSBSplitter, ::fsc::TruePredicate>::type;
-	#endif
+    using Splitter = ::bliss::kmer::hash::sparsehash::split_key<KmerType>;
+//	#if (pDNA == 5) || (pKmerStore == CANONICAL)
+//	using Splitter = ::fsc::TruePredicate;
+//	#else
+//	using Splitter = typename ::std::conditional<(KmerType::nBits == (KmerType::nWords * sizeof(typename KmerType::KmerWordType) * 8)),
+//			MSBSplitter, ::fsc::TruePredicate>::type;
+//	#endif
 
 
   // DEFINE THE MAP TYPE base on the type of data to be stored.
@@ -289,12 +290,12 @@ using CountType = uint32_t;
           KmerType, ValType, MapParams>;
     #elif (pMAP == DENSEHASH)
       using MapType = ::dsc::densehash_multimap<
-          KmerType, ValType, MapParams, Splitter>;
+          KmerType, ValType, MapParams, Splitter::need_to_split>;
     #endif
   #elif (pINDEX == COUNT)  // map
     #if (pMAP == DENSEHASH)
       using MapType = ::dsc::counting_densehash_map<
-        KmerType, ValType, MapParams, Splitter>;
+        KmerType, ValType, MapParams, Splitter::need_to_split>;
     #else
       using MapType = ::dsc::counting_unordered_map<
         KmerType, ValType, MapParams>;
@@ -493,25 +494,26 @@ int main(int argc, char** argv) {
 
 
   // ================  read and get file
-
-  IndexType idx(comm);
-
 #if (pMAP == DENSEHASH)
-  KmerType empty_key = ::bliss::kmer::hash::sparsehash::empty_key<KmerType>::generate();
-  KmerType deleted_key = ::bliss::kmer::hash::sparsehash::deleted_key<KmerType>::generate();
 
-  	idx.get_map().reserve_keys(empty_key, deleted_key);
+
+  KmerType em = ::bliss::kmer::hash::sparsehash::empty_key<  KmerType>::generate();
+  KmerType del = ::bliss::kmer::hash::sparsehash::deleted_key<KmerType>::generate();
+  KmerType sp = ::bliss::kmer::hash::sparsehash::split_key<  KmerType>::generate();
+  KmerType ue = em;
+  KmerType ud = del;
+
+  for (size_t i = 0; i < KmerType::nWords; ++i) {
+    ue.getDataRef()[i] = ~(ue.getDataRef()[i]);
+    ud.getDataRef()[i] = ~(ud.getDataRef()[i]);
+  }
 
   	// upper key is negation of lower keys
-  	KmerType upper_empty_key = empty_key;
-  	KmerType upper_deleted_key = deleted_key;
-  	for (size_t i = 0; i < KmerType::nWords; ++i) {
-  		upper_empty_key.getDataRef()[i] = ~(upper_empty_key.getDataRef()[i]);
-  		upper_deleted_key.getDataRef()[i] = ~(upper_deleted_key.getDataRef()[i]);
-  	}
 
-  	idx.get_map().reserve_upper_keys(upper_empty_key, upper_deleted_key, Splitter());
+  	IndexType idx(em, del, comm, ue, ud, sp);
 
+#else
+  IndexType idx(comm);
 
 #endif
 

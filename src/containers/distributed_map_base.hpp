@@ -111,6 +111,9 @@ namespace dsc
 	  template <typename K>
 	  using StorageTransform = StoreTrans<K>;
 
+	  template <typename K>
+	  using StorageEqual = StoreEqual<K>;
+
 	  using StorageTransformedFunction = StoreTransFunc<Key, StoreFunc, StoreTrans>;
 	  using StorageTransformedEqual = ::fsc::TransformedComparator<Key, StoreEqual, StoreTrans>;
   };
