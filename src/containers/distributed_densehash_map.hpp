@@ -127,9 +127,10 @@ namespace dsc  // distributed std container
    * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
    */
   template<typename Key, typename T,
-    template <typename, typename, bool, template <typename> class, typename, typename...> class Container,
+    template <typename, typename, typename, template <typename> class, 
+      typename, typename, typename, bool> class Container,
     template <typename> class MapParams,
-    bool split = false,
+    typename SpecialKeys = ::fsc::sparsehash::special_keys<Key>,
     class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
   class densehash_map_base :
@@ -203,11 +204,11 @@ namespace dsc  // distributed std container
 
     public:
       using local_container_type = Container<Key, T,
-          split,
+          SpecialKeys,
           StoreTrans,
 		  typename Base::StoreTransformedFunc,
 		  ::fsc::sparsehash::compare<Key, StoreEqual, StoreTrans>,
-		  Alloc>;
+		  Alloc, SpecialKeys::need_to_split>;
 
       // std::densehash_multimap public members.
       using key_type              = typename local_container_type::key_type;
@@ -302,10 +303,6 @@ namespace dsc  // distributed std container
 
           return c.size() - before;
       }
-
-
-
-
 
       /**
        * @brief find elements with the specified keys in the distributed densehash_multimap.
@@ -1135,21 +1132,9 @@ namespace dsc  // distributed std container
       }
 
 
-      template <bool s = split, typename ::std::enable_if<s, int>::type = 0>
-      densehash_map_base(Key const & empty, Key const & deleted, const mxx::comm& _comm,
-    		  Key const & upper_empty, Key const & upper_deleted,
-			  Key const & split_key) :
-			  Base(_comm), key_to_rank(_comm.size()),
-			  c(empty, deleted, upper_empty, upper_deleted, split_key),
-              local_changed(false) {}
-
-      template <bool s = split, typename ::std::enable_if<!s, int>::type = 0>
-      densehash_map_base(Key const & empty, Key const & deleted, const mxx::comm& _comm,
-    		  Key const & upper_empty = Key(), Key const & upper_deleted = Key(),
-			  Key const & split_key = Key()) :
-		  Base(_comm), key_to_rank(_comm.size()),
-		  c(empty, deleted),
-		  local_changed(false) {}
+      densehash_map_base(const mxx::comm& _comm) :
+		    Base(_comm), key_to_rank(_comm.size()),
+		    local_changed(false) {}
 
 
       // ================ local overrides
@@ -1455,12 +1440,13 @@ namespace dsc  // distributed std container
    */
   template<typename Key, typename T,
   	  template <typename> class MapParams,
-      bool split = false,
+    typename SpecialKeys = ::fsc::sparsehash::special_keys<Key>,
 	  class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class densehash_map : public densehash_map_base<Key, T, ::fsc::densehash_map, MapParams, split, Alloc> {
+  class densehash_map : 
+    public densehash_map_base<Key, T, ::fsc::densehash_map, MapParams, SpecialKeys, Alloc> {
     protected:
-      using Base = densehash_map_base<Key, T, ::fsc::densehash_map, MapParams, split, Alloc>;
+      using Base = densehash_map_base<Key, T, ::fsc::densehash_map, MapParams, SpecialKeys, Alloc>;
 
 
     public:
@@ -1526,17 +1512,8 @@ namespace dsc  // distributed std container
     public:
 
 
-      template <bool s = split, typename ::std::enable_if<s, int>::type = 0>
-      densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
-    		  Key const & upper_empty, Key const & upper_deleted,
-			  Key const & split_key) :
-			  Base(empty, deleted, _comm, upper_empty, upper_deleted, split_key) {}
-
-      template <bool s = split, typename ::std::enable_if<!s, int>::type = 0>
-      densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
-    		  Key const & upper_empty = Key(), Key const & upper_deleted = Key(),
-			  Key const & split_key = Key()) :
-	  	  Base(empty, deleted, _comm) {}
+      densehash_map(const mxx::comm& _comm) :
+	  	  Base(_comm) {}
 
 
 
@@ -1654,12 +1631,13 @@ namespace dsc  // distributed std container
    */
   template<typename Key, typename T,
   template <typename> class MapParams,
-  bool split = false,
+    typename SpecialKeys = ::fsc::sparsehash::special_keys<Key>,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class densehash_multimap : public densehash_map_base<Key, T, ::fsc::densehash_multimap, MapParams, split, Alloc> {
+  class densehash_multimap : 
+    public densehash_map_base<Key, T, ::fsc::densehash_multimap, MapParams, SpecialKeys, Alloc> {
     protected:
-      using Base = densehash_map_base<Key, T, ::fsc::densehash_multimap, MapParams, split, Alloc>;
+      using Base = densehash_map_base<Key, T, ::fsc::densehash_multimap, MapParams, SpecialKeys, Alloc>;
 
 
     public:
@@ -1726,19 +1704,8 @@ namespace dsc  // distributed std container
     public:
 
 
-      template <bool s = split, typename ::std::enable_if<s, int>::type = 0>
-      densehash_multimap(Key const & empty, Key const & deleted, const mxx::comm& _comm,
-    		  Key const & upper_empty, Key const & upper_deleted,
-			  Key const & split_key) :
-			  Base(empty, deleted, _comm, upper_empty, upper_deleted, split_key),
-			  local_unique_count(0) {}
-
-      template <bool s = split, typename ::std::enable_if<!s, int>::type = 0>
-      densehash_multimap(Key const & empty, Key const & deleted, const mxx::comm& _comm,
-    		  Key const & upper_empty = Key(), Key const & upper_deleted = Key(),
-			  Key const & split_key = Key()) :
-	  	  Base(empty, deleted, _comm), local_unique_count(0) {}
-
+      densehash_multimap(const mxx::comm& _comm) :
+	  	  Base(_comm), local_unique_count(0) {}
 
 
       virtual ~densehash_multimap() {}
@@ -1953,15 +1920,16 @@ namespace dsc  // distributed std container
    */
   template<typename Key, typename T,
   template <typename> class MapParams,
-  bool split = false,
+    typename SpecialKeys = ::fsc::sparsehash::special_keys<Key>,
   typename Reduc = ::std::plus<T>,
   class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class reduction_densehash_map : public densehash_map<Key, T, MapParams, split, Alloc> {
+  class reduction_densehash_map : 
+    public densehash_map<Key, T, MapParams, SpecialKeys, Alloc> {
       static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     protected:
-      using Base = densehash_map<Key, T, MapParams, split, Alloc>;
+      using Base = densehash_map<Key, T, MapParams, SpecialKeys, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -2072,18 +2040,8 @@ namespace dsc  // distributed std container
 
 
     public:
-
-      template <bool s = split, typename ::std::enable_if<s, int>::type = 0>
-      reduction_densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
-    		  Key const & upper_empty, Key const & upper_deleted,
-			  Key const & split_key) :
-			  Base(empty, deleted, _comm, upper_empty, upper_deleted, split_key) {}
-
-      template <bool s = split, typename ::std::enable_if<!s, int>::type = 0>
-      reduction_densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
-    		  Key const & upper_empty = Key(), Key const & upper_deleted = Key(),
-			  Key const & split_key = Key()) :
-	  	  Base(empty, deleted, _comm) {}
+      reduction_densehash_map(const mxx::comm& _comm) :
+	  	  Base(_comm) {}
 
 
       virtual ~reduction_densehash_map() {};
@@ -2177,14 +2135,15 @@ namespace dsc  // distributed std container
   template<
     typename Key, typename T,
     template <typename> class MapParams,
-    bool split = false,
+    typename SpecialKeys = ::fsc::sparsehash::special_keys<Key>,
     class Alloc = ::std::allocator< ::std::pair<const Key, T> >
   >
-  class counting_densehash_map : public reduction_densehash_map<Key, T, MapParams, split, ::std::plus<T>, Alloc> {
+  class counting_densehash_map : 
+    public reduction_densehash_map<Key, T, MapParams, SpecialKeys, ::std::plus<T>, Alloc> {
       static_assert(::std::is_integral<T>::value, "count type has to be integral");
 
     protected:
-      using Base = reduction_densehash_map<Key, T, MapParams, split, ::std::plus<T>, Alloc>;
+      using Base = reduction_densehash_map<Key, T, MapParams, SpecialKeys, ::std::plus<T>, Alloc>;
 
     public:
       using local_container_type = typename Base::local_container_type;
@@ -2206,17 +2165,8 @@ namespace dsc  // distributed std container
       using difference_type       = typename local_container_type::difference_type;
 
 
-      template <bool s = split, typename ::std::enable_if<s, int>::type = 0>
-      counting_densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
-    		  Key const & upper_empty, Key const & upper_deleted,
-			  Key const & split_key) :
-			  Base(empty, deleted, _comm, upper_empty, upper_deleted, split_key){}
-
-      template <bool s = split, typename ::std::enable_if<!s, int>::type = 0>
-      counting_densehash_map(Key const & empty, Key const & deleted, const mxx::comm& _comm,
-    		  Key const & upper_empty = Key(), Key const & upper_deleted = Key(),
-			  Key const & split_key = Key()) :
-	  	  Base(empty, deleted, _comm) {}
+      counting_densehash_map(const mxx::comm& _comm) :
+	  	  Base(_comm) {}
 
 
       virtual ~counting_densehash_map() {};
