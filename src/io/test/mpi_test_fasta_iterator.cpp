@@ -479,8 +479,9 @@ INSTANTIATE_TEST_CASE_P(Bliss, FASTAIteratorTest, ::testing::Values(
     TestFileInfo(434, 13790, std::string("/test/data/natural.fasta")),
     TestFileInfo(500, 14625, std::string("/test/data/natural.withN.fasta")),
     TestFileInfo(246, 940, std::string("/test/data/test2.fasta")),
+    TestFileInfo(64, 512, std::string("/test/data/test.fasta")),
     TestFileInfo(335000, 1092580, std::string("/test/data/test.medium.fasta")),
-    TestFileInfo(64, 512, std::string("/test/data/test.fasta"))
+    TestFileInfo(31155, 31245, std::string("/test/data/test.unitiqs.fasta"))
 ));
 //INSTANTIATE_TEST_CASE_P(Bliss, FASTAIteratorTest, ::testing::Values(
 //    TestFileInfo(246, 940, std::string("/test/data/test2.fasta")),

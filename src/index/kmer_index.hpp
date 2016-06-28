@@ -452,7 +452,7 @@ public:
 	      // call after getting first L1Block to ensure that file is loaded.  (rank 0 reads and broadcast)
 	      size_t record_size = 0;
 	      size_t seq_len = 0;
-	      std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.getRange(), partition.getRange());
+	      std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.getRange(), partition.getRange(), _comm, 10);
 	      size_t est_size = (record_size == 0) ? 0 : (partition.getRange().size() + record_size - 1) / record_size;  // number of records
 	      est_size *= (seq_len < KmerType::size) ? 0 : (seq_len - KmerType::size + 1) ;  // number of kmers in a record
 	      result.reserve(est_size);
@@ -531,7 +531,7 @@ public:
         // call after getting first L1Block to ensure that file is loaded.  (rank 0 reads and broadcast)
         size_t record_size = 0;
         size_t seq_len = 0;
-        std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.getRange(), partition.getRange());
+        std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.getRange(), partition.getRange(), _comm, 10);
         size_t est_size = (record_size == 0) ? 0 : (partition.getRange().size() + record_size - 1) / record_size;  // number of records
         est_size *= (seq_len < KmerType::size) ? 0 : (seq_len - KmerType::size + 1) ;  // number of kmers in a record
         result.reserve(est_size);
@@ -609,7 +609,7 @@ public:
         // call after getting first L1Block to ensure that file is loaded.  (rank 0 reads and broadcast)
         size_t record_size = 0;
         size_t seq_len = 0;
-        std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.getRange(), partition.getRange());
+        std::tie(record_size, seq_len) = l1parser.get_record_size(partition.begin(), partition.parent_range_bytes, partition.getRange(), partition.getRange(), _comm, 10);
         size_t est_size = (record_size == 0) ? 0 : (partition.getRange().size() + record_size - 1) / record_size;  // number of records
         est_size *= (seq_len < KmerType::size) ? 0 : (seq_len - KmerType::size + 1) ;  // number of kmers in a record
         result.reserve(est_size);

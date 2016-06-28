@@ -268,9 +268,16 @@ TEST_P(FASTQParserTest, parse_mpi_omp)
 INSTANTIATE_TEST_CASE_P(Bliss, FASTQParserTest, ::testing::Values(
     TestFileInfo(243, 27580, std::string("/test/data/natural.fastq")),
     TestFileInfo(250, 29250, std::string("/test/data/natural.withN.fastq")),
+    TestFileInfo(7, 939, std::string("/test/data/test.debruijn.small.fastq")),
+    TestFileInfo(1, 134, std::string("/test/data/test.debruijn.tiny.fastq")),
+    TestFileInfo(254562, 34111308, std::string("/test/data/test.fastq")),
     TestFileInfo(140, 18761, std::string("/test/data/test.medium.fastq")),
     TestFileInfo(7, 939, std::string("/test/data/test.small.fastq")),
-    TestFileInfo(254562, 34111308, std::string("/test/data/test.fastq"))
+    TestFileInfo(1, 33194, std::string("/test/data/test.unitiq1.fastq")),
+    TestFileInfo(1, 7144, std::string("/test/data/test.unitiq1.short2.fastq")),
+    TestFileInfo(1, 14824, std::string("/test/data/test.unitiq1.short.fastq")),
+    TestFileInfo(1, 29296, std::string("/test/data/test.unitiq2.fastq")),
+    TestFileInfo(2, 62490, std::string("/test/data/test.unitiqs.fastq"))
 ));
 
 int main(int argc, char* argv[])

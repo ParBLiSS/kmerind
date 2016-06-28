@@ -535,21 +535,28 @@ public:
 	virtual typename BASE::range_type read_range(std::vector<unsigned char> & output,
 			typename BASE::range_type const & range_bytes) {
 
+	  typename BASE::range_type file_range = BASE::range_type::intersect(range_bytes, this->file_range_bytes);
+
+	  output.clear();
+
+	  if (file_range.size() == 0) {
+	    return file_range;
+	  }
+
 		// map
-		mapped_data md(this->fd, BASE::range_type::intersect(range_bytes, this->file_range_bytes));
+		mapped_data md(this->fd, file_range);
 
 		//
 		unsigned char * md_data = md.get_data();
 		typename BASE::range_type mapped_range = md.get_range();
 
-		if (md_data == nullptr) {
-			std::cout << "WARNING: mapped data is null" << std::endl;
-			output.clear();
-		}
     if (md.size() == 0) {
-      std::cout << "WARNING: mapped data is null" << std::endl;
-      output.clear();
+      std::cout << "WARNING: mapped data size is 0" << std::endl;
+      return mapped_range;
     }
+		if (md_data == nullptr) {
+			throw std::logic_error("ERROR: mapped data is null, but mapped range size is larger than 0");
+		}
 
 		// ensure the portion to copy is within the mapped region.
 		typename BASE::range_type target =
@@ -557,8 +564,7 @@ public:
 
 		if (target.size() == 0) {
 			// print error through exception.
-			std::cout << "WARNING: read_range: requested " << range_bytes << " not in mapped " << mapped_range;
-			output.clear();
+			std::cout << "WARNING: read_range: requested " << range_bytes << " not in mapped " << mapped_range << std::endl;
 			return target;
 		}
 
@@ -681,7 +687,7 @@ public:
 
 		if (target.size() == 0) {
 			// print error through exception.
-			std::cout << "WARNING: read_range: requested " << range_bytes << " not in file " << file_range_bytes;
+			std::cout << "WARNING: read_range: requested " << range_bytes << " not in file " << file_range_bytes << std::endl;
 			output.clear();
 			return target;
 		}
@@ -774,6 +780,7 @@ public:
    * @note  virtual so different file reading mechanisms can be defined AND parallel
    * @param range_bytes range to read, in bytes
    * @param output    vector containing data as bytes.
+   * @return  the range for the read data.
    */
   virtual range_type read_range(std::vector<unsigned char> & output, range_type const & range_bytes) {
     if (this->fd == -1) {
@@ -786,7 +793,7 @@ public:
 
     if (target.size() == 0) {
       // print error through exception.
-      std::cout << "WARNING: read_range: requested " << range_bytes << " not in file " << file_range_bytes;
+      std::cout << "WARNING: read_range: requested " << range_bytes << " not in file " << file_range_bytes << std::endl;
       output.clear();
       return target;
     }
@@ -1053,7 +1060,10 @@ protected:
 
 		partitioner.configure(target, this->comm.size());
 
-		return partitioner.getNext(this->comm.rank());
+		typename BASE::range_type result = partitioner.getNext(this->comm.rank());
+
+		std::cout << "rank = " << this->comm.rank() << " range " << result << std::endl;
+		return result;
 	}
 
 	/**
@@ -1061,6 +1071,8 @@ protected:
 	 * @note	overlap is added to the end of the result ranges.  This may make the result extend
 	 * 			beyong initial in_mem_range.
 	 * @note	assumes that both input parameters are within file range and in memory.
+	 * @return  pair of ranges, first range is the in memory, partitioned, second range is the valid range.
+	 *
 	 */
 	::std::pair<typename BASE::range_type, typename BASE::range_type>
 	partition(typename BASE::range_type const & in_mem_range_bytes,
@@ -1182,13 +1194,10 @@ protected:
 	  typename BASE::range_type target =
 				BASE::range_type::intersect(range_bytes, this->file_range_bytes);
 
-		// covers whole file, so done.
+		// not intersecting file, so done
 		if (target.size() == 0) return target;
 
 		//std::cout << "rank " << this->comm.rank() << " partitioning map" << std::endl;
-
-		// allocate a mmap file for doing the search.
-		::bliss::io::mmap_file record_finder(this->fd, this->size());
 
 
 		// configure the partitioner and get the local partition.
@@ -1196,10 +1205,13 @@ protected:
 		typename BASE::range_type hint = partitioner.getNext(this->comm.rank());
 
 		// now define the search ranges.  for case when partition is smaller than a record,
-		// we need to search more, so make the end of search range (page_size + end).
+		// we need to search more, so make the end of search range (start + (1page or 1MB)).
 		typename BASE::range_type search = hint;
-		// but with staggered start
-		search.end = hint.start + ::std::max(sysconf(_SC_PAGE_SIZE), (1024L * 1024L));  // assume FileParser can check the previous char.
+		// search for the whole range.
+		// search.end = hint.start + ::std::max(sysconf(_SC_PAGE_SIZE), (1024L * 1024L));  // assume FileParser can check the previous char.
+		// in case the search range is less than record size, then the partitioning may be such that no partition has a complete record to be found.
+		// so instead, we search to end of file.
+		search.end = target.end;
 
 		// ensure that previous char is inspected.
 		typename BASE::range_type load = search;
@@ -1210,38 +1222,49 @@ protected:
 		//===  search the region for the starting position, using mmap file
 		typename BASE::range_type found;
 
-		// map the search region
-		mapped_data md = record_finder.map(load);
+		{
+	    // allocate a mmap file for doing the search.
+	    ::bliss::io::mmap_file record_finder(this->fd, this->size());
 
-		//=== search for record starting point using FileParser.
-		::bliss::io::FASTQParser<unsigned char *> parser;
+      // map the search region
+      mapped_data md = record_finder.map(load);
 
+      //=== search for record starting point using FileParser.
+      ::bliss::io::FASTQParser<unsigned char *> parser;
 
-		parser.init_parser(md.get_data(), this->file_range_bytes,
-				md.get_range(), search, this->comm);
+      // mark the first entry found.    this may be outside of our partition hint
+      found.start = parser.init_parser(md.get_data(), this->file_range_bytes,
+          md.get_range(), search, this->comm);
 
-		// mark the first entry found.
-		found.start = parser.find_first_record(md.get_data(),
-				this->file_range_bytes, md.get_range(), search);
+		}
 
+		// if end of search range, then nothing was found.  in which case, set found to be target (range to partition).  scan and exscan then would fill in correctly.
+		if (found.start >= hint.end) found = target;
+		else {
+		  found.end = found.start;
+		}
+
+		//inclusive scan to get the start of record that spans this processor's partition
+    found.start = ::mxx::scan(found.start, [](size_t const & x, size_t const & y) {
+      return ::std::max(x, y);
+    }, this->comm);
+
+    // reverse exclusive scan to get the start of the next record outside of this processor's partition.
+    found.end = ::mxx::exscan(found.end, [](size_t const & x, size_t const & y) {
+      return ::std::min(x, y);
+    }, this->comm.reverse());
+    if (this->comm.rank() == (this->comm.size() - 1)) found.end = target.end;   // last process.
 
 		//	std::cout << "rank " << comm.rank() << " start " << final.start << std::endl;
 
-		// each rank will find a start, which may be outside of hint.
-
-		// now get the end from next proc that found a start.
-
-
-		// not using comm split because the subcommunicator may be constructed in worse than log p time.
-		// next we do reverse exclusive scan with rev communicator
-		found.end = ::mxx::exscan(found.start, [](size_t const & x, size_t const & y) {
-			return ::std::min(x, y);
-		}, this->comm.reverse());
-		if (this->comm.rank() == (this->comm.size() - 1)) found.end = target.end;   // last process.
+    // finally, a process owns a found range if the start falls inside the hint
+    if ((found.start < hint.start) || (found.start >= hint.end)) {
+      found.start = found.end;
+    }
 
 		// finally, check final_start again, and if start is pointing to end of file, let it point to the current range's end.
 		//if (found.start == target.end) found.start = found.end;
-//		std::cout << "rank " << this->comm.rank() << " found = " << found <<  std::endl;
+		std::cout << " rank " << this->comm.rank() << " found = " << found <<  std::endl;
 
 		return found;
 
@@ -1255,6 +1278,7 @@ protected:
 	 * @note	overlap is added to the end of the result ranges.  This may make the result extend
 	 * 			beyong initial in_mem_range.
 	 * @note	assumes that both input parameters are within file range and in memory.
+   * @return  pair of ranges, first range is the in memory, partitioned, second range is the valid range.
 	 */
 	::std::pair<typename BASE::range_type, typename BASE::range_type>
 	partition(typename BASE::range_type const & in_mem_range_bytes,
@@ -1273,7 +1297,7 @@ protected:
 
 	  typename BASE::range_type found = partition(valid);
 
-		return std::make_pair(found, found);
+		return std::make_pair(found, found);   // in mem valid is same as valid range for FASTQParser.
 	}
 
 public:
@@ -1368,7 +1392,7 @@ protected:
     typename BASE::range_type target =
         BASE::range_type::intersect(range_bytes, this->file_range_bytes);
 
-    // covers whole file, so done.
+    // does not cover any of whole file, so done.
     if (target.size() == 0) return target;
 
     // std::cout << "rank " << this->comm.rank() << " partitioning map" << std::endl;
@@ -1380,10 +1404,13 @@ protected:
     typename BASE::range_type hint = partitioner.getNext(this->comm.rank());
 
     // now define the search ranges.  for case when partition is smaller than a record,
-    // we need to search more, so make the end of search range (page_size + end).
+    // we need to search more, so make the end of search range (start + (1page or 1MB)).
     typename BASE::range_type search = hint;
-    // but with staggered start
-    search.end = hint.start + ::std::max(sysconf(_SC_PAGE_SIZE), (1024L * 1024L));  // assume FileParser can check the previous char.
+    // search for the whole range.
+    // search.end = hint.start + ::std::max(sysconf(_SC_PAGE_SIZE), (1024L * 1024L));  // assume FileParser can check the previous char.
+    // in case the search range is less than record size, then the partitioning may be such that no partition has a complete record to be found.
+    // so instead, we search to end of file.
+    search.end = target.end;
 
     // ensure that previous char is inspected.
     typename BASE::range_type load = search;
@@ -1401,32 +1428,38 @@ protected:
       //=== search for record starting point using FileParser.
       ::bliss::io::FASTQParser<unsigned char *> parser;
 
-      parser.init_parser(md.get_data(), this->file_range_bytes,
+      // mark the first entry found.    this may be outside of our partition hint
+      found.start = parser.init_parser(md.get_data(), this->file_range_bytes,
           md.get_range(), search, this->comm);
 
-      // mark the first entry found.
-      found.start = parser.find_first_record(md.get_data(),
-          this->file_range_bytes, md.get_range(), search);
     }
 
+    // if end of search range, then nothing was found.  in which case, set found to be target (range to partition).  scan and exscan then would fill in correctly.
+    if (found.start >= hint.end) found = target;
+    else {
+      found.end = found.start;
+    }
 
-    //  std::cout << "rank " << comm.rank() << " start " << final.start << std::endl;
-
-    // each rank will find a start, which may be outside of hint.
-
-    // now get the end from next proc that found a start.
-
+    //inclusive scan to get the start of record that spans this processor's partition
+    found.start = ::mxx::scan(found.start, [](size_t const & x, size_t const & y) {
+      return ::std::max(x, y);
+    }, this->comm);
 
     // not using comm split because the subcommunicator may be constructed in worse than log p time.
     // next we do reverse exclusive scan with rev communicator
-    found.end = ::mxx::exscan(found.start, [](size_t const & x, size_t const & y) {
+    found.end = ::mxx::exscan(found.end, [](size_t const & x, size_t const & y) {
       return ::std::min(x, y);
     }, this->comm.reverse());
     if (this->comm.rank() == (this->comm.size() - 1)) found.end = target.end;   // last process.
 
+    // finally, a process owns a found range if the start falls inside the hint
+    if ((found.start < hint.start) || (found.start >= hint.end)) {
+      found.start = found.end;
+    }
+
     // finally, check final_start again, and if start is pointing to end of file, let it point to the current range's end.
     //if (found.start == target.end) found.start = found.end;
-//    std::cout << "rank " << this->comm.rank() << " found = " << found <<  std::endl;
+    std::cout << " rank " << this->comm.rank() << " found = " << found <<  std::endl;
 
     return found;
 
@@ -1440,6 +1473,7 @@ protected:
    * @note  overlap is added to the end of the result ranges.  This may make the result extend
    *      beyong initial in_mem_range.
    * @note  assumes that both input parameters are within file range and in memory.
+   * @return  pair of ranges, first range is the in memory, partitioned, second range is the valid range.
    */
   ::std::pair<typename BASE::range_type, typename BASE::range_type>
   partition(typename BASE::range_type const & in_mem_range_bytes,
@@ -1458,7 +1492,7 @@ protected:
 
     typename BASE::range_type found = partition(valid);
 
-    return std::make_pair(found, found);
+    return std::make_pair(found, found);  // in mem valid is same as valid range for FASTQParser.
   }
 
 public:
@@ -1520,7 +1554,7 @@ public:
   }
 };
 
-
+/// disable shared fd for stdio file.
 template <typename FileParser>
 class partitioned_file<::bliss::io::stdio_file, FileParser, ::bliss::io::parallel::base_shared_fd_file >
 {
@@ -1932,15 +1966,12 @@ public:
 
 			// now search for the true start.
 			::bliss::io::FASTQParser<unsigned char *> parser;
-			parser.init_parser(output.data.data(), this->file_range_bytes,
+      // mark the first entry found.
+			size_t real_start = parser.init_parser(output.data.data(), this->file_range_bytes,
 					in_mem, block_range, this->comm);
 
-			// mark the first entry found.
-			size_t real_start = parser.find_first_record(output.data.data(),
-					this->file_range_bytes, in_mem, in_mem);
 
 //			std::cout << "rank " << this->comm.rank() << " real start " << real_start << std::endl;
-
 //			std::cout << "rank " << this->comm.rank() << " data size before remove overlap " << output.data.size() << std::endl;
 
 			// now clear the region outside of the block range  (the overlap portion)
@@ -1989,7 +2020,7 @@ public:
 			output.valid_range_bytes.end =
 					not_found ? block_range.end : output.in_mem_range_bytes.end;
 
-//			std::cout << "rank " << this->comm.rank() << " final valid " << output.valid_range_bytes << std::endl;
+			if (output.valid_range_bytes.size() > 0) std::cout << "rank " << this->comm.rank() << "/" << this->comm.size() << " final valid " << output.valid_range_bytes << std::endl;
 
 			output.parent_range_bytes = file_range_bytes;
 

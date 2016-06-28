@@ -308,10 +308,17 @@ namespace io
         * @brief   get the average record size in the supplied range
         * @return  return the records size and the internal data size
         */
-       virtual ::std::pair<size_t, size_t> get_record_size(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &validRange, size_t const count = 10) {
+       virtual ::std::pair<size_t, size_t> get_record_size(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &validRange, size_t const count) {
          size_t dist = validRange.size();
          return ::std::pair<size_t, size_t>(dist,dist);
        }
+#ifdef USE_MPI
+       virtual ::std::pair<size_t, size_t> get_record_size(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &validRange, mxx::comm const & comm, size_t const count) {
+         size_t dist = validRange.size();
+         return ::std::pair<size_t, size_t>(dist,dist);
+       }
+#endif
+
    };
    /// template class' static variable definition (declared and initialized in class)
   template <typename Iterator>
@@ -975,11 +982,24 @@ namespace io
             try {
 #ifdef USE_MPI
               output.start = temp_parser.init_parser(searchData, this->fileRange, loadRange, start_search_range, this->comm);
+
+              output.end = (output.start >= start_search_range.end) ?
+                this->fileRange.end : // did not find a start position.
+                output.start;
+
+              // do reverse exclusive scan
+              output.end = mxx::exscan(output.end, [](typename RangeType::ValueType const & x,
+                  typename RangeType::ValueType const & y){
+                return std::min(x, y);
+              }, this->comm.reverse());
+              if (this->comm.rank() == (this->comm.size() - 1))  output.end = start_search_range.end;  // fill in the last rank.
+
+              if (output.start >= start_search_range.end) output.end = output.start;
+
 #else
               output.start = temp_parser.init_parser(searchData, this->fileRange, loadRange, start_search_range);
-#endif
+
               if (hint.start <= output.start && output.start < hint.end) {
-                // if start position is in this file segment, then this proc/thread owns this block.
                 output.end = temp_parser.find_first_record(searchData, this->fileRange, loadRange, end_search_range);
 
                 // extend by overlap if specified.
@@ -989,6 +1009,7 @@ namespace io
                 output.end = hint.end;
                 output.start = hint.end;
               }
+#endif
 
 
 //              ::std::cout << "start in " << hint << " end in " << end_search_range << " final " << output << ::std::endl;
@@ -1041,11 +1062,11 @@ protected:
           // clean up any previous runs.
           unloadL1Data();
 
-          // don't do anything if range is empty.
-          if (range.size() == 0) {
-            L1Block.assign(nullptr, nullptr, range);
-            return L1Block;
-          }
+//          // don't do anything if range is empty.
+//          if (range.size() == 0) {
+//            L1Block.assign(nullptr, nullptr, range);
+//            return L1Block;
+//          }
 
           // make sure the mmapRange is within the file range, and page align it.
           RangeType blockRange = RangeType::intersect(range, fileRange);
@@ -1344,58 +1365,26 @@ protected:
 
         	//  map file directly on proc 1, determine Record size, then broadcast.
 
-            // try mapping the first 9 page size worth  (typical, 4KB each, so 36KB.  chosen so that we can see if sequence length is greater than 32K (16 bit))
+
+
+            // try mapping the first 9 page size worth  (typical, 4KB each, so 36KB.  chosen so that we can see if sequence length is greater than 64K (16 bit))
             auto search_range = this->getFileRange();
-            search_range.end = std::min(9 * pageSize, search_range.end);
+            search_range.end = std::min(17 * pageSize, search_range.end);
+
 
             // map the region.  (no need to align.)
             auto search_data = map(search_range);  // no alignment issue because we're at beginning of file.
-            auto sstart = search_data;
-            auto send = search_data + search_range.size();
 
             RangeType inmem(search_range);
 
             // create a L1 Parser local instance
-            Parser<decltype(sstart)> local_parser;
+            Parser<decltype(search_data)> local_parser;
 
-            // For FASTAParser, this computes the sequence demarcation vector.  For FASTQ, this does nothing.
-            size_t offset = 0;
+            // For FASTAParser, this computes the sequence demarcation vector.  For FASTQ, this does nothing.  single node, sequential search
+            local_parser.init_parser(search_data, this->getFileRange(), inmem, search_range);
 
-            // only rank 0 needs to use the parser.
-            offset = local_parser.init_parser(sstart, this->getFileRange(), inmem, search_range);
-
-            // then find start, and adjust search range.  NOT NEEDED HERE since we are at beginning of file.
-
-            // now initialize the search.  no need to call the first increment separately since we know that we have to start from seq id 0.
-            size_t seq_data_len = 0;
-
-            int i = 0;
-            while ((i < iterations) && (sstart != send)) {
-              // repeat for iterations or until no more sequences (empty sequence is returned).
-
-              // get the next sequence
-              typename Parser<decltype(sstart)>::SequenceType seq = local_parser.get_next_record(sstart, send, offset);
-
-              // get the char count in a record
-              seq_data_len = std::distance(seq.seq_begin, seq.seq_end);
-
-              if (seq_data_len >= (1 << 16))  {// larger than 16 bit DNA length  so stop and just return this.
-                i = 1;
-                break;
-              }
-              // else sum up.
-              counts[0] += seq.record_size;
-              counts[1] += seq_data_len;
-              ++i;
-
-            }
-            if (i == 0) throw std::logic_error("ERROR: no record found");
-
-            counts[0] /= i;
-            counts[1] /= i;
-
-            if (counts[0] == 0) throw std::logic_error("ERROR: estimated sequence data size is 0");
-            if (counts[1] == 0) throw std::logic_error("ERROR: estimated record size is 0");
+            // just rank 0 doing the search.
+            std::tie(counts[0], counts[1]) = local_parser.get_record_size(search_data, this->getFileRange(), inmem, search_range, 10);
 
             // release the data.
             unmap(search_data, search_range);

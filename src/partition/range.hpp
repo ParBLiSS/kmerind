@@ -378,7 +378,9 @@ namespace bliss
         bool contains(const range<T> &other) const {
           return (other.start >= this->start) && (other.end <= this->end);
         }
-
+        bool contains(T const & v) const {
+          return (v >= this->start) && (v < this->end);
+        }
 
         /**
          * @brief Determines if this range is disjoint from the other range.  adjacent == disjoint

@@ -434,13 +434,20 @@ TEST_P(FASTQIteratorTest, read_omp_mpi)
 #endif
 #endif
 
-// first number is number of kmers (duplicate or not).  second number is file size.
+// first number is number of 35-mers (duplicate or not).  second number is file size.
 INSTANTIATE_TEST_CASE_P(Bliss, FASTQIteratorTest, ::testing::Values(
     TestFileInfo(434, 27580, std::string("/test/data/natural.fastq")),
     TestFileInfo(500, 29250, std::string("/test/data/natural.withN.fastq")),
+    TestFileInfo(182, 939, std::string("/test/data/test.debruijn.small.fastq")),
+    TestFileInfo(26, 134, std::string("/test/data/test.debruijn.tiny.fastq")),
+    TestFileInfo(6618612, 34111308, std::string("/test/data/test.fastq")),
     TestFileInfo(3640, 18761, std::string("/test/data/test.medium.fastq")),
     TestFileInfo(182, 939, std::string("/test/data/test.small.fastq")),
-    TestFileInfo(6618612, 34111308, std::string("/test/data/test.fastq"))
+    TestFileInfo(16552, 33194, std::string("/test/data/test.unitiq1.fastq")),
+    TestFileInfo(3527, 7144, std::string("/test/data/test.unitiq1.short2.fastq")),
+    TestFileInfo(7367, 14824, std::string("/test/data/test.unitiq1.short.fastq")),
+    TestFileInfo(14603, 29296, std::string("/test/data/test.unitiq2.fastq")),
+    TestFileInfo(31155, 62490, std::string("/test/data/test.unitiqs.fastq"))
 ));
 
 
