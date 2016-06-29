@@ -252,7 +252,11 @@ namespace io
          // no op, other than to use intersect to make sure that the start is valid and within parent, and in memry ranges.
          return RangeType::intersect(searchRange, inMemRange).start;
        }
-
+#ifdef USE_MPI
+       virtual std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm) {
+         return find_first_record(_data, parentRange, inMemRange, searchRange);
+       }
+#endif
 
        virtual typename RangeType::ValueType find_overlap_end(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, typename RangeType::ValueType end, size_t overlap ) {
          return end;
@@ -260,6 +264,15 @@ namespace io
 
        /// reset any parser internal state so the parser can be reused on a different data range.  overridden in subclass.
        virtual void reset() {}
+
+       virtual bool should_parse(const RangeType & range) {
+         return range.size() > 0;
+       }
+#ifdef USE_MPI
+       virtual bool should_parse(const RangeType & range, const mxx::comm & comm) {
+         return range.size() > 0;
+       }
+#endif
 
        /// initializes parser for a particular data range.  overridden in subclass.  returns start of first record.  _data points to first element in mem.
        virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange) {
@@ -959,8 +972,6 @@ namespace io
           // TODO: SEARCH 1 and communicate, then record size does not matter.
 
           // find starting and ending positions.  do not search in overlap region.
-          //if (hint.size() > 0) {
-
             // extend by Overlap
             RangeType start_search_range(hint.start, hint.end + ::std::max(Overlap, 2 * recordSize));
             start_search_range.intersect(this->fileRange);
@@ -978,6 +989,13 @@ namespace io
 
             Parser<decltype(searchData)> temp_parser;  // local parser, since iterator type may not be the same.
 
+#ifdef USE_MPI
+          if (temp_parser.should_parse(hint, this->comm)) {
+#else
+          if (temp_parser.should_parse(hint)) {
+#endif
+
+
             // search for new start and end using find_first_record
             try {
 #ifdef USE_MPI
@@ -987,7 +1005,7 @@ namespace io
                 this->fileRange.end : // did not find a start position.
                 output.start;
 
-              // do reverse exclusive scan
+              // do reverse exclusive scan to move next start to local to as the local end.
               output.end = mxx::exscan(output.end, [](typename RangeType::ValueType const & x,
                   typename RangeType::ValueType const & y){
                 return std::min(x, y);
@@ -1026,7 +1044,7 @@ namespace io
               output.start = hint.end;
               output.end = hint.end;
             }
-
+          }
             // clean up and unmap
             this->unmap(mappedData, loadRange);
 
@@ -1062,6 +1080,7 @@ protected:
           // clean up any previous runs.
           unloadL1Data();
 
+// commented out because parser may be MPI collective, so all processes need to participate.
 //          // don't do anything if range is empty.
 //          if (range.size() == 0) {
 //            L1Block.assign(nullptr, nullptr, range);
@@ -1113,11 +1132,10 @@ protected:
           loaded = true;
 
           // initialize for L2 processing.
-#ifdef USE_MPI
-          L1parser.init_parser(L1Block.begin(), this->fileRange, overlappedRange, blockRange, this->comm);
-#else
-          L1parser.init_parser(L1Block.begin(), this->fileRange, overlappedRange, blockRange);
-#endif
+//        commented out because FASTQ partitions would be aligned so no need to init.  FASTA can reuse the record markers so no need to init.
+//        also, since L2 is not going to be distributed here, no need for MPI version either.
+//          L1parser.init_parser(L1Block.begin(), this->fileRange, overlappedRange, blockRange);
+
           // now configure L2 partitioner to traverse this data.  work with overlappedblocks because the last L2 block still needs to read the whole overlap region.
           configL2Partitioner(L2Partitioner, L2Blocks, overlappedRange, nConsumingThreads, L2BlockSize);
 

@@ -127,7 +127,7 @@ TEST_P(FASTAParserTest, parse_omp)
 
   while (l1.getRange().size() > 0) {
 
-    l1parser.init_parser(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
+    l1parser.init_parser(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());   // this should be okay.  l1 should have file range.
 
     localKmerCount = 0;
 #pragma omp parallel num_threads(nthreads) shared(loader, l1parser) reduction(+:localKmerCount)

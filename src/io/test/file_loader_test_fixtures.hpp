@@ -117,7 +117,16 @@ class FileLoadValueParamTest : public ::testing::TestWithParam<TestFileInfo>
 
       // get file size
       struct stat filestat;
-      stat(fileName.c_str(), &filestat);
+      int result = stat(fileName.c_str(), &filestat);
+
+      if (result == -1) {
+        std::stringstream ss;
+        int myerr = errno;
+        ss << "ERROR in file stat: " << myerr << ": " << strerror(myerr);
+        throw ::std::logic_error(ss.str());
+      }
+
+
       size_t fileSize = static_cast<size_t>(filestat.st_size);
 
       if (p.fileSize != fileSize) printf("filename : %s\n", fileName.c_str());

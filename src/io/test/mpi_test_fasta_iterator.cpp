@@ -273,6 +273,7 @@ TEST_P(FASTAIteratorTest, read_omp)
 
   while (l1.getRange().size() > 0) {
 
+    // this should be okay - l1.getRange should be the file range..
     l1parser.init_parser(l1.begin(), loader.getFileRange(), l1.getRange(), l1.getRange());
 
 

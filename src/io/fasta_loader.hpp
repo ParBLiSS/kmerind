@@ -142,6 +142,13 @@ namespace bliss
           return *this;
         }
 
+        using bliss::io::BaseFileParser<Iterator>::find_overlap_end;
+        using bliss::io::BaseFileParser<Iterator>::reset;
+        using bliss::io::BaseFileParser<Iterator>::init_parser;
+        using bliss::io::BaseFileParser<Iterator>::find_first_record;
+        using bliss::io::BaseFileParser<Iterator>::get_next_record;
+        using bliss::io::BaseFileParser<Iterator>::get_record_size;
+        using bliss::io::BaseFileParser<Iterator>::should_parse;
 
 // use base class definition
 //        /**
@@ -198,6 +205,10 @@ namespace bliss
          */
         virtual size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& comm)
         {
+
+          std::cout << "rank " << comm.rank()<< "   parent " << parentRange << std::endl;
+          std::cout << "rank " << comm.rank()<< "   inmem " << inMemRange << std::endl;
+          std::cout << "rank " << comm.rank()<< "   search " << searchRange << std::endl;
 
           //== range checking
           if(!parentRange.contains(inMemRange)) {
@@ -439,7 +450,7 @@ namespace bliss
             }
             //=====DONE===== NOW SPREAD THE LAST ENTRY FORWARD.  empty range (r) does not participate
             size_t total_sequences = mxx::allreduce(sequences.size(), comm);
-            if (total_sequences == 0) throw std::logic_error("ERROR: no sequences found.  wrong input file type?");
+            if (total_sequences == 0) throw std::logic_error("ERROR: no sequences found distributed.  wrong input file type?");
 
             //if (in_comm != MPI_COMM_NULL) MPI_Comm_free(&in_comm);
 
@@ -575,7 +586,9 @@ namespace bliss
 
             //=====DONE===== CONVERT FROM LINE START POSITION TO RANGE FOR HEADERS
 
-              if (sequences.size() == 0) throw std::logic_error("ERROR: no sequences found.  wrong input file type?");
+              if (sequences.size() == 0) {
+                BL_WARNING("WARNING: no sequences found serially. either incorrect file type, or a part of file that does not contain sequence start was read.");
+              }
 
 //            for (auto x : sequences)
 //              BL_DEBUGF("R 0 header range [%lu, %lu, %lu), id %lu\n", std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
@@ -757,15 +770,21 @@ namespace bliss
 
          return std::make_pair(record_size, seq_data_len);
        }
+
+
+       virtual bool should_parse(const RangeType & range, const mxx::comm & comm) {
+         return mxx::any_of(range.size() > 0, comm);
+       }
+
 #endif
     };
 
 
 
     /**
-     * @class FASTQLoader
+     * @class FASTALoader
      * @brief FileLoader subclass specialized for the FASTQ file format, uses CRTP to enforce interface consistency.
-     * @details   FASTQLoader understands the FASTQ file format, and enforces that the
+     * @details   FASTALoader understands the FASTQ file format, and enforces that the
      *            L1 and L2 partition boundaries occur at FASTQ sequence record boundaries.
      *
      *            FASTQ files allow storage of per-base quality score and is typically used

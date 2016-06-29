@@ -133,15 +133,15 @@ namespace bliss
      *
      * @note  all sequences now have the quality score iterators.
      * @note  NOT THREAD SAFE.
-     *
+     * @note  DEFAULT DOES NOT SUPPORT BLOCK PARTITION.
      * @tparam Iterator   The underlying iterator to be traversed to generate a Sequence
      */
     template <typename Iterator>
-    class FASTQParser : public bliss::io::BaseFileParser<Iterator >
+    class SequentialFASTQParser : public bliss::io::BaseFileParser<Iterator >
     {
         // let another BaseFileParser with some other iterator type be a friend so we can convert.
         template <typename Iterator2>
-        friend class FASTQParser;
+        friend class SequentialFASTQParser;
 
       protected:
 
@@ -151,22 +151,23 @@ namespace bliss
 
         /// default constructor.
 
-        FASTQParser() : bliss::io::BaseFileParser<Iterator>() {};
+        SequentialFASTQParser() : bliss::io::BaseFileParser<Iterator>() {};
 
         /// default destructor
-        virtual ~FASTQParser() {};
+        virtual ~SequentialFASTQParser() {};
 
         /// converting constructor.
         template <typename Iterator2>
-        FASTQParser(FASTQParser<Iterator2> const & other) : FASTQParser() {}
+        SequentialFASTQParser(SequentialFASTQParser<Iterator2> const & other) : SequentialFASTQParser() {}
         /// converting assignment operator that can transform the base iterator type.
         template <typename Iterator2>
-        FASTQParser<Iterator>& operator=(FASTQParser<Iterator2> const & other) { return *this; }
+        SequentialFASTQParser<Iterator>& operator=(SequentialFASTQParser<Iterator2> const & other) { return *this; }
 
         // inherited reset and init_parser and find_overlap_end
         using bliss::io::BaseFileParser<Iterator>::find_overlap_end;
         using bliss::io::BaseFileParser<Iterator>::reset;
         using bliss::io::BaseFileParser<Iterator>::init_parser;
+        using bliss::io::BaseFileParser<Iterator>::should_parse;
 
 
       protected:
@@ -188,247 +189,6 @@ namespace bliss
 
 
       public:
-
-#ifdef USE_MPI
-       /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.   _data points to first element in mem.
-       virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& _comm)
-       {
-         return this->find_first_record(_data, parentRange, inMemRange, searchRange, _comm);
-       };
-#endif
-
-       /**
-        * @brief given a block, find the starting point that best aligns with the first sequence object (here, the first @)
-        * @details
-        *     search for first occurrence of @ from an arbitrary offset in data, thus getting the position of the beginning of a FASTQ sequence record within the block.
-        *
-        *        A FASTQ sequence record has the following general structure (expressed as regular expression.  not
-        *          rigorously expressed)
-        *
-        *          [@][^\n]*\n[ATCGN]+\n[+].*\n[\^n]*\n
-        *
-        *        line 1 has "@" followed by the name of the sequence, which can contain any ascii character except newline
-        *        line 2 is the biological sequence, with a constrained alphabet
-        *        line 3 has "+" followed by either newline or by some other string, potentially the name of the sequence
-        *        line 4 has the quality scores, encoded as ascii
-        *
-        *        because line 4 may start with "@" or "+", there can be ambiguity in identifying a line as the true start of a record.
-        *        further, because lines 1, 3, and 4 may contain "@" and "+", there can be ambiguity when a L1 or L2 partitioning
-        *          produces a DataBlock with first character in the middle of lines 1, 3, or 4.  This method implements a simple
-        *          algorithm to disambiguate these cases by scanning multiple lines, to find the true start of a FASTQ record.
-        *
-        *        Specifically, we are looking for the pairing of a @ line and a + line separated by 1 line
-        *          e.g. .*\n[@][^\n]*\n[ATCGN]+\n[+].*\n.*
-        *
-        *        this combination can occur at 2 places only: at beginning of read/sequence, or if read name contains @ and the L1 or L2 DataBlock happens to start there.
-        *
-        *        we can also look for + followed by @ in 2 lines.
-        *          e.g. [ATCGN]*\n[+][^\n]*\n[^\n]+\n[@].*\n.*
-        *
-        *        this combination can also occur at 2 places only.
-        *
-        *    using just 1 of these patterns would require us to search through up to 7 lines.
-        *      pattern 1 works better if partition starts on lines 3 or 4, and pattern 2 works better if partition starts on 1 or 2.
-        *    using both patterns, we can just look at 4 lines.
-        *
-        *
-        * Decoding logic:
-        * standard pattern is @x*
-        *                     l*
-        *                     +x*
-        *                     q*
-        *                     @x*
-        *                     l*
-        *                     +x*
-        *                     q*
-        *                     ....
-        *                  x could be @, +, or other char except "\n".
-        *                  l is alphabet, so no @, +, or "\n"
-        *                  q could be @, +, or other char within some ascii range., no "\n"
-        *
-        *
-        *  Algorithm:
-        *          ignore all characters before the first "\n" in the DataBlock
-        *          Read 4 lines starting from the first "\n" found and save the first characters.
-        *            If the DataBlock is the first one in the parent DataBlock/Range,
-        *            then treat the block as if it's prefixed with a "\n"
-        *              e.g. first L1Block in the File's range,
-        *              e.g. first L2Block in the parent L1Block (L1Block are record-aligned by the same process)
-        *          inspect the first char, and look for either @..+ or +..@.
-        *
-        * @note    the range should be large enough so that we would not run into trouble with partition search not finding a starting position.
-        *
-        *
-        * @tparam Iterator   type of iterator for data to traverse.  raw pointer if no L2Buffering, or vector's iterator if buffering.
-        * @param _data       start of iterator.
-        * @param parentRange   the "full" range to which the inMemRange belongs.  used to determine if the target is a "first" block and last block.  has to start and end with valid delimiters (@)
-        * @param inMemRange the portion of the "full" range that's loaded in memory (e.g. in DataBlock).  does NOT have to start and end with @
-        * @param searchRange the range in which to search for a record.  the start and end position in the file.  does NOT have to start and end with @. should be inside inMemRange
-        * @return            position of the start of next read sequence (@).  if there is no complete sequence within the parentRange, return end of parentRange.
-        * @throws            if no start is found, and search range does not cover the parent's end, then the search range does not include a complete record, throws IOException
-        */
-#ifdef USE_MPI
-       virtual std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange,
-                                             const RangeType &inMemRange, const RangeType &searchRange,
-                                             mxx::comm const & comm)
-       {
-
-         typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
-
-         //== range checking
-         if(!parentRange.contains(inMemRange)) {
-           ::std::cout << "parent: " << parentRange << " , in mem: " << inMemRange << ::std::endl;
-           throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
-         }
-
-
-         // ensure non-overlapping search ranges.
-         // left shift to query for the previous character.
-         size_t next_start = searchRange.size() > 0 ? searchRange.start : parentRange.end;
-         next_start = ::mxx::exscan(next_start, [](size_t const & x, size_t const & y){
-           return std::min(x, y);
-         }, comm.reverse());
-         if (comm.rank() == (comm.size() - 1)) // last rank
-           next_start = searchRange.end;
-
-         RangeType t;
-         t.start = std::min(next_start, searchRange.start);
-         t.end = std::min(next_start, searchRange.end);
-         t = RangeType::intersect(t, inMemRange); // intersection to bound target to between parent's ends.
-
-
-         std::cout << "rank " << comm.rank()<< "   parent " << parentRange << std::endl;
-         std::cout << "rank " << comm.rank()<< "   inmem " << inMemRange << std::endl;
-         std::cout << "rank " << comm.rank()<< "   search " << searchRange << std::endl;
-         std::cout << "rank " << comm.rank()<< "   intersect " << t << std::endl;
-
-
-         // set iterator for the data
-         Iterator iter(_data);
-         Iterator end(_data);
-         std::advance(iter, t.start - inMemRange.start);
-         std::advance(end, t.end - inMemRange.start);
-
-//         if (inMemRange.size() > 0) std::cout << "rank " << comm.rank() << " orig " << *(end-1) << " |";
-
-         // block partitioned so all the smaller ones are on higher rank
-
-         int target_rank = t.size() > 0 ? comm.rank() : comm.size();
-         target_rank = ::mxx::exscan(target_rank, [](size_t const & x, size_t const & y){
-           return std::min(x, y);
-         }, comm.reverse());
-         if (comm.rank() == (comm.size() - 1)) // last rank
-           target_rank = comm.rank();
-
-         std::vector<size_t> send_counts(comm.size(), 0);
-
-         // move the prev character.
-         std::vector<ValueType> tmps;
-         if (((inMemRange.start < next_start) && (inMemRange.end >= next_start)))
-           tmps.push_back(*(_data + (next_start - 1 - inMemRange.start)));
-         if (comm.rank() != (comm.size() - 1)) send_counts[target_rank] = 1;
-         std::vector<ValueType> recv = ::mxx::all2allv(tmps, send_counts, comm);
-
-         ValueType tmp = (tmps.size() > 0) ? tmps.front() : 0;
-         //== if rank zero, and t.start is after inMemRange, then get that character.
-         if (comm.rank() == 0) {
-           tmp = (t.start > inMemRange.start) ? *(iter - 1) : '\n';   // if there are characters before t.start, use it.  else assume EOL
-         }
-
-
-         //== set up the iterator for later
-         std::size_t i = t.start;
-
-         // storage.
-         std::vector<ValueType> first;
-         std::vector<size_t> offsets;
-
-         if ((tmp != ::bliss::io::BaseFileParser<Iterator>::eol) && (tmp != ::bliss::io::BaseFileParser<Iterator>::cr)) {  // previous char is not newline,
-           iter = this->findEOL(iter, end, i);
-         }
-
-         // lines 1 through 4.  reorganized so that O3 optimization by gcc 5.2.1 does not skip over the whole loop (compiler bug?)
-         for (int j = 0; j < 4; ++j) {
-           iter = this->findNonEOL(iter, end, i);
-           if (i >= t.end) break;
-
-
-           offsets.push_back(i);
-           first.push_back(*iter);
-           iter = this->findEOL(iter, end, i);
-         }
-
-         std::cout << " rank " << comm.rank() << " raw lines = " << offsets.size() << "|";
-         for (auto ii : first) {
-           std::cout << ii << ",";
-         }
-         std::cout << std::endl;
-
-
-         // find @ if present.
-         size_t at_cnt = std::count(first.begin(), first.end(), '@');
-
-//#ifdef USE_MPI
-         // set rank to send to.  then use exscan to propagate it to adjacent ranks without @
-         target_rank = (at_cnt == 0) ? 0 : comm.rank();
-         target_rank = ::mxx::exscan(target_rank, [](int const & x, int const & y){
-           return ::std::max(x, y);
-         }, comm);
-
-         // send the lines to target rank.
-         send_counts.clear();
-         send_counts.resize(comm.size(), 0);
-         recv.clear();
-         if (comm.rank() > 0) send_counts[target_rank] = first.size();
-         recv = ::mxx::all2allv(first, send_counts, comm);
-
-         // concatenate recv to first.
-         first.insert(first.end(), recv.begin(), recv.end());
-//#endif
-
-         // now that what needs to be sent has been sent, can stop if no more work is needed.
-         if (at_cnt == 0) return searchRange.end;  // this has to happen AFTER comm...
-
-
-
-         std::cout << " rank " << comm.rank() << " lines = " << offsets.size() << "|";
-         for (auto ii : first) {
-           std::cout << ii << ",";
-         }
-         std::cout << std::endl;
-
-         //=== determine the position of a read by looking for @...+ or +...@
-         // at this point, first[0] is pointing to first char after first newline, or in the case of first block, the first char.
-         // everything in "first" array are first characters right after a newline.
-         if (first[0] == '@' && first[2] == '+')  return (offsets.size() > 0) ? offsets[0] : searchRange.end;
-         if (first[1] == '@' && first[3] == '+')  return (offsets.size() > 1) ? offsets[1] : searchRange.end;
-         if (first[0] == '+' && first[2] == '@')  return (offsets.size() > 2) ? offsets[2] : searchRange.end;
-         if (first[1] == '+' && first[3] == '@')  return (offsets.size() > 3) ? offsets[3] : searchRange.end;
-
-         //=== If nothing was found, because we are at the end of the parentRange, then return the end.
-         if (t.end == parentRange.end) {
-           return t.end;
-         }
-
-         //=== Finally, if nothing was found, and we are not at the parentRange's end, then
-         // the search range does not include a complete record.  this is an error and
-         // exception is thrown.
-         std::stringstream ss;
-         ss << "ERROR in MPI file processing: file segment \n" << "\t\t"
-             << t << "\n\t\t(original " << searchRange << ")\n"
-             << "\t\t(actual search " << t << ")\n"
-             << "\t\tdoes not contain valid FASTQ markers.\n String:"
-             << "first chars are " << first[0] << "," << first[1] << "," << first[2] << "," << first[3];
-         std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
-         Iterator s(_data);
-         std::advance(s, (t.start - inMemRange.start));
-         Iterator e(_data);
-         std::advance(e, (t.end - inMemRange.start));
-         std::copy(s, e, oit);
-
-         throw ::std::logic_error(ss.str());
-         }
-#endif
 
         /**
          * @brief given a block, find the starting point that best aligns with the first sequence object (here, the first @)
@@ -763,8 +523,319 @@ namespace bliss
           return std::make_pair(record_size, seq_data_len);
         }
 
+    };
+
+    /**
+     * @class bliss::io::FASTQParser
+     * @brief Functoid encapsulating increment functionality traversing data in an iterator record by record, by parsing and searching for record boundaries.
+     * @details   The purpose of this class is to abstract the increment operations in
+     *    an iterator that transforms a block of data into a collection of FASTQ records. Using this class allows us to reuse
+     *    an sequence parsing iterator, but potentially for different sequence record formats.
+     *
+     *    This class assumes that the iterator at start is pointing to the beginning of a FASTQ record already.
+     *    Increment is done by walking through the data and recording the positions of the start and end of each
+     *    of the 4 lines in a FASTQ record.  Because we are always searching to the end of a record (by reading 4 lines always),
+     *    successive calls to increment always are aligned correctly with record boundaries
+     *
+     * @note  all sequences now have the quality score iterators.
+     * @note  NOT THREAD SAFE.
+     *
+     * @tparam Iterator   The underlying iterator to be traversed to generate a Sequence
+     */
+    template <typename Iterator>
+    class FASTQParser : public bliss::io::SequentialFASTQParser<Iterator >
+    {
+        // let another BaseFileParser with some other iterator type be a friend so we can convert.
+        template <typename Iterator2>
+        friend class FASTQParser;
+
+      protected:
+
+      public:
+        using SequenceType = bliss::io::FASTQSequence<Iterator>;  // redefined SequenceType
+        using SequenceIdType = typename SequenceType::IdType;  // redefined SequenceType
+
+        /// default constructor.
+
+        FASTQParser() : bliss::io::SequentialFASTQParser<Iterator>() {};
+
+        /// default destructor
+        virtual ~FASTQParser() {};
+
+        /// converting constructor.
+        template <typename Iterator2>
+        FASTQParser(FASTQParser<Iterator2> const & other) : FASTQParser() {}
+        /// converting assignment operator that can transform the base iterator type.
+        template <typename Iterator2>
+        FASTQParser<Iterator>& operator=(FASTQParser<Iterator2> const & other) { return *this; }
+
+        // inherited reset and init_parser and find_overlap_end
+        using bliss::io::SequentialFASTQParser<Iterator>::find_overlap_end;
+        using bliss::io::SequentialFASTQParser<Iterator>::reset;
+        using bliss::io::SequentialFASTQParser<Iterator>::init_parser;
+        using bliss::io::SequentialFASTQParser<Iterator>::find_first_record;
+        using bliss::io::SequentialFASTQParser<Iterator>::get_next_record;
+        using bliss::io::SequentialFASTQParser<Iterator>::get_record_size;
+        using bliss::io::SequentialFASTQParser<Iterator>::isQualityIteratorAtEnd;
+        using bliss::io::SequentialFASTQParser<Iterator>::should_parse;
+
+
+      protected:
+
+        /**
+         * @typedef RangeType
+         * @brief   range object types
+         */
+        using RangeType = bliss::partition::range<size_t>;
+
+
+      public:
 
 #ifdef USE_MPI
+       /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.   _data points to first element in mem.
+       virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& _comm)
+       {
+         return this->find_first_record(_data, parentRange, inMemRange, searchRange, _comm);
+       };
+#endif
+
+       /**
+        * @brief given a block, find the starting point that best aligns with the first sequence object (here, the first @)
+        * @details
+        *     search for first occurrence of @ from an arbitrary offset in data, thus getting the position of the beginning of a FASTQ sequence record within the block.
+        *
+        *        A FASTQ sequence record has the following general structure (expressed as regular expression.  not
+        *          rigorously expressed)
+        *
+        *          [@][^\n]*\n[ATCGN]+\n[+].*\n[\^n]*\n
+        *
+        *        line 1 has "@" followed by the name of the sequence, which can contain any ascii character except newline
+        *        line 2 is the biological sequence, with a constrained alphabet
+        *        line 3 has "+" followed by either newline or by some other string, potentially the name of the sequence
+        *        line 4 has the quality scores, encoded as ascii
+        *
+        *        because line 4 may start with "@" or "+", there can be ambiguity in identifying a line as the true start of a record.
+        *        further, because lines 1, 3, and 4 may contain "@" and "+", there can be ambiguity when a L1 or L2 partitioning
+        *          produces a DataBlock with first character in the middle of lines 1, 3, or 4.  This method implements a simple
+        *          algorithm to disambiguate these cases by scanning multiple lines, to find the true start of a FASTQ record.
+        *
+        *        Specifically, we are looking for the pairing of a @ line and a + line separated by 1 line
+        *          e.g. .*\n[@][^\n]*\n[ATCGN]+\n[+].*\n.*
+        *
+        *        this combination can occur at 2 places only: at beginning of read/sequence, or if read name contains @ and the L1 or L2 DataBlock happens to start there.
+        *
+        *        we can also look for + followed by @ in 2 lines.
+        *          e.g. [ATCGN]*\n[+][^\n]*\n[^\n]+\n[@].*\n.*
+        *
+        *        this combination can also occur at 2 places only.
+        *
+        *    using just 1 of these patterns would require us to search through up to 7 lines.
+        *      pattern 1 works better if partition starts on lines 3 or 4, and pattern 2 works better if partition starts on 1 or 2.
+        *    using both patterns, we can just look at 4 lines.
+        *
+        *
+        * Decoding logic:
+        * standard pattern is @x*
+        *                     l*
+        *                     +x*
+        *                     q*
+        *                     @x*
+        *                     l*
+        *                     +x*
+        *                     q*
+        *                     ....
+        *                  x could be @, +, or other char except "\n".
+        *                  l is alphabet, so no @, +, or "\n"
+        *                  q could be @, +, or other char within some ascii range., no "\n"
+        *
+        *
+        *  Algorithm:
+        *          ignore all characters before the first "\n" in the DataBlock
+        *          Read 4 lines starting from the first "\n" found and save the first characters.
+        *            If the DataBlock is the first one in the parent DataBlock/Range,
+        *            then treat the block as if it's prefixed with a "\n"
+        *              e.g. first L1Block in the File's range,
+        *              e.g. first L2Block in the parent L1Block (L1Block are record-aligned by the same process)
+        *          inspect the first char, and look for either @..+ or +..@.
+        *
+        * @note    the range should be large enough so that we would not run into trouble with partition search not finding a starting position.
+        *
+        *
+        * @tparam Iterator   type of iterator for data to traverse.  raw pointer if no L2Buffering, or vector's iterator if buffering.
+        * @param _data       start of iterator.
+        * @param parentRange   the "full" range to which the inMemRange belongs.  used to determine if the target is a "first" block and last block.  has to start and end with valid delimiters (@)
+        * @param inMemRange the portion of the "full" range that's loaded in memory (e.g. in DataBlock).  does NOT have to start and end with @
+        * @param searchRange the range in which to search for a record.  the start and end position in the file.  does NOT have to start and end with @. should be inside inMemRange
+        * @return            position of the start of next read sequence (@).  if there is no complete sequence within the parentRange, return end of parentRange.
+        * @throws            if no start is found, and search range does not cover the parent's end, then the search range does not include a complete record, throws IOException
+        */
+#ifdef USE_MPI
+       virtual std::size_t find_first_record(const Iterator &_data, const RangeType &parentRange,
+                                             const RangeType &inMemRange, const RangeType &searchRange,
+                                             mxx::comm const & comm)
+       {
+         // require non-overlapping search ranges.  only works with block decomposition
+         // NOTE: do not rely on user supplying non-overlapping search ranges.
+
+
+         typedef typename std::iterator_traits<Iterator>::value_type  ValueType;
+
+         //== range checking
+         if(!parentRange.contains(inMemRange)) {
+           ::std::cout << "parent: " << parentRange << " , in mem: " << inMemRange << ::std::endl;
+           throw std::invalid_argument("ERROR: Parent Range does not contain inMemRange");
+         }
+
+
+         // ensure non-overlapping search ranges.
+         // left shift to query for the previous character.
+         size_t next_start = searchRange.size() > 0 ? searchRange.start : parentRange.end;
+         next_start = ::mxx::exscan(next_start, [](size_t const & x, size_t const & y){
+           return std::min(x, y);
+         }, comm.reverse());
+         if (comm.rank() == (comm.size() - 1)) // last rank
+           next_start = searchRange.end;
+
+         RangeType t;
+         t.start = std::min(next_start, searchRange.start);
+         t.end = std::min(next_start, searchRange.end);
+         t = RangeType::intersect(t, inMemRange); // intersection to bound target to between parent's ends.
+
+
+         std::cout << "rank " << comm.rank()<< "   parent " << parentRange << std::endl;
+         std::cout << "rank " << comm.rank()<< "   inmem " << inMemRange << std::endl;
+         std::cout << "rank " << comm.rank()<< "   search " << searchRange << std::endl;
+         std::cout << "rank " << comm.rank()<< "   intersect " << t << std::endl;
+
+
+         // set iterator for the data
+         Iterator iter(_data);
+         Iterator end(_data);
+         std::advance(iter, t.start - inMemRange.start);
+         std::advance(end, t.end - inMemRange.start);
+
+//         if (inMemRange.size() > 0) std::cout << "rank " << comm.rank() << " orig " << *(end-1) << " |";
+
+
+         // get the rank to send the previous char.  (from low to high rank, possibly skipping ranks if there is no data.
+         int target_rank = t.size() > 0 ? comm.rank() : (comm.size() - 1);
+         target_rank = ::mxx::exscan(target_rank, [](size_t const & x, size_t const & y){
+           return std::min(x, y);
+         }, comm.reverse());
+         if (comm.rank() == (comm.size() - 1)) // last rank send to self, but not really.
+           target_rank = (comm.size() - 1);
+
+
+         // move the prev character.
+         std::vector<size_t> send_counts(comm.size(), 0);
+
+         std::vector<ValueType> tmps(1, 0);
+         if (t.size() > 0)  // have something to send, so do it.
+           tmps[0] = *(end - 1);
+         if (comm.rank() < (comm.size() - 1)) send_counts[target_rank] = 1;
+         std::vector<ValueType> recv = ::mxx::all2allv(tmps, send_counts, comm);
+
+         ValueType tmp = (recv.size() > 0) ? recv.front() : 0;
+         //== if rank zero, and t.start is after inMemRange, then get that character.  else assume it's \n
+         if (comm.rank() == 0) {
+           tmp = (t.start > inMemRange.start) ? *(iter - 1) : '\n';   // if there are characters before t.start, use it.  else assume EOL
+         }
+
+
+         //== set up the iterator for later
+         std::size_t i = t.start;
+
+         // storage.
+         std::vector<ValueType> first;
+         std::vector<size_t> offsets;
+
+         if ((tmp != ::bliss::io::BaseFileParser<Iterator>::eol) && (tmp != ::bliss::io::BaseFileParser<Iterator>::cr)) {  // previous char is not newline,
+           iter = this->findEOL(iter, end, i);
+         }
+
+         // lines 1 through 4.  reorganized so that O3 optimization by gcc 5.2.1 does not skip over the whole loop (compiler bug?)
+         for (int j = 0; j < 4; ++j) {
+           iter = this->findNonEOL(iter, end, i);
+           if (i >= t.end) break;
+
+
+           offsets.push_back(i);
+           first.push_back(*iter);
+           iter = this->findEOL(iter, end, i);
+         }
+
+         std::cout << " rank " << comm.rank() << " prev: " << tmp << " raw lines = " << offsets.size() << "|";
+         for (uint8_t j = 0; j < offsets.size(); ++j) {
+           std::cout << offsets[j] << ":" << first[j] << ", ";
+         }
+         std::cout << std::endl;
+
+
+         // find @ if present.
+         size_t at_cnt = std::count(first.begin(), first.end(), '@');
+
+//#ifdef USE_MPI
+         // set rank to send to.  then use exscan to propagate it to adjacent ranks without @
+         target_rank = (at_cnt == 0) ? 0 : comm.rank();
+         target_rank = ::mxx::exscan(target_rank, [](int const & x, int const & y){
+           return ::std::max(x, y);
+         }, comm);
+
+         // send the lines to target rank. (to the left)
+         send_counts.clear();
+         send_counts.resize(comm.size(), 0);
+         recv.clear();
+         if (comm.rank() > 0) send_counts[target_rank] = first.size();
+         recv = ::mxx::all2allv(first, send_counts, comm);
+
+         // concatenate recv to first.
+         first.insert(first.end(), recv.begin(), recv.end());
+//#endif
+
+         // now that what needs to be sent has been sent, can stop if no more work is needed.
+         if (at_cnt == 0) return searchRange.end;  // this has to happen AFTER comm...
+
+
+
+         std::cout << " rank " << comm.rank() << " lines = " << offsets.size() << "|";
+         for (auto ii : first) {
+           std::cout << ii << ",";
+         }
+         std::cout << std::endl;
+
+         //=== determine the position of a read by looking for @...+ or +...@
+         // at this point, first[0] is pointing to first char after first newline, or in the case of first block, the first char.
+         // everything in "first" array are first characters right after a newline.
+         if (first[0] == '@' && first[2] == '+')  return (offsets.size() > 0) ? offsets[0] : searchRange.end;
+         if (first[1] == '@' && first[3] == '+')  return (offsets.size() > 1) ? offsets[1] : searchRange.end;
+         if (first[0] == '+' && first[2] == '@')  return (offsets.size() > 2) ? offsets[2] : searchRange.end;
+         if (first[1] == '+' && first[3] == '@')  return (offsets.size() > 3) ? offsets[3] : searchRange.end;
+
+         //=== If nothing was found, because we are at the end of the parentRange, then return the end.
+         if (t.end == parentRange.end) {
+           return t.end;
+         }
+
+         //=== Finally, if nothing was found, and we are not at the parentRange's end, then
+         // the search range does not include a complete record.  this is an error and
+         // exception is thrown.
+         std::stringstream ss;
+         ss << "ERROR in MPI file processing: file segment \n" << "\t\t"
+             << t << "\n\t\t(original " << searchRange << ")\n"
+             << "\t\t(actual search " << t << ")\n"
+             << "\t\tdoes not contain valid FASTQ markers.\n String:"
+             << "first chars are " << first[0] << "," << first[1] << "," << first[2] << "," << first[3];
+         std::ostream_iterator<typename std::iterator_traits<Iterator>::value_type> oit(ss);
+         Iterator s(_data);
+         std::advance(s, (t.start - inMemRange.start));
+         Iterator e(_data);
+         std::advance(e, (t.end - inMemRange.start));
+         std::copy(s, e, oit);
+
+         throw ::std::logic_error(ss.str());
+         }
+
+
        virtual ::std::pair<size_t, size_t> get_record_size(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &validRange, mxx::comm const & comm, size_t const count) {
 
          if (count == 0) throw std::invalid_argument("ERROR: called FASTQParser get_record_size with count == 0");
@@ -807,9 +878,15 @@ namespace bliss
          return std::make_pair(record_size, seq_data_len);
 
        }
+
+       virtual bool should_parse(const RangeType & range, const mxx::comm & comm) {
+         return mxx::any_of(range.size() > 0, comm);
+       }
+
 #endif
 
     };
+
 
 
 
@@ -851,10 +928,23 @@ namespace bliss
     template<typename T,
         bool L2Buffering = false,
         bool L1Buffering = true,
-        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> >,
-        typename L1PartitionerT = bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >
-    using FASTQLoader = FileLoader<T, 0, FASTQParser, L2Buffering, L1Buffering, L2PartitionerT, L1PartitionerT>;
+        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
+    using DemandDrivenFASTQLoader =
+        FileLoader<T, 0, SequentialFASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >;
 
+    template<typename T,
+        bool L2Buffering = false,
+        bool L1Buffering = true,
+        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
+    using RoundRobinFASTQLoader =
+        FileLoader<T, 0, SequentialFASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::CyclicPartitioner<bliss::partition::range<size_t> > >;
+
+    template<typename T,
+        bool L2Buffering = false,
+        bool L1Buffering = true,
+        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
+    using FASTQLoader =
+        FileLoader<T, 0, FASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >;
 
   } /* namespace io */
 } /* namespace bliss */
