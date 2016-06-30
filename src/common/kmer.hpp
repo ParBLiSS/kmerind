@@ -1500,15 +1500,15 @@ namespace bliss
 
   };
 
-
   /**
-   * @brief << operator to write out DataBlock object's actual data.
-   * @tparam Iterator   Source data iterator type.
-   * @tparam Range      Range data type
-   * @tparam Container  container type for buffer.  defaults to std::vector.
-   * @param[in/out] ost   output stream to which the content is directed.
-   * @param[in]     db    BufferedDataBlock object to write out
-   * @return              output stream object
+   * @brief print kmer to output stream
+   *
+   * @tparam KMER_SIZE  number of characters in kmer
+   * @tparam ALPHABET	alphabet used for kmers
+   * @tparam WORD_TYPE	size of each word.
+   * @param ost 	output stream object
+   * @param kmer	a kmer
+   * @return 		reference to output stream object
    */
   template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE=WordType>
   std::ostream& operator<<(std::ostream& ost, const Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> & kmer)

@@ -71,7 +71,7 @@ namespace bliss
       /**
        * @brief << operator to write out SequenceId
        * @param[in/out] ost   output stream to which the content is directed.
-       * @param[in]     db    BufferedDataBlock object to write out
+       * @param[in]     seq   Sequence object to write out
        * @return              output stream object
        */
       friend std::ostream& operator<<(std::ostream& ost, const FASTQSequence & seq)
@@ -890,61 +890,61 @@ namespace bliss
 
 
 
-    /**
-     * @class FASTQLoader
-     * @brief FileLoader subclass specialized for the FASTQ file format, uses CRTP to enforce interface consistency.
-     * @details   FASTQLoader understands the FASTQ file format, and enforces that the
-     *            L1 and L2 partition boundaries occur at FASTQ sequence record boundaries.
-     *
-     *            FASTQ files allow storage of per-base quality score and is typically used
-     *              to store a collection of short sequences.
-     *            Long sequences (such as complete genome) can be found in FASTQ formatted files
-     *              these CAN be read using standard FileLoader, provided an appropriate overlap
-     *              is specified (e.g. for kmer reading, overlap should be k-1).
-     *
-     *          for reads, expected lengths are maybe up to 1K in length, and files contain >> 1 seq
-     *
-     *          Majority of the interface is inherited from FileLoader.
-     *          This class modifies the behaviors of GetNextL1Block and getNextL2Block,
-     *            as described in FileLoader's "Advanced Usage".  Specifically, the range is modified
-     *            for each block by calling "find_first_record" to align the start and end to FASTQ sequence
-     *            record boundaries.
-     *
-     * @note    Processes 1 file at a time.  For paired end reads, a separate subclass is appropriate.
-     *          Sequences are identified by the following set of attributes:
-     *
-     *             file id.          (via filename to id map)
-     *             read id in file   (e.g. using the offset at whcih read occurs in the file as id)
-     *             position in read  (useful for kmer)
-     *
-     *          using the offset as id allows us to avoid d assignment via prefix sum.
-     *
-     * @tparam  T                 type of each element read from file
-     * @tparam  L1Buffering       bool indicating if L1 partition blocks should be buffered.  default to false
-     * @tparam  L2Buffering       bool indicating if L2 partition blocks should be buffered.  default to true (to avoid contention between threads)
-     * @tparam  L1PartitionerT    Type of the Level 1 Partitioner to generate the range of the file to load from disk
-     * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
-     */
-    template<typename T,
-        bool L2Buffering = false,
-        bool L1Buffering = true,
-        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
-    using DemandDrivenFASTQLoader =
-        FileLoader<T, 0, SequentialFASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >;
-
-    template<typename T,
-        bool L2Buffering = false,
-        bool L1Buffering = true,
-        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
-    using RoundRobinFASTQLoader =
-        FileLoader<T, 0, SequentialFASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::CyclicPartitioner<bliss::partition::range<size_t> > >;
-
-    template<typename T,
-        bool L2Buffering = false,
-        bool L1Buffering = true,
-        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
-    using FASTQLoader =
-        FileLoader<T, 0, FASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >;
+//    /**
+//     * @class FASTQLoader
+//     * @brief FileLoader subclass specialized for the FASTQ file format, uses CRTP to enforce interface consistency.
+//     * @details   FASTQLoader understands the FASTQ file format, and enforces that the
+//     *            L1 and L2 partition boundaries occur at FASTQ sequence record boundaries.
+//     *
+//     *            FASTQ files allow storage of per-base quality score and is typically used
+//     *              to store a collection of short sequences.
+//     *            Long sequences (such as complete genome) can be found in FASTQ formatted files
+//     *              these CAN be read using standard FileLoader, provided an appropriate overlap
+//     *              is specified (e.g. for kmer reading, overlap should be k-1).
+//     *
+//     *          for reads, expected lengths are maybe up to 1K in length, and files contain >> 1 seq
+//     *
+//     *          Majority of the interface is inherited from FileLoader.
+//     *          This class modifies the behaviors of GetNextL1Block and getNextL2Block,
+//     *            as described in FileLoader's "Advanced Usage".  Specifically, the range is modified
+//     *            for each block by calling "find_first_record" to align the start and end to FASTQ sequence
+//     *            record boundaries.
+//     *
+//     * @note    Processes 1 file at a time.  For paired end reads, a separate subclass is appropriate.
+//     *          Sequences are identified by the following set of attributes:
+//     *
+//     *             file id.          (via filename to id map)
+//     *             read id in file   (e.g. using the offset at whcih read occurs in the file as id)
+//     *             position in read  (useful for kmer)
+//     *
+//     *          using the offset as id allows us to avoid d assignment via prefix sum.
+//     *
+//     * @tparam  T                 type of each element read from file
+//     * @tparam  L1Buffering       bool indicating if L1 partition blocks should be buffered.  default to false
+//     * @tparam  L2Buffering       bool indicating if L2 partition blocks should be buffered.  default to true (to avoid contention between threads)
+//     * @tparam  L1PartitionerT    Type of the Level 1 Partitioner to generate the range of the file to load from disk
+//     * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
+//     */
+//    template<typename T,
+//        bool L2Buffering = false,
+//        bool L1Buffering = true,
+//        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
+//    using DemandDrivenFASTQLoader =
+//        FileLoader<T, 0, SequentialFASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >;
+//
+//    template<typename T,
+//        bool L2Buffering = false,
+//        bool L1Buffering = true,
+//        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
+//    using RoundRobinFASTQLoader =
+//        FileLoader<T, 0, SequentialFASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::CyclicPartitioner<bliss::partition::range<size_t> > >;
+//
+//    template<typename T,
+//        bool L2Buffering = false,
+//        bool L1Buffering = true,
+//        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
+//    using FASTQLoader =
+//        FileLoader<T, 0, FASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >;
 
   } /* namespace io */
 } /* namespace bliss */

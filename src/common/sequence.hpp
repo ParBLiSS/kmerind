@@ -68,7 +68,7 @@ namespace bliss
         /**
          * @brief << operator to write out SequenceId
          * @param[in/out] ost   output stream to which the content is directed.
-         * @param[in]     db    BufferedDataBlock object to write out
+         * @param[in]     seq_id    sequence id object to write out
          * @return              output stream object
          */
         friend std::ostream& operator<<(std::ostream& ost, const SequenceId & seq_id)
@@ -134,7 +134,7 @@ namespace bliss
         /**
          * @brief << operator to write out SequenceId
          * @param[in/out] ost   output stream to which the content is directed.
-         * @param[in]     db    BufferedDataBlock object to write out
+         * @param[in]     seq_id    sequence id object to write out
          * @return              output stream object
          */
         friend std::ostream& operator<<(std::ostream& ost, const ShortSequenceKmerId & seq_id)
@@ -228,7 +228,7 @@ namespace bliss
         /**
          * @brief << operator to write out SequenceId
          * @param[in/out] ost   output stream to which the content is directed.
-         * @param[in]     db    BufferedDataBlock object to write out
+         * @param[in]     seq_id    sequence id object to write out
          * @return              output stream object
          */
         friend std::ostream& operator<<(std::ostream& ost, const LongSequenceKmerId & seq_id)
@@ -338,7 +338,7 @@ namespace bliss
         /**
          * @brief << operator to write out SequenceId
          * @param[in/out] ost   output stream to which the content is directed.
-         * @param[in]     db    BufferedDataBlock object to write out
+         * @param[in]     seq_id    sequence id object to write out
          * @return              output stream object
          */
         friend std::ostream& operator<<(std::ostream& ost, const Sequence & seq)

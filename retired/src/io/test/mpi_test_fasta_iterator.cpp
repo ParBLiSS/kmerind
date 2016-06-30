@@ -38,7 +38,6 @@
 #include "io/file_loader.hpp"
 #include "common/kmer.hpp"
 #include "common/alphabets.hpp"
-//#include "io/fasta_iterator.hpp"
 #include "io/mxx_support.hpp"
 #include "partition/partitioner.hpp"
 #include "partition/range.hpp"

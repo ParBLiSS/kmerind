@@ -57,7 +57,7 @@ protected:
 
 	template <typename file_loader>
 	void parse_seq(file_loader & fobj ) {
-		  typedef typename FileLoaderType::RangeType RangeType;
+		  using RangeType = ::bliss::partition::range<size_t>;
 
 		  // get fileName
 
@@ -113,7 +113,7 @@ protected:
 
 	template <typename file_loader>
 	void parse_mpi(file_loader & fobj, MPI_Comm comm) {
-		  typedef typename FileLoaderType::RangeType RangeType;
+		  using RangeType = ::bliss::partition::range<size_t>;
 
 		  // get this->fileName
 
