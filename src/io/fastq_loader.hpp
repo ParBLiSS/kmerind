@@ -591,6 +591,12 @@ namespace bliss
 
       public:
 
+        virtual typename RangeType::ValueType find_overlap_end(const Iterator &_data,
+     		   const RangeType &parentRange, const RangeType &inMemRange, typename RangeType::ValueType end, size_t overlap ) {
+          return end;
+        }
+
+
 #ifdef USE_MPI
        /// initializes the parser.  only useful for FASTA parser for now.  Assumes searchRange do NOT overlap between processes.   _data points to first element in mem.
        virtual std::size_t init_parser(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &searchRange, const mxx::comm& _comm)
@@ -702,10 +708,10 @@ namespace bliss
          t = RangeType::intersect(t, inMemRange); // intersection to bound target to between parent's ends.
 
 
-         std::cout << "rank " << comm.rank()<< "   parent " << parentRange << std::endl;
-         std::cout << "rank " << comm.rank()<< "   inmem " << inMemRange << std::endl;
-         std::cout << "rank " << comm.rank()<< "   search " << searchRange << std::endl;
-         std::cout << "rank " << comm.rank()<< "   intersect " << t << std::endl;
+//         std::cout << "rank " << comm.rank()<< "   parent " << parentRange << std::endl;
+//         std::cout << "rank " << comm.rank()<< "   inmem " << inMemRange << std::endl;
+//         std::cout << "rank " << comm.rank()<< "   search " << searchRange << std::endl;
+//         std::cout << "rank " << comm.rank()<< "   intersect " << t << std::endl;
 
 
          // set iterator for the data
@@ -764,11 +770,11 @@ namespace bliss
            iter = this->findEOL(iter, end, i);
          }
 
-         std::cout << " rank " << comm.rank() << " prev: " << tmp << " raw lines = " << offsets.size() << "|";
-         for (uint8_t j = 0; j < offsets.size(); ++j) {
-           std::cout << offsets[j] << ":" << first[j] << ", ";
-         }
-         std::cout << std::endl;
+//         std::cout << " rank " << comm.rank() << " prev: " << tmp << " raw lines = " << offsets.size() << "|";
+//         for (uint8_t j = 0; j < offsets.size(); ++j) {
+//           std::cout << offsets[j] << ":" << first[j] << ", ";
+//         }
+//         std::cout << std::endl;
 
 
          // find @ if present.
@@ -797,11 +803,11 @@ namespace bliss
 
 
 
-         std::cout << " rank " << comm.rank() << " lines = " << offsets.size() << "|";
-         for (auto ii : first) {
-           std::cout << ii << ",";
-         }
-         std::cout << std::endl;
+//         std::cout << " rank " << comm.rank() << " lines = " << offsets.size() << "|";
+//         for (auto ii : first) {
+//           std::cout << ii << ",";
+//         }
+//         std::cout << std::endl;
 
          //=== determine the position of a read by looking for @...+ or +...@
          // at this point, first[0] is pointing to first char after first newline, or in the case of first block, the first char.

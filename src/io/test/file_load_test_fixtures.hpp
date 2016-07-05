@@ -35,24 +35,22 @@
 #include <cstdint> // for uint64_t, etc.
 #include <string>
 
-#include "io/file_loader.hpp"
-
 #ifdef USE_MPI
-#include "mpi.h"
+#include "mxx/env.hpp"
 #include "io/mxx_support.hpp"
 #include <mxx/collective.hpp>
 #include <mxx/big_collective.hpp>
 #endif
 
-template <typename
 
 struct TestFileInfo {
-    size_t elemCount;
+    size_t seqCount;
+    size_t kmerCount;
     size_t fileSize;
     std::string filename;
 
-    TestFileInfo(size_t const & _elem_count, size_t const & _file_size, std::string const & _file_name) :
-      elemCount(_elem_count), fileSize(_file_size), filename(_file_name) {};
+    TestFileInfo(size_t const & _elem_count, size_t const& _kmer_count, size_t const & _file_size, std::string const & _file_name) :
+      seqCount(_elem_count), kmerCount(_kmer_count), fileSize(_file_size), filename(_file_name) {};
 };
 
 
@@ -63,7 +61,7 @@ bool equal(const Iter1 &i1, const Iter2 &i2, size_t len, bool print = false) {
 
   for (size_t i = 0; i < len; ++i, ++ii1, ++ii2) {
     if (*ii1 != *ii2) {
-      if (print) std::cout << i << " " << *ii1 << "!=" << *ii2 << std::endl;
+      if (print) std::cout << i << ": \"" << *ii1 << "\"!=\"" << *ii2 << "\"" << std::endl;
       return false;
     }
   }
@@ -86,8 +84,19 @@ class FileLoadTypeParamTest : public ::testing::Test
     virtual void readFilePOSIX(const std::string &fileName, const size_t offset,
                               const size_t length, ValueType* result)
     {
+//    	std::cout << "open " << fileName << " offset " << offset << " length " << length << " address " << static_cast<void*>(result) << std::endl;
+
       FILE *fp = fopen(fileName.c_str(), "r");
-      fseek(fp, offset * sizeof(ValueType), SEEK_SET);
+
+      int res = fseek(fp, offset * sizeof(ValueType), SEEK_SET);
+
+      if (res == -1) {
+        std::stringstream ss;
+        int myerr = errno;
+        ss << "ERROR in file seek: " << myerr << ": " << strerror(myerr);
+        throw ::std::logic_error(ss.str());
+      }
+
       size_t read = fread_unlocked(result, sizeof(ValueType), length, fp);
       fclose(fp);
 
@@ -139,7 +148,16 @@ class FileLoadValueParamTest : public ::testing::TestWithParam<TestFileInfo>
                               const size_t length, ValueType* result)
     {
       FILE *fp = fopen(fileName.c_str(), "r");
-      fseek(fp, offset * sizeof(ValueType), SEEK_SET);
+
+      int res = fseek(fp, offset * sizeof(ValueType), SEEK_SET);
+
+      if (res == -1) {
+        std::stringstream ss;
+        int myerr = errno;
+        ss << "ERROR in file seek: " << myerr << ": " << strerror(myerr);
+        throw ::std::logic_error(ss.str());
+      }
+
       size_t read = fread_unlocked(result, sizeof(ValueType), length, fp);
       fclose(fp);
 
@@ -157,16 +175,17 @@ class FileLoadValueParamTest : public ::testing::TestWithParam<TestFileInfo>
 class FileParserTest : public FileLoadValueParamTest
 {
   protected:
-    using ValueType = unsigned char;
-    using InputIterType = ValueType*;
+    using ValueType = typename FileLoadValueParamTest::ValueType;
+    using InputIterType = typename FileLoadValueParamTest::InputIterType;
 
     virtual ~FileParserTest() {};
 
     virtual void SetUp()
     {
-    	FileLoadValueParamTest<Loader>::SetUp();
+    	FileLoadValueParamTest::SetUp();
 
-      elemCount = 0;
+      seqCount = 0;
+      kmerCount = 0;
 
 #if defined(USE_MPI)
       MPI_Barrier(MPI_COMM_WORLD);
@@ -176,21 +195,37 @@ class FileParserTest : public FileLoadValueParamTest
 
     virtual void TearDown() {
 
-      if (this->elemCount < std::numeric_limits<size_t>::max() ) {
+      if (this->seqCount < std::numeric_limits<size_t>::max() ) {
 
         TestFileInfo const & p = this->GetParam();
 
 #ifdef USE_MPI
         MPI_Barrier(MPI_COMM_WORLD);
-        size_t totalElemCount = mxx::allreduce(elemCount);
+        size_t totalseqCount = mxx::allreduce(seqCount);
 #else
-        size_t totalElemCount = elemCount;
+        size_t totalseqCount = seqCount;
 #endif
-        EXPECT_EQ(p.elemCount, totalElemCount);
+        EXPECT_EQ(p.seqCount, totalseqCount);
+      }
+
+      if (this->kmerCount < std::numeric_limits<size_t>::max() ) {
+
+        TestFileInfo const & p = this->GetParam();
+
+#ifdef USE_MPI
+        MPI_Barrier(MPI_COMM_WORLD);
+        size_t totalKmerCount = mxx::allreduce(kmerCount);
+//        std::cout << "rank " << mxx::comm().rank() << " local kmer count = " << kmerCount << " total " << totalKmerCount << std::endl;
+
+#else
+        size_t totalKmerCount = kmerCount;
+#endif
+        EXPECT_EQ(p.kmerCount, totalKmerCount);
       }
     }
 
-    size_t elemCount;
+    size_t seqCount;
+    size_t kmerCount;
 };
 
 /**
@@ -199,8 +234,8 @@ class FileParserTest : public FileLoadValueParamTest
 class KmerReaderTest : public FileParserTest
 {
   protected:
-    using ValueType = unsigned char;
-    using InputIterType = ValueType*;
+    using ValueType = typename FileParserTest::ValueType;
+    using InputIterType = typename FileParserTest::InputIterType;
 
     virtual ~KmerReaderTest() {};
 
@@ -217,7 +252,18 @@ class KmerReaderTest : public FileParserTest
       if (length_hint <= 0) return;
 
       FILE *fp = fopen(fileName.c_str(), "r");
-      fseek(fp, offset * sizeof(ValueType), SEEK_SET);
+
+
+      int res = fseek(fp, offset * sizeof(ValueType), SEEK_SET);
+
+      if (res == -1) {
+        std::stringstream ss;
+        int myerr = errno;
+        ss << "ERROR in file seek: " << myerr << ": " << strerror(myerr);
+        throw ::std::logic_error(ss.str());
+      }
+
+
       ValueType c;
       ValueType* curr = result;
       int read = 0;
@@ -241,8 +287,6 @@ class KmerReaderTest : public FileParserTest
 
     }
 
-    static constexpr size_t get_kmer_size() { return Loader::get_overlap_size(); }
-
 };
 
 
@@ -252,8 +296,8 @@ class KmerReaderTest : public FileParserTest
 class FileLoaderTest : public FileLoadTypeParamTest
 {
   protected:
-    using ValueType = unsigned char;
-    using InputIterType = ValueType*;
+    using ValueType = typename FileLoadTypeParamTest::ValueType;
+    using InputIterType = typename FileLoadTypeParamTest::InputIterType;
 
     virtual ~FileLoaderTest() {};
 
@@ -264,7 +308,16 @@ class FileLoaderTest : public FileLoadTypeParamTest
 
       // get file size
       struct stat filestat;
-      stat(this->fileName.c_str(), &filestat);
+
+      int result = stat(this->fileName.c_str(), &filestat);
+
+      if (result == -1) {
+        std::stringstream ss;
+        int myerr = errno;
+        ss << "ERROR in file stat: " << myerr << ": " << strerror(myerr);
+        throw ::std::logic_error(ss.str());
+      }
+
       size_t fileSize = static_cast<size_t>(filestat.st_size);
 
       ASSERT_EQ(34111308UL, fileSize);

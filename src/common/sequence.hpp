@@ -343,7 +343,7 @@ namespace bliss
          */
         friend std::ostream& operator<<(std::ostream& ost, const Sequence & seq)
         {
-          ost << " Sequence: id=[" << seq.id << "] record_size=" << seq.record_size << " seq_offset=" << seq.seq_offset;
+          ost << " Sequence: id=[" << seq.id << "] record_size=" << seq.record_size << " seq_offset=" << seq.seq_offset << " size = " << std::distance(seq.seq_begin, seq.seq_end);
           return ost;
         }
 

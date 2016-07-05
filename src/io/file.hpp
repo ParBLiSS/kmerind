@@ -166,10 +166,10 @@ struct file_data {
 	// range from which the data came
 	range_type parent_range_bytes;
 
-	// range loaded in memory
+	// range loaded in memory.  INCLUDES OVERLAP
 	range_type in_mem_range_bytes;
 
-	// valid range for this
+	// valid range for this.  EXCLUDES OVERLAP
 	range_type valid_range_bytes;
 
 	// storage for actual data
@@ -179,11 +179,20 @@ struct file_data {
 	unsigned char * begin() {
 		return data.data() + valid_range_bytes.start - in_mem_range_bytes.start;
 	}
-
 	/// end of valid range
 	unsigned char * end() {
 		return data.data() + valid_range_bytes.end - in_mem_range_bytes.start;
 	}
+
+	/// start of inmem range
+	unsigned char * in_mem_begin() {
+		return data.data();
+	}
+	/// end of in mem range
+	unsigned char * in_mem_end() {
+		return data.data() + in_mem_range_bytes.size();
+	}
+
 	range_type getRange() {
 		return valid_range_bytes;
 	}
@@ -470,7 +479,7 @@ public:
 	 */
 	base_file(std::string const & _filename) :
 		filename(_filename), fd(-1), file_range_bytes(0, 0) {
-    this->file_range_bytes.end = this->get_file_size();
+		this->file_range_bytes.end = this->get_file_size();
 	  this->open_file();
 	};
 
@@ -505,7 +514,9 @@ public:
 	}
 
 	/// get file size
-	size_t size() { return file_range_bytes.end; };
+	size_t size() {
+		return file_range_bytes.end;
+	};
 
 	/// get file name
 	::std::string const & get_filename() const { return filename; };
@@ -660,8 +671,8 @@ protected:
 		if (fp != nullptr) {
 			fclose(fp);    // okay to close since fd is dup'ed
 			fp = nullptr;
-			this->fd = -1;
-			this->file_range_bytes.end = 0;
+//			this->fd = -1;
+//			this->file_range_bytes.end = 0;
 		}
 	}
 
@@ -671,6 +682,7 @@ public:
 
 	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
 	using BASE::read_range;
+	using BASE::size;
 
 	/**
 	 * @brief  bulk load all the data and return it in a newly constructed vector.  reuse vector
@@ -702,7 +714,7 @@ public:
 			throw ::bliss::utils::make_exception<bliss::io::IOException>(ss.str());
 		}
 
-		//std::cout << "curr pos in fd is " << ftell(this->fp) << std::endl;
+//		std::cout << "curr pos in fd is " << ftell(this->fp) << std::endl;
 
 		// resize output's capacity
 		if (output.capacity() < target.size()) output.resize(target.size());
@@ -717,9 +729,11 @@ public:
 			throw ::bliss::utils::make_exception<bliss::io::IOException>(ss.str());
 		}
 
-    //std::cout << "curr pos in fd after read is " << ftell(this->fp) << std::endl;
+//    std::cout << "curr pos in fd after read is " << ftell(this->fp) << std::endl;
 
 		this->close_file_stream();
+
+//		std::cout << "read " << target << std::endl;
 		return target;
 	}
 
@@ -793,7 +807,7 @@ public:
 
     if (target.size() == 0) {
       // print error through exception.
-      std::cout << "WARNING: read_range: requested " << range_bytes << " not in file " << file_range_bytes << std::endl;
+      std::cout << "WARNING: read_range: requested " << range_bytes << " not in file " << this->file_range_bytes << std::endl;
       output.clear();
       return target;
     }
@@ -1060,10 +1074,11 @@ protected:
 
 		partitioner.configure(target, this->comm.size());
 
-		typename BASE::range_type result = partitioner.getNext(this->comm.rank());
-
-		std::cout << "rank = " << this->comm.rank() << " range " << result << std::endl;
-		return result;
+		return partitioner.getNext(this->comm.rank());
+//		typename BASE::range_type result = partitioner.getNext(this->comm.rank());
+//
+//		std::cout << "rank = " << this->comm.rank() << " range " << result << std::endl;
+//		return result;
 	}
 
 	/**
@@ -1075,7 +1090,7 @@ protected:
 	 *
 	 */
 	::std::pair<typename BASE::range_type, typename BASE::range_type>
-	partition(typename BASE::range_type const & in_mem_range_bytes,
+	overlapped_partition(typename BASE::range_type const & in_mem_range_bytes,
 	          typename BASE::range_type const & valid_range_bytes) {
 //		::std::cout << "rank " << this->comm.rank() << " partition comm_size " << this->comm.size() << ::std::endl;
 //		std::cout << " partition comm object at " << &(this->comm) << " for this " << this << std::endl;
@@ -1112,7 +1127,7 @@ public:
 	using BASE::read_range;
 
 	/**
-	 * @brief  bulk load the data and return it in a newly constructed vector.  block decomposes the range.  reuse vector
+	 * @brief  bulk load the data and return it in a newly constructed vector.  block decomposes the range.  reuse vector.  no overlap
 	 * @note   virtual so other overloads of this function can also block decompose the range.
 	 * @param range_bytes	range to read, in bytes
 	 * @param output		vector containing data as bytes.
@@ -1155,7 +1170,7 @@ public:
 	  typename BASE::range_type valid_partitioned;
 
 		::std::tie(in_mem_partitioned, valid_partitioned) =
-				partition(this->file_range_bytes, this->file_range_bytes);
+				overlapped_partition(this->file_range_bytes, this->file_range_bytes);
 
 		// then read the range via sequential version
 		output.in_mem_range_bytes = reader.read_range(output.data, in_mem_partitioned);
@@ -1165,12 +1180,15 @@ public:
 	}
 };
 
+
 template <typename FileReader, typename BaseType>
 class partitioned_file<FileReader, ::bliss::io::FASTQParser<unsigned char* >, BaseType > :
 	public BaseType {
 
 protected:
 	using BASE = BaseType;
+
+	using range_type = typename ::bliss::io::base_file::range_type;
 
 	/// FileReader
 	FileReader reader;
@@ -1188,89 +1206,21 @@ protected:
 	 * @note  assumes input parameter is in memory and inside file.
 	 */
 	typename BASE::range_type partition(typename BASE::range_type const & range_bytes) {
-
-		// ensure that the search range is inside the file
-		// restrict in_mem to within file
 	  typename BASE::range_type target =
 				BASE::range_type::intersect(range_bytes, this->file_range_bytes);
 
-		// not intersecting file, so done
-		if (target.size() == 0) return target;
+		if (this->comm.size() == 1) {
+			return target;
+		}
 
-		//std::cout << "rank " << this->comm.rank() << " partitioning map" << std::endl;
-
-
-		// configure the partitioner and get the local partition.
 		partitioner.configure(target, this->comm.size());
-		typename BASE::range_type hint = partitioner.getNext(this->comm.rank());
 
-		// now define the search ranges.  for case when partition is smaller than a record,
-		// we need to search more, so make the end of search range (start + (1page or 1MB)).
-		typename BASE::range_type search = hint;
-		// search for the whole range.
-		// search.end = hint.start + ::std::max(sysconf(_SC_PAGE_SIZE), (1024L * 1024L));  // assume FileParser can check the previous char.
-		// in case the search range is less than record size, then the partitioning may be such that no partition has a complete record to be found.
-		// so instead, we search to end of file.
-		search.end = target.end;
-
-		// ensure that previous char is inspected.
-		typename BASE::range_type load = search;
-		load.start = (search.start == this->file_range_bytes.start ?
-				this->file_range_bytes.start : search.start - 1);  // read extra char before
-
-
-		//===  search the region for the starting position, using mmap file
-		typename BASE::range_type found;
-
-		{
-	    // allocate a mmap file for doing the search.
-	    ::bliss::io::mmap_file record_finder(this->fd, this->size());
-
-      // map the search region
-      mapped_data md = record_finder.map(load);
-
-      //=== search for record starting point using FileParser.
-      ::bliss::io::FASTQParser<unsigned char *> parser;
-
-      // mark the first entry found.    this may be outside of our partition hint
-      found.start = parser.init_parser(md.get_data(), this->file_range_bytes,
-          md.get_range(), search, this->comm);
-
-		}
-
-		// if end of search range, then nothing was found.  in which case, set found to be target (range to partition).  scan and exscan then would fill in correctly.
-		if (found.start >= hint.end) found = target;
-		else {
-		  found.end = found.start;
-		}
-
-		//inclusive scan to get the start of record that spans this processor's partition
-    found.start = ::mxx::scan(found.start, [](size_t const & x, size_t const & y) {
-      return ::std::max(x, y);
-    }, this->comm);
-
-    // reverse exclusive scan to get the start of the next record outside of this processor's partition.
-    found.end = ::mxx::exscan(found.end, [](size_t const & x, size_t const & y) {
-      return ::std::min(x, y);
-    }, this->comm.reverse());
-    if (this->comm.rank() == (this->comm.size() - 1)) found.end = target.end;   // last process.
-
-		//	std::cout << "rank " << comm.rank() << " start " << final.start << std::endl;
-
-    // finally, a process owns a found range if the start falls inside the hint
-    if ((found.start < hint.start) || (found.start >= hint.end)) {
-      found.start = found.end;
-    }
-
-		// finally, check final_start again, and if start is pointing to end of file, let it point to the current range's end.
-		//if (found.start == target.end) found.start = found.end;
-		std::cout << " rank " << this->comm.rank() << " found = " << found <<  std::endl;
-
-		return found;
-
-		// mapped_data unmapped as we go out of scope.
+		return partitioner.getNext(this->comm.rank());
+//		typename BASE::range_type result = partitioner.getNext(this->comm.rank());
+//
+//		std::cout << "rank = " << this->comm.rank() << " range " << result << std::endl;
+//		return result;
 	}
-
 
 
 	/**
@@ -1281,23 +1231,36 @@ protected:
    * @return  pair of ranges, first range is the in memory, partitioned, second range is the valid range.
 	 */
 	::std::pair<typename BASE::range_type, typename BASE::range_type>
-	partition(typename BASE::range_type const & in_mem_range_bytes,
+	overlapped_partition(typename BASE::range_type const & in_mem_range_bytes,
 	          typename BASE::range_type const & valid_range_bytes) {
+//		::std::cout << "rank " << this->comm.rank() << " partition comm_size " << this->comm.size() << ::std::endl;
+//		std::cout << " partition comm object at " << &(this->comm) << " for this " << this << std::endl;
+//        std::cout << " partition comm is set to world ? " <<  (MPI_COMM_WORLD == this->comm ? "y" : "n") << std::endl;
 
-		// search for starting point using valid_range_bytes
-
-		// restrict in_mem to within file
 	  typename BASE::range_type in_mem =
 				BASE::range_type::intersect(in_mem_range_bytes, this->file_range_bytes);
 
 		// and restrict valid to in memory data.
-	  typename BASE::range_type valid =
-	      BASE::range_type::intersect(valid_range_bytes, in_mem);
+		typename BASE::range_type valid =
+				BASE::range_type::intersect(valid_range_bytes, in_mem);
 
+		// single process, just return
+		if (this->comm.size() == 1) {
+			return ::std::make_pair(in_mem, valid);
+		}
+		// === multi process.
 
-	  typename BASE::range_type found = partition(valid);
+		// partition valid range
+		partitioner.configure(valid, this->comm.size());
+		valid = partitioner.getNext(this->comm.rank());
 
-		return std::make_pair(found, found);   // in mem valid is same as valid range for FASTQParser.
+		// compute the in mem range.  extend by overlap
+		typename BASE::range_type in_mem_valid = valid;
+		in_mem_valid.end += overlap;
+
+		in_mem_valid.intersect(in_mem);
+
+		return ::std::make_pair(in_mem_valid, valid);
 	}
 
 public:
@@ -1305,7 +1268,221 @@ public:
 	using BASE::read_range;
 
 	/**
-	 * @brief  bulk load the data and return it in a newly constructed vector.  block decomposes the range.  reuse vector
+	 * @brief  bulk load the data and return it in a newly constructed vector.  block decomposes the range.  reuse vector.  no overlap
+	 * @note   virtual so other overloads of this function can also block decompose the range.
+	 * @param range_bytes	range to read, in bytes
+	 * @param output		vector containing data as bytes.
+	 */
+	virtual typename BASE::range_type read_range(std::vector<unsigned char> & output,
+	                                             typename BASE::range_type const & range_bytes) {
+
+		// first get rough partition
+	  typename BASE::range_type target = partition(range_bytes);
+
+
+		// then read the range via sequential version
+		reader.read_range(output, target);
+
+		return target;
+	}
+
+	/**
+	 * @brief constructor
+	 * @param _filename 		name of file to open
+	 * @param _comm				MPI communicator to use.
+	 */
+	partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
+		BaseType(_filename, _comm),
+		 reader(this->fd, this->file_range_bytes.end), overlap(0UL) {};
+
+	/// destructor
+	virtual ~partitioned_file() {};  // will call super's unmap.
+
+
+	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
+	using BASE::read_file;
+
+	/**
+	 * @brief  read the whole file.  reuse allocated file_data object.
+	 * @note	virtual so that parallel readers can compute range to read.
+	 * 			same as mpiio file's read_file
+	 * @param output 		file_data object containing data and various ranges.
+	 */
+	virtual void read_file(::bliss::io::file_data & output) {
+
+		// overlap is set to page size, so output will have sufficient space.
+		// note that this is same behavior as the serial mmap_file
+
+		// then read the range via sequential version
+		range_type partition_range = read_range(output.data, this->file_range_bytes);
+
+//		std::cout << "rank " << this->comm.rank() << " read " << partition_range << std::endl;
+//			std::ostream_iterator<unsigned char> oit(std::cout, "");
+//			std::copy(output.data.begin(), output.data.begin() + 100, oit);
+//			std::cout << std::endl;
+
+		range_type in_mem = partition_range;
+		in_mem.end = in_mem.start + output.data.size();
+
+//		std::cout << "rank " << this->comm.rank() << " in mem " << in_mem << std::endl;
+//		std::cout << "rank " << this->comm.rank() << " overlap " << this->overlap << std::endl;
+
+
+		// now search for the true start.
+		::bliss::io::FASTQParser<unsigned char *> parser;
+  // mark the first entry found.
+		size_t real_start = parser.init_parser(output.data.data(), this->file_range_bytes,
+				in_mem, partition_range, this->comm);
+
+
+//		std::cout << "rank " << this->comm.rank() << " real start " << real_start << std::endl;
+//		std::cout << "rank " << this->comm.rank() << " data size before remove overlap " << output.data.size() << std::endl;
+
+		// now clear the region outside of the block range  (the overlap portion)
+		if (output.data.size() > partition_range.size()) {
+			output.data.erase(output.data.begin() + partition_range.size(), output.data.end());
+		}
+
+//		std::cout << "rank " << this->comm.rank() << " data size after remove overlap " << output.data.size() << std::endl;
+
+		// ==== shift values to the left (as vector?)
+		// actually, not shift. need to do all to all - if a rank found no internal starts
+		// first compute the target proc id via exscan
+		bool not_found = (real_start >= partition_range.end);  // if real start is outside of partition, not found
+		real_start = std::min(real_start, partition_range.end);
+		int target_rank = not_found ? 0 : this->comm.rank();
+		target_rank = ::mxx::exscan(target_rank, [](int const & x, int const & y) {
+			return (x < y) ? y : x;
+		}, this->comm);
+
+//		std::cout << "rank " << this->comm.rank() << " adjusted real start " << real_start << std::endl;
+//		std::cout << "rank " << this->comm.rank() << " target rank " << target_rank << std::endl;
+
+
+		// MPI 2 does not have neighbor_ collective operations, so we can't create
+		// graph with sparse edges.  in any case, the amount of data we send should be
+		// small so alltoallv should be enough
+		std::vector<size_t> send_counts(this->comm.size(), 0);
+		if (this->comm.rank() > 0) send_counts[target_rank] = real_start - in_mem.start;
+
+		// copy the region to shift
+		std::vector<unsigned char> shifted =
+				::mxx::all2allv(output.data, send_counts, this->comm);
+		output.data.insert(output.data.end(), shifted.begin(), shifted.end());
+
+//		std::cout << "rank " << this->comm.rank() << " shifted " << shifted.size() << std::endl;
+//		std::cout << "rank " << this->comm.rank() << " new data size " << output.data.size() << std::endl;
+
+		// adjust the ranges.
+		output.in_mem_range_bytes = partition_range;
+		output.in_mem_range_bytes.end = partition_range.start + output.data.size();
+
+//		std::cout << "rank " << this->comm.rank() << " final in mem " << output.in_mem_range_bytes << std::endl;
+
+
+		output.valid_range_bytes.start = real_start;
+		output.valid_range_bytes.end =
+				not_found ? partition_range.end : output.in_mem_range_bytes.end;
+
+//		std::cout << "rank " << this->comm.rank() << "/" << this->comm.size() << " final valid " << output.valid_range_bytes << std::endl;
+
+		output.parent_range_bytes = this->file_range_bytes;
+
+//		std::cout << "rank " << this->comm.rank() << " file  " << output.parent_range_bytes << std::endl;
+
+	}
+
+};
+
+
+template <typename FileReader, typename BaseType>
+class partitioned_file<FileReader, ::bliss::io::FASTAParser<unsigned char* >, BaseType > :
+	public BaseType {
+
+protected:
+	using BASE = BaseType;
+
+	using range_type = typename ::bliss::io::base_file::range_type;
+
+	/// FileReader
+	FileReader reader;
+
+	/// overlap amount
+	const size_t overlap;
+
+	/// partitioner to use.
+	::bliss::partition::BlockPartitioner<typename BASE::range_type> partitioner;
+
+	/**
+	 * @brief partitions the specified range by the number of processes in communicator
+	 * @note  does not add overlap.  this is strictly for block partitioning a range.
+	 * 			if overlap is needed, use the overload version.
+	 * @note  assumes input parameter is in memory and inside file.
+	 */
+	typename BASE::range_type partition(typename BASE::range_type const & range_bytes) {
+	  typename BASE::range_type target =
+				BASE::range_type::intersect(range_bytes, this->file_range_bytes);
+
+		if (this->comm.size() == 1) {
+			return target;
+		}
+
+		partitioner.configure(target, this->comm.size());
+
+		return partitioner.getNext(this->comm.rank());
+//		typename BASE::range_type result = partitioner.getNext(this->comm.rank());
+//
+//		std::cout << "rank = " << this->comm.rank() << " range " << result << std::endl;
+//		return result;
+	}
+
+
+	/**
+	 * @brief  partition the in mem valid range by the number of processes in communicator
+	 * @note	overlap is added to the end of the result ranges.  This may make the result extend
+	 * 			beyong initial in_mem_range.
+	 * @note	assumes that both input parameters are within file range and in memory.
+   * @return  pair of ranges, first range is the in memory, partitioned, second range is the valid range.
+	 */
+	::std::pair<typename BASE::range_type, typename BASE::range_type>
+	overlapped_partition(typename BASE::range_type const & in_mem_range_bytes,
+	          typename BASE::range_type const & valid_range_bytes) {
+//		::std::cout << "rank " << this->comm.rank() << " partition comm_size " << this->comm.size() << ::std::endl;
+//		std::cout << " partition comm object at " << &(this->comm) << " for this " << this << std::endl;
+//        std::cout << " partition comm is set to world ? " <<  (MPI_COMM_WORLD == this->comm ? "y" : "n") << std::endl;
+
+	  typename BASE::range_type in_mem =
+				BASE::range_type::intersect(in_mem_range_bytes, this->file_range_bytes);
+
+		// and restrict valid to in memory data.
+		typename BASE::range_type valid =
+				BASE::range_type::intersect(valid_range_bytes, in_mem);
+
+		// single process, just return
+		if (this->comm.size() == 1) {
+			return ::std::make_pair(in_mem, valid);
+		}
+		// === multi process.
+
+		// partition valid range
+		partitioner.configure(valid, this->comm.size());
+		valid = partitioner.getNext(this->comm.rank());
+
+		// compute the in mem range.  extend by overlap
+		typename BASE::range_type in_mem_valid = valid;
+		in_mem_valid.end += 2 * overlap;
+
+		in_mem_valid.intersect(in_mem);
+
+		return ::std::make_pair(in_mem_valid, valid);
+	}
+
+public:
+	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
+	using BASE::read_range;
+
+	/**
+	 * @brief  bulk load the data and return it in a newly constructed vector.  block decomposes the range.  reuse vector.  no overlap
 	 * @note   virtual so other overloads of this function can also block decompose the range.
 	 * @param range_bytes	range to read, in bytes
 	 * @param output		vector containing data as bytes.
@@ -1342,216 +1519,48 @@ public:
 	/**
 	 * @brief  read the whole file.  reuse allocated file_data object.
 	 * @note	virtual so that parallel readers can compute range to read.
+	 * 			same as mpiio file's read_file
 	 * @param output 		file_data object containing data and various ranges.
 	 */
 	virtual void read_file(::bliss::io::file_data & output) {
-	  typename BASE::range_type in_mem_partitioned;
-	  typename BASE::range_type valid_partitioned;
 
-      ::std::tie(in_mem_partitioned, valid_partitioned) =
-          partition(this->file_range_bytes, this->file_range_bytes);
+		// overlap is set to page size, so output will have sufficient space.
+		// note that this is same behavior as the serial mmap_file
 
 		// then read the range via sequential version
-		output.in_mem_range_bytes = reader.read_range(output.data, in_mem_partitioned);
+		::std::tie(output.in_mem_range_bytes, output.valid_range_bytes) =
+				overlapped_partition(this->file_range_bytes, this->file_range_bytes);
 
-		output.valid_range_bytes = valid_partitioned;
+		// then read the range via sequential version
+		output.in_mem_range_bytes = reader.read_range(output.data, output.in_mem_range_bytes);
+
 		output.parent_range_bytes = this->file_range_bytes;
+
+//		std::cout << "rank " << this->comm.rank() << " read " << partition_range << std::endl;
+//			std::ostream_iterator<unsigned char> oit(std::cout, "");
+//			std::copy(output.data.begin(), output.data.begin() + 100, oit);
+//			std::cout << std::endl;
+
+//		std::cout << "rank " << this->comm.rank() << " in mem " << in_mem << std::endl;
+//		std::cout << "rank " << this->comm.rank() << " overlap " << this->overlap << std::endl;
+
+		// now search for the true start.
+		::bliss::io::FASTAParser<unsigned char *> parser;
+  // mark the first entry found.
+		size_t overlap_end = parser.find_overlap_end(output.data.data(), output.parent_range_bytes,
+				output.in_mem_range_bytes, output.valid_range_bytes.end, overlap);
+
+		// erase the extra.
+		output.in_mem_range_bytes.end = overlap_end;
+		output.data.erase(output.data.begin() + output.in_mem_range_bytes.size(), output.data.end());
+
+
+//		std::cout << "rank " << this->comm.rank() << "/" << this->comm.size() << " final valid " << output.valid_range_bytes << std::endl;
+
+//		std::cout << "rank " << this->comm.rank() << " file  " << output.parent_range_bytes << std::endl;
+
 	}
-};
 
-
-/**
- * @brief partitioned_file specialization that minimizes
- */
-template <typename BaseType>
-class partitioned_file<::bliss::io::mmap_file, ::bliss::io::FASTQParser<unsigned char* >, BaseType > :
-  public BaseType {
-
-protected:
-  using BASE = BaseType;
-
-  /// FileReader
-  ::bliss::io::mmap_file reader;
-
-  /// overlap amount
-  const size_t overlap;
-
-  /// partitioner to use.
-  ::bliss::partition::BlockPartitioner<typename BASE::range_type> partitioner;
-
-  /**
-   * @brief partitions the specified range by the number of processes in communicator
-   * @note  does not add overlap.  this is strictly for block partitioning a range.
-   *      if overlap is needed, use the overload version.
-   * @note  assumes input parameter is in memory and inside file.
-   */
-  typename BASE::range_type partition(typename BASE::range_type const & range_bytes) {
-
-    // ensure that the search range is inside the file
-    // restrict in_mem to within file
-    typename BASE::range_type target =
-        BASE::range_type::intersect(range_bytes, this->file_range_bytes);
-
-    // does not cover any of whole file, so done.
-    if (target.size() == 0) return target;
-
-    // std::cout << "rank " << this->comm.rank() << " partitioning map" << std::endl;
-
-    // allocate a mmap file for doing the search.
-
-    // configure the partitioner and get the local partition.
-    partitioner.configure(target, this->comm.size());
-    typename BASE::range_type hint = partitioner.getNext(this->comm.rank());
-
-    // now define the search ranges.  for case when partition is smaller than a record,
-    // we need to search more, so make the end of search range (start + (1page or 1MB)).
-    typename BASE::range_type search = hint;
-    // search for the whole range.
-    // search.end = hint.start + ::std::max(sysconf(_SC_PAGE_SIZE), (1024L * 1024L));  // assume FileParser can check the previous char.
-    // in case the search range is less than record size, then the partitioning may be such that no partition has a complete record to be found.
-    // so instead, we search to end of file.
-    search.end = target.end;
-
-    // ensure that previous char is inspected.
-    typename BASE::range_type load = search;
-    load.start = (search.start == this->file_range_bytes.start ?
-        this->file_range_bytes.start : search.start - 1);  // read extra char before
-
-
-    //===  search the region for the starting position, using mmap file
-    typename BASE::range_type found;
-
-    {
-      // map the search region
-      mapped_data md = reader.map(load);
-
-      //=== search for record starting point using FileParser.
-      ::bliss::io::FASTQParser<unsigned char *> parser;
-
-      // mark the first entry found.    this may be outside of our partition hint
-      found.start = parser.init_parser(md.get_data(), this->file_range_bytes,
-          md.get_range(), search, this->comm);
-
-    }
-
-    // if end of search range, then nothing was found.  in which case, set found to be target (range to partition).  scan and exscan then would fill in correctly.
-    if (found.start >= hint.end) found = target;
-    else {
-      found.end = found.start;
-    }
-
-    //inclusive scan to get the start of record that spans this processor's partition
-    found.start = ::mxx::scan(found.start, [](size_t const & x, size_t const & y) {
-      return ::std::max(x, y);
-    }, this->comm);
-
-    // not using comm split because the subcommunicator may be constructed in worse than log p time.
-    // next we do reverse exclusive scan with rev communicator
-    found.end = ::mxx::exscan(found.end, [](size_t const & x, size_t const & y) {
-      return ::std::min(x, y);
-    }, this->comm.reverse());
-    if (this->comm.rank() == (this->comm.size() - 1)) found.end = target.end;   // last process.
-
-    // finally, a process owns a found range if the start falls inside the hint
-    if ((found.start < hint.start) || (found.start >= hint.end)) {
-      found.start = found.end;
-    }
-
-    // finally, check final_start again, and if start is pointing to end of file, let it point to the current range's end.
-    //if (found.start == target.end) found.start = found.end;
-    std::cout << " rank " << this->comm.rank() << " found = " << found <<  std::endl;
-
-    return found;
-
-    // mapped data goes out of scope and unmapped here
-  }
-
-
-
-  /**
-   * @brief  partition the in mem valid range by the number of processes in communicator
-   * @note  overlap is added to the end of the result ranges.  This may make the result extend
-   *      beyong initial in_mem_range.
-   * @note  assumes that both input parameters are within file range and in memory.
-   * @return  pair of ranges, first range is the in memory, partitioned, second range is the valid range.
-   */
-  ::std::pair<typename BASE::range_type, typename BASE::range_type>
-  partition(typename BASE::range_type const & in_mem_range_bytes,
-            typename BASE::range_type const & valid_range_bytes) {
-
-    // search for starting point using valid_range_bytes
-
-    // restrict in_mem to within file
-    typename BASE::range_type in_mem =
-        BASE::range_type::intersect(in_mem_range_bytes, this->file_range_bytes);
-
-    // and restrict valid to in memory data.
-    typename BASE::range_type valid =
-        BASE::range_type::intersect(valid_range_bytes, in_mem);
-
-
-    typename BASE::range_type found = partition(valid);
-
-    return std::make_pair(found, found);  // in mem valid is same as valid range for FASTQParser.
-  }
-
-public:
-  // this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
-  using BASE::read_range;
-
-  /**
-   * @brief  bulk load the data and return it in a newly constructed vector.  block decomposes the range.  reuse vector
-   * @note   virtual so other overloads of this function can also block decompose the range.
-   * @param range_bytes range to read, in bytes
-   * @param output    vector containing data as bytes.
-   */
-  virtual typename BASE::range_type read_range(std::vector<unsigned char> & output,
-                                               typename BASE::range_type const & range_bytes) {
-
-    // first get rough partition
-    typename BASE::range_type target = partition(range_bytes);
-
-
-    // then read the range via sequential version
-    reader.read_range(output, target);
-
-    return target;
-  }
-
-  /**
-   * @brief constructor
-   * @param _filename     name of file to open
-   * @param _comm       MPI communicator to use.
-   */
-  partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-    BaseType(_filename, _comm),
-     reader(this->fd, this->file_range_bytes.end), overlap(_overlap) {};
-
-  /// destructor
-  virtual ~partitioned_file() {};  // will call super's unmap.
-
-
-  // this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
-  using BASE::read_file;
-
-  /**
-   * @brief  read the whole file.  reuse allocated file_data object.
-   * @note  virtual so that parallel readers can compute range to read.
-   * @param output    file_data object containing data and various ranges.
-   */
-  virtual void read_file(::bliss::io::file_data & output) {
-    typename BASE::range_type in_mem_partitioned;
-    typename BASE::range_type valid_partitioned;
-
-      ::std::tie(in_mem_partitioned, valid_partitioned) =
-          partition(this->file_range_bytes, this->file_range_bytes);
-
-    // then read the range via sequential version
-    output.in_mem_range_bytes = reader.read_range(output.data, in_mem_partitioned);
-
-    output.valid_range_bytes = valid_partitioned;
-    output.parent_range_bytes = this->file_range_bytes;
-  }
 };
 
 /// disable shared fd for stdio file.
@@ -1575,6 +1584,7 @@ class partitioned_file<::bliss::io::stdio_file, FileParser, ::bliss::io::paralle
 
 
 // multilevel parallel file io relies on MPIIO.
+template <typename FileParser = ::bliss::io::BaseFileParser<unsigned char*> >
 class mpiio_base_file : public ::bliss::io::base_file {
 
 	static_assert(sizeof(MPI_Offset) > 4, "ERROR: MPI_Offset is defined as an integer 4 bytes or less.  Do not use mpiio_file ");
@@ -1593,6 +1603,9 @@ protected:
 
 	/// partitioner to use.
 	::bliss::partition::BlockPartitioner<range_type> partitioner;
+
+
+
 
 	std::string get_error_string(std::string const & op_name, int const & return_val) {
 		char error_string[BUFSIZ];
@@ -1711,10 +1724,8 @@ public:
 
 		// compute the size to read.
 		range_type read_range = target;
-		read_range.end += this->overlap;
+	read_range.end += std::is_same<FileParser, ::bliss::io::FASTAParser<unsigned char*> >::value ? 2 * this->overlap : this->overlap;
 		read_range.intersect(this->file_range_bytes);
-
-		output.reserve(target.size() + overlap);  // reserve more
 
 		output.resize(read_range.size());    // set size for reading.
 
@@ -1854,7 +1865,9 @@ public:
 
 
 	mpiio_base_file(::std::string const & _filename, size_t const _overlap = 0UL,  ::mxx::comm const & _comm = ::mxx::comm()) :
-	  BASE(static_cast<int>(-1), static_cast<size_t>(0)), overlap(_overlap), comm(_comm.copy()), fh(MPI_FILE_NULL) {
+	  BASE(static_cast<int>(-1), static_cast<size_t>(0)),
+	 	 overlap(_overlap),
+				  comm(_comm.copy()), fh(MPI_FILE_NULL) {
 		this->filename = _filename;
 	  this->open_file();
 		this->file_range_bytes.end = this->get_file_size();  // call after opening file
@@ -1873,10 +1886,10 @@ public:
  * parallel file abstraction for MPIIO, block partition with overlap
  */
 template <typename FileParser = ::bliss::io::BaseFileParser<unsigned char*> >
-class mpiio_file : public ::bliss::io::parallel::mpiio_base_file {
+class mpiio_file : public ::bliss::io::parallel::mpiio_base_file<FileParser> {
 
 	protected:
-		using BASE = ::bliss::io::parallel::mpiio_base_file;
+		using BASE = ::bliss::io::parallel::mpiio_base_file<FileParser>;
 
 
 public:
@@ -1885,7 +1898,7 @@ public:
 
 
 		mpiio_file(::std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-			::bliss::io::parallel::mpiio_base_file(_filename, _overlap, _comm) {};
+			BASE(_filename, _overlap, _comm) {};
 
 		~mpiio_file() {};
 
@@ -1908,10 +1921,11 @@ public:
 			// set up the ranges.
 			output.in_mem_range_bytes = output.valid_range_bytes;
 
-			output.in_mem_range_bytes.end += overlap;
+			output.in_mem_range_bytes.end += this->overlap;
 			output.in_mem_range_bytes.intersect(this->file_range_bytes);
 
-			output.parent_range_bytes = file_range_bytes;
+			output.parent_range_bytes = this->file_range_bytes;
+
 		}
 };
 
@@ -1919,10 +1933,11 @@ public:
  * parallel file abstraction for MPIIO.  FASTQParser, which searches the input.
  */
 template <>
-class mpiio_file<::bliss::io::FASTQParser<unsigned char*> > : public ::bliss::io::parallel::mpiio_base_file {
+class mpiio_file<::bliss::io::FASTQParser<unsigned char*> > :
+	public ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTQParser<unsigned char*> > {
 
 	protected:
-		using BASE = ::bliss::io::parallel::mpiio_base_file;
+		using BASE = ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTQParser<unsigned char*> > ;
 
 
 public:
@@ -1931,7 +1946,7 @@ public:
 
 
 		mpiio_file(::std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
-			::bliss::io::parallel::mpiio_base_file(_filename, sysconf(_SC_PAGE_SIZE), _comm) {};      // specify 1 page worth as overlap
+			BASE(_filename, 0UL, _comm) {};      // specify 1 page worth as overlap
 
 		~mpiio_file() { };
 
@@ -1951,32 +1966,33 @@ public:
 			// note that this is same behavior as the serial mmap_file
 
 			// then read the range via sequential version
-			range_type block_range = read_range(output.data, this->file_range_bytes);
+			range_type partition_range = read_range(output.data, this->file_range_bytes);
 
-//			std::cout << "rank " << this->comm.rank() << " read " << block_range << std::endl;
+//			std::cout << "rank " << this->comm.rank() << " read " << partition_range << std::endl;
 //			std::ostream_iterator<unsigned char> oit(std::cout, "");
 //			std::copy(output.data.begin(), output.data.begin() + 100, oit);
 //			std::cout << std::endl;
 
-			range_type in_mem = block_range;
+			range_type in_mem = partition_range;
 			in_mem.end = in_mem.start + output.data.size();
 
 //			std::cout << "rank " << this->comm.rank() << " in mem " << in_mem << std::endl;
+//			std::cout << "rank " << this->comm.rank() << " overlap " << this->overlap << std::endl;
 
 
 			// now search for the true start.
 			::bliss::io::FASTQParser<unsigned char *> parser;
       // mark the first entry found.
 			size_t real_start = parser.init_parser(output.data.data(), this->file_range_bytes,
-					in_mem, block_range, this->comm);
+					in_mem, partition_range, this->comm);
 
 
 //			std::cout << "rank " << this->comm.rank() << " real start " << real_start << std::endl;
 //			std::cout << "rank " << this->comm.rank() << " data size before remove overlap " << output.data.size() << std::endl;
 
 			// now clear the region outside of the block range  (the overlap portion)
-			if (output.data.size() > block_range.size()) {
-				output.data.erase(output.data.begin() + block_range.size(), output.data.end());
+			if (output.data.size() > partition_range.size()) {
+				output.data.erase(output.data.begin() + partition_range.size(), output.data.end());
 			}
 
 //			std::cout << "rank " << this->comm.rank() << " data size after remove overlap " << output.data.size() << std::endl;
@@ -1984,12 +2000,12 @@ public:
 			// ==== shift values to the left (as vector?)
 			// actually, not shift. need to do all to all - if a rank found no internal starts
 			// first compute the target proc id via exscan
-			bool not_found = (real_start >= block_range.end);  // if real start is outside of partition, not found
-			real_start = std::min(real_start, block_range.end);
-			int target_rank = not_found ? 0 : comm.rank();
+			bool not_found = (real_start >= partition_range.end);  // if real start is outside of partition, not found
+			real_start = std::min(real_start, partition_range.end);
+			int target_rank = not_found ? 0 : this->comm.rank();
 			target_rank = ::mxx::exscan(target_rank, [](int const & x, int const & y) {
 				return (x < y) ? y : x;
-			}, comm);
+			}, this->comm);
 
 //			std::cout << "rank " << this->comm.rank() << " adjusted real start " << real_start << std::endl;
 //			std::cout << "rank " << this->comm.rank() << " target rank " << target_rank << std::endl;
@@ -1998,33 +2014,108 @@ public:
 			// MPI 2 does not have neighbor_ collective operations, so we can't create
 			// graph with sparse edges.  in any case, the amount of data we send should be
 			// small so alltoallv should be enough
-			std::vector<size_t> send_counts(comm.size(), 0);
-			if (comm.rank() > 0) send_counts[target_rank] = real_start - block_range.start;
+			std::vector<size_t> send_counts(this->comm.size(), 0);
+			if (this->comm.rank() > 0) send_counts[target_rank] = real_start - in_mem.start;
 
 			// copy the region to shift
 			std::vector<unsigned char> shifted =
-					::mxx::all2allv(output.data, send_counts, comm);
+					::mxx::all2allv(output.data, send_counts, this->comm);
 			output.data.insert(output.data.end(), shifted.begin(), shifted.end());
 
 //			std::cout << "rank " << this->comm.rank() << " shifted " << shifted.size() << std::endl;
 //			std::cout << "rank " << this->comm.rank() << " new data size " << output.data.size() << std::endl;
 
 			// adjust the ranges.
-			output.in_mem_range_bytes = block_range;
-			output.in_mem_range_bytes.end = block_range.start + output.data.size();
+			output.in_mem_range_bytes = partition_range;
+			output.in_mem_range_bytes.end = partition_range.start + output.data.size();
 
 //			std::cout << "rank " << this->comm.rank() << " final in mem " << output.in_mem_range_bytes << std::endl;
 
 
 			output.valid_range_bytes.start = real_start;
 			output.valid_range_bytes.end =
-					not_found ? block_range.end : output.in_mem_range_bytes.end;
+					not_found ? partition_range.end : output.in_mem_range_bytes.end;
 
-			if (output.valid_range_bytes.size() > 0) std::cout << "rank " << this->comm.rank() << "/" << this->comm.size() << " final valid " << output.valid_range_bytes << std::endl;
+//			std::cout << "rank " << this->comm.rank() << "/" << this->comm.size() << " final valid " << output.valid_range_bytes << std::endl;
 
-			output.parent_range_bytes = file_range_bytes;
+			output.parent_range_bytes = this->file_range_bytes;
 
 //			std::cout << "rank " << this->comm.rank() << " file  " << output.parent_range_bytes << std::endl;
+
+		}
+};
+
+/**
+ * parallel file abstraction for MPIIO.  FASTQParser, which searches the input.
+ */
+template <>
+class mpiio_file<::bliss::io::FASTAParser<unsigned char*> > :
+	public ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTAParser<unsigned char*> > {
+
+	protected:
+		using BASE = ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTAParser<unsigned char*> > ;
+
+
+public:
+		// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
+		using BASE::read_range;
+
+
+		mpiio_file(::std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) :
+			BASE(_filename, _overlap, _comm) {};      // specify 1 page worth as overlap
+
+		~mpiio_file() { };
+
+		// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
+		using BASE::read_file;
+
+
+		/**
+		 * @brief  read the whole file.  reuse allocated file_data object.
+		 * @note	virtual so that parallel readers can compute range to read.
+		 * @param output 		file_data object containing data and various ranges.
+		 */
+		virtual void read_file(::bliss::io::file_data & output) {
+
+			// overlap is set to page size, so output will have sufficient space.
+			// note that this is same behavior as the serial mmap_file
+
+			// then read the range via sequential version
+			// then read the range via sequential version
+			output.valid_range_bytes = read_range(output.data, this->file_range_bytes);
+
+			// overlap is part of the read so there is no left shift needed.
+
+			// set up the ranges.
+			output.in_mem_range_bytes = output.valid_range_bytes;
+
+			output.in_mem_range_bytes.end += 2 * this->overlap;
+			output.in_mem_range_bytes.intersect(this->file_range_bytes);
+
+			output.parent_range_bytes = this->file_range_bytes;
+
+	//		std::cout << "rank " << this->comm.rank() << " read " << partition_range << std::endl;
+	//			std::ostream_iterator<unsigned char> oit(std::cout, "");
+	//			std::copy(output.data.begin(), output.data.begin() + 100, oit);
+	//			std::cout << std::endl;
+
+	//		std::cout << "rank " << this->comm.rank() << " in mem " << in_mem << std::endl;
+	//		std::cout << "rank " << this->comm.rank() << " overlap " << this->overlap << std::endl;
+
+			// now search for the true start.
+			::bliss::io::FASTAParser<unsigned char *> parser;
+	  // mark the first entry found.
+			size_t overlap_end = parser.find_overlap_end(output.data.data(), output.parent_range_bytes,
+					output.in_mem_range_bytes, output.valid_range_bytes.end, overlap);
+
+			// erase the extra.
+			output.in_mem_range_bytes.end = overlap_end;
+			output.data.erase(output.data.begin() + output.in_mem_range_bytes.size(), output.data.end());
+
+
+	//		std::cout << "rank " << this->comm.rank() << "/" << this->comm.size() << " final valid " << output.valid_range_bytes << std::endl;
+
+	//		std::cout << "rank " << this->comm.rank() << " file  " << output.parent_range_bytes << std::endl;
 
 		}
 };

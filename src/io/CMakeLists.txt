@@ -7,8 +7,8 @@ if (ENABLE_TESTING)
 # load the testing:
 if (IS_DIRECTORY ./test)
     # get all files from ./test
-    FILE(GLOB TEST_FILES test/test_*.cpp)
-    bliss_add_test(${TEST_NAME} FALSE ${TEST_FILES})
+#    FILE(GLOB TEST_FILES test/test_*.cpp)
+#    bliss_add_test(${TEST_NAME} FALSE ${TEST_FILES})
     # get all mpi test files from ./test
     FILE(GLOB MPI_TEST_FILES test/mpi_test_*.cpp)
     bliss_add_mpi_test(${TEST_NAME} FALSE ${MPI_TEST_FILES})

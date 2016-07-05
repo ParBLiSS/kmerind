@@ -315,15 +315,15 @@ using CountType = uint32_t;
  *
  */
 
-template <typename IndexType, typename KmerType = typename IndexType::KmerType>
-std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
-
-  ::std::vector<KmerType> query;
-
-  IndexType::template read_file<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
-
-  return query;
-}
+//template <typename IndexType, typename KmerType = typename IndexType::KmerType>
+//std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) {
+//
+//  ::std::vector<KmerType> query;
+//
+//  IndexType::template read_file<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+//
+//  return query;
+//}
 
 
 template <typename IndexType, typename KmerType = typename IndexType::KmerType>
@@ -493,13 +493,14 @@ int main(int argc, char** argv) {
 	  ::std::vector<typename IndexType::TupleType> temp;
 
 	  BL_BENCH_START(test);
-	  if (reader_algo == 2)
-	  {
-		if (comm.rank() == 0) printf("reading %s via fileloader\n", filename.c_str());
-
-		idx.read_file<PARSER_TYPE, typename IndexType::KmerParserType>(filename, temp, comm);
-
-	  } else if (reader_algo == 5) {
+//	  if (reader_algo == 2)
+//	  {
+//		if (comm.rank() == 0) printf("reading %s via fileloader\n", filename.c_str());
+//
+//		idx.read_file<PARSER_TYPE, typename IndexType::KmerParserType>(filename, temp, comm);
+//
+//	  } else
+	  if (reader_algo == 5) {
 		if (comm.rank() == 0) printf("reading %s via mmap\n", filename.c_str());
 		idx.read_file_mmap<PARSER_TYPE, typename IndexType::KmerParserType>(filename, temp, comm);
 
