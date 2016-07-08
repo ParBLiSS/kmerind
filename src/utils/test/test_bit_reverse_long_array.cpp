@@ -78,9 +78,10 @@ typedef ::testing::Types<
     ::bliss::utils::bit_ops::test::BitsParam< 2> ,
     ::bliss::utils::bit_ops::test::BitsParam< 3> ,
     ::bliss::utils::bit_ops::test::BitsParam< 4> ,
-    ::bliss::utils::bit_ops::test::BitsParam< 8> ,
-    ::bliss::utils::bit_ops::test::BitsParam<16> ,
-    ::bliss::utils::bit_ops::test::BitsParam<32>
+    ::bliss::utils::bit_ops::test::BitsParam< 8>
+//	 ,
+//    ::bliss::utils::bit_ops::test::BitsParam<16> ,
+//    ::bliss::utils::bit_ops::test::BitsParam<32>
 > BitReverseLongArrayTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitReverseLongArrayTest, BitReverseLongArrayTestTypes);
 

@@ -52,7 +52,7 @@
 
 #include "utils/logging.h"
 #include "bliss-config.hpp"
-#ifdef USE_SIMD
+#if defined(__AVX2__) || defined(__SSSE3__)
 #include <x86intrin.h>   // all intrinsics.  will be enabled based on compiler flag such as __SSSE3__ internally.
 #endif
 
@@ -3070,7 +3070,7 @@ namespace bliss {
 
 #else
       template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
-          unsigned int WordsInM128 = sizeof(__m128i) / sizeof(WORD_TYPE)>
+          unsigned int WordsInM128 = 16 / sizeof(WORD_TYPE)>
       BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_SSSE3), uint16_t>::type
       reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint16_t bit_offset = 0 ) {
         return reverse<BIT_GROUP_SIZE, BIT_REV_SWAR>(::std::forward<WORD_TYPE *>(out),
@@ -3198,7 +3198,7 @@ namespace bliss {
 
 #else
       template <unsigned int BIT_GROUP_SIZE, unsigned char MAX_SIMD_TYPE, typename WORD_TYPE,
-          unsigned int WordsInM256 = sizeof(__m256i) / sizeof(WORD_TYPE)>
+          unsigned int WordsInM256 = 32 / sizeof(WORD_TYPE)>
       BITS_INLINE typename std::enable_if<(MAX_SIMD_TYPE == BIT_REV_AVX2), uint16_t>::type
       reverse(WORD_TYPE * out, WORD_TYPE const * in, size_t const & len, uint16_t bit_offset = 0 ) {
         // cascade to SSSE3 and let the choice of implementation be decided there.
