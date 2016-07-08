@@ -496,10 +496,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             return results;
           }
 
-          if (this->empty()) {
-              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_a2a", this->comm);
-              return results;
-          }
+//          if (this->empty()) {
+//              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_a2a", this->comm);
+//              return results;
+//          }
 
 
           BL_BENCH_START(find);
@@ -616,10 +616,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_overlap", this->comm);
             return results;
           }
-          if (this->empty()) {
-              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_overlap", this->comm);
-              return results;
-          }
+//          if (this->empty()) {
+//              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_overlap", this->comm);
+//              return results;
+//          }
 
           BL_BENCH_START(find);
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
@@ -815,10 +815,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
             return results;
           }
-          if (this->empty()) {
-              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
-              return results;
-          }
+//          if (this->empty()) {
+//              BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
+//              return results;
+//          }
 
 
           BL_BENCH_START(find);
@@ -961,10 +961,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_sendrecv", this->comm);
             return results;
           }
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_sendrecv", this->comm);
-            return results;
-          }
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_sendrecv", this->comm);
+//            return results;
+//          }
 
 
           BL_BENCH_START(find);
@@ -1515,10 +1515,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_REPORT_MPI_NAMED(count, "base_sorted_map:count", this->comm);
           return results;
         }
-        if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(count, "base_sorted_map:count", this->comm);
-            return results;
-        }
+//        if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(count, "base_sorted_map:count", this->comm);
+//            return results;
+//        }
 
 
         BL_BENCH_START(count);
@@ -1667,12 +1667,16 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        */
       template <class Predicate = ::fsc::TruePredicate>
       size_t insert(::std::vector<::std::pair<Key, T> > &input, bool sorted_input = false, Predicate const &pred = Predicate()) {
-          if (input.size() == 0) return 0;  // OKAY HERE ONLY BECAUSE NO COMMUNICATION IS HERE.
+          BL_BENCH_INIT(insert);
+
+          if (::dsc::empty(input, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(insert, "base_sorted_map:insert", this->comm);
+            return 0;
+          }
 
           this->set_balanced(false);
           this->set_globally_sorted(false);
 
-          BL_BENCH_INIT(insert);
 
           BL_BENCH_START(insert);
           this->transform_input(input);
@@ -1727,11 +1731,6 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             return 0;
           }
 
-          if (this->empty()) {
-              BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
-        	  return 0;
-          }
-
           BL_BENCH_START(erase);
           this->transform_input(keys);
           BL_BENCH_END(erase, "transform_input", keys.size());
@@ -1757,6 +1756,12 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_START(erase);
           this->local_sort();  // sort container before deleting.
           BL_BENCH_END(erase, "local_sort", keys.size());
+        }
+
+
+        if (this->empty() || keys.empty()) {
+            BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
+      	  return 0;
         }
 
         BL_BENCH_START(erase);

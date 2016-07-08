@@ -367,12 +367,12 @@ namespace dsc  // distributed std container
             BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_a2a", this->comm);
             return results;
           }
-
-
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_a2a", this->comm);
-            return results;
-          }
+//
+//
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_a2a", this->comm);
+//            return results;
+//          }
 
 
           BL_BENCH_START(find);
@@ -474,11 +474,11 @@ namespace dsc  // distributed std container
             return results;
           }
 
-
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_overlap", this->comm);
-            return results;
-          }
+//
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_overlap", this->comm);
+//            return results;
+//          }
 
 
           BL_BENCH_START(find);
@@ -660,10 +660,10 @@ namespace dsc  // distributed std container
             return results;
           }
 
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find", this->comm);
-            return results;
-          }
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find", this->comm);
+//            return results;
+//          }
 
           BL_BENCH_START(find);
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
@@ -780,10 +780,10 @@ namespace dsc  // distributed std container
             return results;
           }
 
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_sendrecv", this->comm);
-            return results;
-          }
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_sendrecv", this->comm);
+//            return results;
+//          }
 
 
           BL_BENCH_START(find);
@@ -1190,11 +1190,6 @@ namespace dsc  // distributed std container
             return 0;
           }
 
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
-            return 0;
-          }
-
           BL_BENCH_START(erase);
           this->transform_input(keys);
           BL_BENCH_END(erase, "transform_intput", keys.size());
@@ -1209,6 +1204,13 @@ namespace dsc  // distributed std container
             // don't try to run unique further - have to use a set so might as well just have erase_element handle it.
             sorted_input = false;
           }
+
+          if (this->empty() || keys.empty()) {
+            BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
+            return 0;
+          }
+
+
 
           BL_BENCH_START(erase);
           // then call local remove.
@@ -1336,11 +1338,11 @@ namespace dsc  // distributed std container
             BL_BENCH_REPORT_MPI_NAMED(count, "base_unordered_map:count", this->comm);
             return results;
           }
-
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(count, "base_unordered_map:count", this->comm);
-            return results;
-          }
+//
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(count, "base_unordered_map:count", this->comm);
+//            return results;
+//          }
 
 
 

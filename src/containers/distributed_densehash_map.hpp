@@ -321,10 +321,10 @@ namespace dsc  // distributed std container
           }
 
 
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_a2a", this->comm);
-            return results;
-          }
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_a2a", this->comm);
+//            return results;
+//          }
 
 
           BL_BENCH_START(find);
@@ -426,11 +426,11 @@ namespace dsc  // distributed std container
             return results;
           }
 
-
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_overlap", this->comm);
-            return results;
-          }
+//
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_overlap", this->comm);
+//            return results;
+//          }
 
 
           BL_BENCH_START(find);
@@ -612,10 +612,10 @@ namespace dsc  // distributed std container
             return results;
           }
 
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find", this->comm);
-            return results;
-          }
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find", this->comm);
+//            return results;
+//          }
 
           BL_BENCH_START(find);
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
@@ -732,10 +732,10 @@ namespace dsc  // distributed std container
             return results;
           }
 
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_sendrecv", this->comm);
-            return results;
-          }
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_sendrecv", this->comm);
+//            return results;
+//          }
 
 
           BL_BENCH_START(find);
@@ -1204,10 +1204,10 @@ namespace dsc  // distributed std container
             return results;
           }
 
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(count, "base_densehash_map:count", this->comm);
-            return results;
-          }
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(count, "base_densehash_map:count", this->comm);
+//            return results;
+//          }
 
 
 
@@ -1316,12 +1316,7 @@ namespace dsc  // distributed std container
           BL_BENCH_INIT(erase);
 
           if (::dsc::empty(keys, this->comm)) {
-            BL_BENCH_REPORT_MPI_NAMED(erase, "base_densehash_map:erase", this->comm);
-            return 0;
-          }
-
-          if (this->empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(erase, "base_densehash_map:erase", this->comm);
+            BL_BENCH_REPORT_MPI_NAMED(erase, "base_densehash:erase", this->comm);
             return 0;
           }
 
@@ -1339,6 +1334,13 @@ namespace dsc  // distributed std container
             // don't try to run unique further - have to use a set so might as well just have erase_element handle it.
             sorted_input = false;
           }
+
+          if (this->empty() || keys.empty()) {
+            BL_BENCH_REPORT_MPI_NAMED(erase, "base_densehash:erase", this->comm);
+            return 0;
+          }
+
+
 
           BL_BENCH_START(erase);
           // then call local remove.

@@ -61,19 +61,19 @@ function(add_sortedmap_target file prefix parser dna k store map index)
 
 endfunction(add_sortedmap_target)
 
-function(add_orderedmap_target file prefix parser dna k store map index disttrans disthash)
-    # storehash is ignored if passed in
-
-      add_executable(${prefix}-${parser}-a${dna}-k${k}-${store}-ORDERED-${index}-dt${disttrans}-dh${disthash}-shZZZZ ${file})
-      
-      SET_TARGET_PROPERTIES(${prefix}-${parser}-a${dna}-k${k}-${store}-ORDERED-${index}-dt${disttrans}-dh${disthash}-shZZZZ
-         PROPERTIES COMPILE_FLAGS 
-         "-DpPARSER=${parser} -DpDNA=${dna} -DpK=${k} -DpKmerStore=${store} -DpMAP=ORDERED -DpINDEX=${index} -DpDistTrans=${disttrans} -DpDistHash=${disthash}")
-      
-      target_link_libraries(${prefix}-${parser}-a${dna}-k${k}-${store}-ORDERED-${index}-dt${disttrans}-dh${disthash}-shZZZZ
-       ${EXTRA_LIBS})
-
-endfunction(add_orderedmap_target)
+#function(add_orderedmap_target file prefix parser dna k store map index disttrans disthash)
+#    # storehash is ignored if passed in
+#
+#      add_executable(${prefix}-${parser}-a${dna}-k${k}-${store}-ORDERED-${index}-dt${disttrans}-dh${disthash}-shZZZZ ${file})
+#      
+#      SET_TARGET_PROPERTIES(${prefix}-${parser}-a${dna}-k${k}-${store}-ORDERED-${index}-dt${disttrans}-dh${disthash}-shZZZZ
+#         PROPERTIES COMPILE_FLAGS 
+#         "-DpPARSER=${parser} -DpDNA=${dna} -DpK=${k} -DpKmerStore=${store} -DpMAP=ORDERED -DpINDEX=${index} -DpDistTrans=${disttrans} -DpDistHash=${disthash}")
+#      
+#      target_link_libraries(${prefix}-${parser}-a${dna}-k${k}-${store}-ORDERED-${index}-dt${disttrans}-dh${disthash}-shZZZZ
+#       ${EXTRA_LIBS})
+#
+#endfunction(add_orderedmap_target)
 
 function(add_hashmap_target file prefix parser dna k store map index disttrans disthash storehash)
 
@@ -163,7 +163,7 @@ foreach(store SINGLE BIMOLECULE CANONICAL)
 #  add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED POS IDEN FARM FARM)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} VEC POS IDEN FARM FARM)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} COMPACTVEC POS IDEN FARM FARM)
-  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
+#  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
 endforeach(store)
 
 #   then add for SINGLE strand store, different distribution transforms for COUNT and POS
@@ -184,7 +184,7 @@ endforeach(hash)
 foreach(hash IDEN STD MURMUR)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE UNORDERED COUNT IDEN FARM ${hash})
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH COUNT IDEN FARM ${hash})
-  foreach(map VEC COMPACTVEC UNORDERED DENSEHASH HASHEDVEC) 
+  foreach(map VEC COMPACTVEC UNORDERED DENSEHASH)  #HASHEDVEC 
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE ${map} POS IDEN FARM ${hash})
   endforeach(map)
 endforeach(hash)  

@@ -165,6 +165,10 @@ before_script:
 script:
     # run tests.
     - make test 
+    - ./bin/testFASTA_load
+    - mpiexec -np 4 ./bin/testFASTA_load
+    - ./bin/testFASTQ_load
+    - mpiexec -np 4 ./bin/testFASTQ_load
     - ./bin/testKmerIndex-fasta
     - mpiexec -np 4 ./bin/testKmerIndex-fasta
     - ./bin/testKmerIndex-fastq

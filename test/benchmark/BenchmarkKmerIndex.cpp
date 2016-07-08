@@ -410,9 +410,9 @@ int main(int argc, char** argv) {
   std::string filename;
   filename.assign(PROJ_SRC_DIR);
 #if (pPARSER == FASTA)
-      filename.append("/test/data/test.fasta");
+      filename.append("/test/data/test2.fasta");
 #elif (pPARSER == FASTQ)
-      filename.append("/test/data/test.fastq");
+      filename.append("/test/data/test.small.fastq");
 #endif
   std::string queryname(filename);
 

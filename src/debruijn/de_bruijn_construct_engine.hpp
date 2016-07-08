@@ -54,6 +54,7 @@
 
 #include "io/mxx_support.hpp"
 #include "containers/distributed_unordered_map.hpp"
+#include "containers/distributed_densehash_map.hpp"
 #include "containers/distributed_sorted_map.hpp"
 // way too slow.  also not updated. #include "containers/distributed_map.hpp"
 

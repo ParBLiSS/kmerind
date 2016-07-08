@@ -53,7 +53,8 @@ class FASTAParseTest : public KmerReaderTest
 	// can't compare the sequences directly since offsets may be different.
 protected:
 
-	typedef bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> ParserType;
+	template <typename ITER>
+	using ParserType = bliss::io::FASTAParser<ITER>;
 
 	static constexpr size_t kmer_size = 35;
 	using KmerType = ::bliss::common::Kmer<kmer_size, bliss::common::DNA5, uint64_t>;
@@ -76,7 +77,7 @@ protected:
 			ASSERT_EQ(fdata.parent_range_bytes.size(), fobj.size());
 			ASSERT_EQ(fdata.parent_range_bytes.end, fobj.size());
 
-		  ASSERT_TRUE(fdata.data[0] == '>');
+		  ASSERT_TRUE((fdata.data[0] == '>') || (fdata.data[0] == ';'));
 
 			this->seqCount = 0;
 			this->kmerCount = 0;
@@ -85,7 +86,7 @@ protected:
 			using BlockIterType = typename bliss::io::file_data::const_iterator;
 			using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
-			ParserType l1parser;
+			ParserType<typename ::bliss::io::file_data::const_iterator> l1parser;
 
 			size_t offset = l1parser.init_parser(fdata.in_mem_cbegin(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes);
 
@@ -205,7 +206,7 @@ protected:
 		using BlockIterType = typename ::bliss::io::file_data::const_iterator;
 		using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
-		ParserType l1parser;
+		ParserType<typename ::bliss::io::file_data::const_iterator> l1parser;
 
 		size_t offset = l1parser.init_parser(fdata.in_mem_cbegin(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes, comm);
 
@@ -372,7 +373,7 @@ TEST_P(FASTAParseTest, parse_mpiio_mpi)
 {
 	  ::mxx::comm comm;
 
-	::bliss::io::parallel::mpiio_file<ParserType> fobj(this->fileName, kmer_size - 1, comm);
+	::bliss::io::parallel::mpiio_file<bliss::io::FASTAParser> fobj(this->fileName, kmer_size - 1, comm);
 
 	  this->parse_mpi(fobj, kmer_size - 1, comm);
 

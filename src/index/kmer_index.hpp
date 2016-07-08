@@ -71,10 +71,10 @@
 #include "common/kmer_transform.hpp"
 
 #include "io/mxx_support.hpp"
-#include "containers/distributed_hashed_vec.hpp"
+//#include "containers/distributed_hashed_vec.hpp"
 #include "containers/distributed_unordered_map.hpp"
 #include "containers/distributed_sorted_map.hpp"
-#include "containers/distributed_map.hpp"
+//#include "containers/distributed_map.hpp"
 #include "containers/distributed_densehash_map.hpp"
 
 #include "io/sequence_iterator.hpp"
@@ -242,7 +242,7 @@ public:
 		      partition = fobj.read_file();
 		      BL_BENCH_END(file, "open", partition.getRange().size());
 		    }
-		      BL_BENCH_REPORT_MPI_NAMED(file, "index:read:mpiio", _comm);
+		      BL_BENCH_REPORT_MPI_NAMED(file, "index:open_file", _comm);
 		return partition;
 	}
 
@@ -258,7 +258,7 @@ public:
 
 	    size_t before = result.size();
 
-	    using FileType = ::bliss::io::parallel::mpiio_file<SeqParser<typename ::bliss::io::file_data::const_iterator> > ;
+	    using FileType = ::bliss::io::parallel::mpiio_file<SeqParser > ;
 
 	    BL_BENCH_INIT(file);
 	    {  // ensure that fileloader is closed at the end.
@@ -308,7 +308,7 @@ public:
 
 
       // partitioned file with mmap or posix do not seem to be much faster than mpiio and may result in more jitter when congested.
-      using FileType = ::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, SeqParser<typename ::bliss::io::file_data::const_iterator> >;
+      using FileType = ::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, SeqParser >;
 	    //====  now process the file, one L1 block (block partition by MPI Rank) at a time
 
       size_t before = result.size();
@@ -358,7 +358,7 @@ public:
 
 
       // partitioned file with mmap or posix do not seem to be much faster than mpiio and may result in more jitter when congested.
-      using FileType = ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, SeqParser<typename ::bliss::io::file_data::const_iterator> >;
+      using FileType = ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, SeqParser >;
 	    //====  now process the file, one L1 block (block partition by MPI Rank) at a time
 
       size_t before = result.size();
@@ -370,6 +370,7 @@ public:
 	      ::bliss::io::file_data partition = open_file<FileType>(filename, _comm);
         BL_BENCH_END(file, "open", partition.getRange().size());
 
+        std::cout << "rank " << _comm.size() << " in_mem " << partition.in_mem_range_bytes << " valid " << partition.valid_range_bytes << std::endl;
 
 	      // not reusing the SeqParser in loader.  instead, reinitializing one.
 	      BL_BENCH_START(file);
@@ -1100,51 +1101,51 @@ using BimoleculeHashMapParams = ::dsc::HashMapParams<
 		    ::std::equal_to
 		  >;
 
-template <typename Key,
-			template <typename> class DistHash = DistHashFarm,
-			template <typename> class StoreLess = ::std::less,
-			template <typename> class DistTrans = ::bliss::kmer::transform::identity >
-using SingleStrandOrderedMapParams = ::dsc::OrderedMapParams<
-		Key,
-		::bliss::kmer::transform::identity,  // precanonalizer
-		 DistTrans,  				// could be iden, xor, lex_less
-		  DistHash,
-		  ::std::equal_to,
-		   ::bliss::kmer::transform::identity,  // only one that makes sense given InputTransform
-		    StoreLess,
-		    ::std::equal_to
-		  >;
-
-
-template <typename Key,
-			template <typename> class DistHash = DistHashFarm,
-			template <typename> class StoreLess = ::std::less
-			>
-using CanonicalOrderedMapParams = ::dsc::OrderedMapParams<
-		Key,
-		::bliss::kmer::transform::lex_less,  // precanonalizer
-		 ::bliss::kmer::transform::identity,  // only one that makes sense given InputTransform
-		  DistHash,
-		  ::std::equal_to,
-		   ::bliss::kmer::transform::identity,
-		    StoreLess,
-		    ::std::equal_to
-		  >;
-
-template <typename Key,
-			template <typename> class DistHash = DistHashFarm,
-			template <typename> class StoreLess = ::std::less
-			>
-using BimoleculeOrderedMapParams = ::dsc::OrderedMapParams<
-		Key,
-		::bliss::kmer::transform::identity,  // precanonalizer - only one that makes sense for bimole
-		 ::bliss::kmer::transform::lex_less,  // only one that makes sense for bimole
-		  DistHash,
-		  ::std::equal_to,
-		   ::bliss::kmer::transform::lex_less,
-		    StoreLess,
-		    ::std::equal_to
-		  >;
+//template <typename Key,
+//			template <typename> class DistHash = DistHashFarm,
+//			template <typename> class StoreLess = ::std::less,
+//			template <typename> class DistTrans = ::bliss::kmer::transform::identity >
+//using SingleStrandOrderedMapParams = ::dsc::OrderedMapParams<
+//		Key,
+//		::bliss::kmer::transform::identity,  // precanonalizer
+//		 DistTrans,  				// could be iden, xor, lex_less
+//		  DistHash,
+//		  ::std::equal_to,
+//		   ::bliss::kmer::transform::identity,  // only one that makes sense given InputTransform
+//		    StoreLess,
+//		    ::std::equal_to
+//		  >;
+//
+//
+//template <typename Key,
+//			template <typename> class DistHash = DistHashFarm,
+//			template <typename> class StoreLess = ::std::less
+//			>
+//using CanonicalOrderedMapParams = ::dsc::OrderedMapParams<
+//		Key,
+//		::bliss::kmer::transform::lex_less,  // precanonalizer
+//		 ::bliss::kmer::transform::identity,  // only one that makes sense given InputTransform
+//		  DistHash,
+//		  ::std::equal_to,
+//		   ::bliss::kmer::transform::identity,
+//		    StoreLess,
+//		    ::std::equal_to
+//		  >;
+//
+//template <typename Key,
+//			template <typename> class DistHash = DistHashFarm,
+//			template <typename> class StoreLess = ::std::less
+//			>
+//using BimoleculeOrderedMapParams = ::dsc::OrderedMapParams<
+//		Key,
+//		::bliss::kmer::transform::identity,  // precanonalizer - only one that makes sense for bimole
+//		 ::bliss::kmer::transform::lex_less,  // only one that makes sense for bimole
+//		  DistHash,
+//		  ::std::equal_to,
+//		   ::bliss::kmer::transform::lex_less,
+//		    StoreLess,
+//		    ::std::equal_to
+//		  >;
 
 
 template <typename Key,

@@ -14,7 +14,7 @@
 
 
 #include "containers/unordered_vecmap.hpp"
-#include "containers/hashed_vecmap.hpp"
+//#include "containers/hashed_vecmap.hpp"
 #include "containers/densehash_map.hpp"
 
 #include "common/kmer.hpp"
@@ -284,62 +284,62 @@ void benchmark_unordered_vecmap(size_t const count, size_t const query_frac, ::m
   BL_BENCH_REPORT_MPI_NAMED(map, "unordered_vecmap", comm);
 }
 
-template <typename Kmer, typename Value>
-void benchmark_hashed_vecmap(size_t const count, size_t const query_frac, ::mxx::comm const & comm) {
-  BL_BENCH_INIT(map);
-
-  std::vector<Kmer> query;
-
-  BL_BENCH_START(map);
-  // no transform involved.
-  ::fsc::hashed_vecmap<Kmer, Value, ::bliss::kmer::hash::farm<Kmer, false> > map(1, count);
-  BL_BENCH_END(map, "reserve", count);
-
-
-  {
+//template <typename Kmer, typename Value>
+//void benchmark_hashed_vecmap(size_t const count, size_t const query_frac, ::mxx::comm const & comm) {
+//  BL_BENCH_INIT(map);
+//
+//  std::vector<Kmer> query;
+//
+//  BL_BENCH_START(map);
+//  // no transform involved.
+//  ::fsc::hashed_vecmap<Kmer, Value, ::bliss::kmer::hash::farm<Kmer, false> > map(1, count);
+//  BL_BENCH_END(map, "reserve", count);
+//
+//
+//  {
+////    BL_BENCH_START(map);
+//    std::vector<::std::pair<Kmer, Value> > input(count);
+////    BL_BENCH_END(map, "reserve input", count);
+//
+////    BL_BENCH_START(map);
+//    generate_input(input, count);
+//    query.resize(count / query_frac);
+//    std::transform(input.begin(), input.begin() + input.size() / query_frac, query.begin(),
+//                   [](::std::pair<Kmer, Value> const & x){
+//      return x.first;
+//    });
+////    BL_BENCH_END(map, "generate input", input.size());
+//
+//
 //    BL_BENCH_START(map);
-    std::vector<::std::pair<Kmer, Value> > input(count);
-//    BL_BENCH_END(map, "reserve input", count);
-
-//    BL_BENCH_START(map);
-    generate_input(input, count);
-    query.resize(count / query_frac);
-    std::transform(input.begin(), input.begin() + input.size() / query_frac, query.begin(),
-                   [](::std::pair<Kmer, Value> const & x){
-      return x.first;
-    });
-//    BL_BENCH_END(map, "generate input", input.size());
-
-
-    BL_BENCH_START(map);
-    map.insert(input);
-    BL_BENCH_END(map, "insert", map.size());
-  }
-
-  BL_BENCH_START(map);
-  size_t result = 0;
-  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
-    auto iters = map.equal_range(query[i]);
-    for (auto it = iters.first; it != iters.second; ++it)
-      result ^= (*it).second;
-  }
-  BL_BENCH_END(map, "find", result);
-
-
-  BL_BENCH_START(map);
-  result = 0;
-  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
-    result += map.count(query[i]);
-  }
-  BL_BENCH_END(map, "count", result);
-
-  BL_BENCH_START(map);
-  result = map.erase(query.begin(), query.end());
-  BL_BENCH_END(map, "erase", result);
-
-
-  BL_BENCH_REPORT_MPI_NAMED(map, "hashed_vecmap", comm);
-}
+//    map.insert(input);
+//    BL_BENCH_END(map, "insert", map.size());
+//  }
+//
+//  BL_BENCH_START(map);
+//  size_t result = 0;
+//  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
+//    auto iters = map.equal_range(query[i]);
+//    for (auto it = iters.first; it != iters.second; ++it)
+//      result ^= (*it).second;
+//  }
+//  BL_BENCH_END(map, "find", result);
+//
+//
+//  BL_BENCH_START(map);
+//  result = 0;
+//  for (size_t i = 0, max = count / query_frac; i < max; ++i) {
+//    result += map.count(query[i]);
+//  }
+//  BL_BENCH_END(map, "count", result);
+//
+//  BL_BENCH_START(map);
+//  result = map.erase(query.begin(), query.end());
+//  BL_BENCH_END(map, "erase", result);
+//
+//
+//  BL_BENCH_REPORT_MPI_NAMED(map, "hashed_vecmap", comm);
+//}
 
 template <typename Kmer, typename Value>
 void benchmark_densehash_map(size_t const count, size_t const query_frac, ::mxx::comm const & comm) {
@@ -1241,9 +1241,9 @@ int main(int argc, char** argv) {
   benchmark_unordered_vecmap<Kmer, size_t>(count, query_frac, comm);
   BL_BENCH_COLLECTIVE_END(test, "unordered_vecmap", count, comm);
 
-  BL_BENCH_START(test);
-  benchmark_hashed_vecmap<Kmer, size_t>(count, query_frac, comm);
-  BL_BENCH_COLLECTIVE_END(test, "hashed_vecmap", count, comm);
+//  BL_BENCH_START(test);
+//  benchmark_hashed_vecmap<Kmer, size_t>(count, query_frac, comm);
+//  BL_BENCH_COLLECTIVE_END(test, "hashed_vecmap", count, comm);
 
 
   BL_BENCH_REPORT_MPI_NAMED(test, "hashmaps", comm);

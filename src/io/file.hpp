@@ -1061,7 +1061,7 @@ public:
 
 
 template <typename FileReader,
-          typename FileParser = ::bliss::io::BaseFileParser<typename ::bliss::io::file_data::const_iterator>,
+          template <typename> class FileParser = ::bliss::io::BaseFileParser,
           typename BaseType = ::bliss::io::parallel::base_file >
 class partitioned_file : public BaseType {
 
@@ -1069,7 +1069,7 @@ protected:
 	using BASE = BaseType;
 
 	using range_type = typename ::bliss::io::base_file::range_type;
-	using FileParserType = FileParser;
+	using FileParserType = FileParser<typename ::bliss::io::file_data::const_iterator >;
 
 	/// FileReader
 	FileReader reader;
@@ -1205,7 +1205,7 @@ public:
 
 
 template <typename FileReader, typename BaseType>
-class partitioned_file<FileReader, ::bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator >, BaseType > :
+class partitioned_file<FileReader, ::bliss::io::FASTQParser, BaseType > :
 	public BaseType {
 
 protected:
@@ -1419,7 +1419,7 @@ public:
 
 
 template <typename FileReader, typename BaseType>
-class partitioned_file<FileReader, ::bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator>, BaseType > :
+class partitioned_file<FileReader, ::bliss::io::FASTAParser, BaseType > :
 	public BaseType {
 
 protected:
@@ -1589,16 +1589,14 @@ public:
 };
 
 /// disable shared fd for stdio file.
-template <typename FileParser>
+template <template <typename> class FileParser>
 class partitioned_file<::bliss::io::stdio_file, FileParser, ::bliss::io::parallel::base_shared_fd_file >
 {
   private:
-	template <typename dummy = FileParser>
     partitioned_file(std::string const & _filename, size_t const & _overlap = 0UL, ::mxx::comm const & _comm = ::mxx::comm()) {
 		// static_assert(false, "ERROR: stdio_file is not compatible with base_shared_fd_file, as there is no fread that will maintain the old position");
     }
 
-	template <typename dummy = FileParser>
 	partitioned_file() {
 		// static_assert(false, "ERROR: stdio_file is not compatible with base_shared_fd_file, as there is no fread that will maintain the old position");
 	};
@@ -1609,7 +1607,7 @@ class partitioned_file<::bliss::io::stdio_file, FileParser, ::bliss::io::paralle
 
 
 // multilevel parallel file io relies on MPIIO.
-template <typename FileParser = ::bliss::io::BaseFileParser<typename ::bliss::io::file_data::const_iterator> >
+template <template <typename> class FileParser = ::bliss::io::BaseFileParser >
 class mpiio_base_file : public ::bliss::io::base_file {
 
 	static_assert(sizeof(MPI_Offset) > 4, "ERROR: MPI_Offset is defined as an integer 4 bytes or less.  Do not use mpiio_file ");
@@ -1718,7 +1716,7 @@ protected:
 public:
 	// this is needed to prevent overload name hiding.  see http://stackoverflow.com/questions/888235/overriding-a-bases-overloaded-function-in-c/888337#888337
 	using BASE::read_range;
-	using FileParserType = FileParser;
+	using FileParserType = FileParser<typename ::bliss::io::file_data::const_iterator>;
 
 	/**
 	 * @brief  bulk load the data and return it in a newly constructed vector.  block decomposes the range.  reuse vector
@@ -1747,7 +1745,7 @@ public:
 
 		// compute the size to read.
 		range_type read_range = target;
-		read_range.end += std::is_same<FileParser, ::bliss::io::FASTAParser<typename bliss::io::file_data::const_iterator> >::value ? 2 * this->overlap : this->overlap;
+		read_range.end += std::is_same<FileParser<typename bliss::io::file_data::const_iterator>, ::bliss::io::FASTAParser<typename bliss::io::file_data::const_iterator> >::value ? 2 * this->overlap : this->overlap;
 		read_range.intersect(this->file_range_bytes);
 
 		output.resize(read_range.size());    // set size for reading.
@@ -1908,7 +1906,7 @@ public:
 /**
  * parallel file abstraction for MPIIO, block partition with overlap
  */
-template <typename FileParser = ::bliss::io::BaseFileParser<typename ::bliss::io::file_data::const_iterator> >
+template <template <typename> class FileParser = ::bliss::io::BaseFileParser >
 class mpiio_file : public ::bliss::io::parallel::mpiio_base_file<FileParser> {
 
 	protected:
@@ -1957,11 +1955,11 @@ public:
  * parallel file abstraction for MPIIO.  FASTQParser, which searches the input.
  */
 template <>
-class mpiio_file<::bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator> > :
-	public ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator> > {
+class mpiio_file<::bliss::io::FASTQParser> :
+	public ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTQParser> {
 
 	protected:
-		using BASE = ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator> > ;
+		using BASE = ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTQParser> ;
 
 
 public:
@@ -2074,11 +2072,11 @@ public:
  * parallel file abstraction for MPIIO.  FASTQParser, which searches the input.
  */
 template <>
-class mpiio_file<::bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> > :
-	public ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> > {
+class mpiio_file<::bliss::io::FASTAParser > :
+	public ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTAParser > {
 
 	protected:
-		using BASE = ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> > ;
+		using BASE = ::bliss::io::parallel::mpiio_base_file<::bliss::io::FASTAParser > ;
 
 
 public:

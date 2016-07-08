@@ -290,38 +290,38 @@ int main(int argc, char** argv) {
 
 	  if (which == -1 || which == 5)
 	  {
-		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<typename ::bliss::io::file_data::const_iterator> >, KmerType> (comm, filename, "mpi mmap");
+		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE >, KmerType> (comm, filename, "mpi mmap");
 		  comm.barrier();
 	  }
 
 	  if (which == -1 || which == 6)
 	  {
-		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::stdio_file, PARSER_TYPE<typename ::bliss::io::file_data::const_iterator> >, KmerType> (comm, filename, "mpi stdio");
+		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::stdio_file, PARSER_TYPE >, KmerType> (comm, filename, "mpi stdio");
 		  comm.barrier();
 	  }
 
     if (which == -1 || which == 7)
     {
-      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE<typename ::bliss::io::file_data::const_iterator> >, KmerType> (comm, filename, "mpi posix");
+      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE >, KmerType> (comm, filename, "mpi posix");
       comm.barrier();
     }
 
     if (which == -1 || which == 8)
     {
-      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<typename ::bliss::io::file_data::const_iterator>, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd mmap");
+      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd mmap");
       comm.barrier();
     }
 
     if (which == -1 || which == 9)
     {
-      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE<typename ::bliss::io::file_data::const_iterator>, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd posix");
+      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd posix");
       comm.barrier();
     }
 
 
 	  if (which == -1 || which == 10)
 	  {
-		  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE<typename ::bliss::io::file_data::const_iterator> >, KmerType> (comm, filename, "mpi-io");
+		  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE >, KmerType> (comm, filename, "mpi-io");
 		  comm.barrier();
 	  }
 
