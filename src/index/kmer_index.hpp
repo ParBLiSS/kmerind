@@ -154,8 +154,8 @@ public:
 		//== process the chunk of data
 
 		//==  and wrap the chunk inside an iterator that emits Reads.
-		SeqIterType seqs_start(seq_parser, partition.cbegin(), partition.cend(), partition.getRange().start);
-		SeqIterType seqs_end(partition.cend());
+		SeqIterType seqs_start(seq_parser, partition.cbegin(), partition.in_mem_cend(), partition.getRange().start);
+		SeqIterType seqs_end(partition.in_mem_cend());
 
 		::fsc::back_emplace_iterator<std::vector<typename KP::value_type> > emplace_iter(result);
 
@@ -238,7 +238,7 @@ public:
 		//      FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
 		//      typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 
-		      FileType fobj(filename, KmerType::size, _comm);
+		      FileType fobj(filename, KmerType::size - 1, _comm);
 		      partition = fobj.read_file();
 		      BL_BENCH_END(file, "open", partition.getRange().size());
 		    }
