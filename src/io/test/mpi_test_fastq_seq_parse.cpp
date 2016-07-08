@@ -46,7 +46,7 @@
 #include "io/file.hpp"
 
 
-typedef bliss::io::FASTQParser<unsigned char *> ParserType;
+typedef bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator> ParserType;
 
 
 class FASTQParseTest : public KmerReaderTest
@@ -81,12 +81,12 @@ protected:
 			this->kmerCount = 0;
 
 			// from FileLoader type, get the block iter type and range type
-			using BlockIterType = unsigned char *;
+			using BlockIterType = typename ::bliss::io::file_data::const_iterator;
 			using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTQParser >;
 
 			ParserType l1parser;
 
-			size_t offset = l1parser.init_parser(fdata.data.data(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes);
+			size_t offset = l1parser.init_parser(fdata.in_mem_cbegin(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes);
 
 			  //==  and wrap the chunk inside an iterator that emits Reads.
 			  SeqIterType seqs_start(l1parser, fdata.begin(),
@@ -158,6 +158,22 @@ protected:
 
 		::bliss::io::file_data fdata = fobj.read_file();
 
+//		comm.barrier();
+//        if (comm.rank() == 1) {
+//        std::cout << "rank " << comm.rank() << "   parent " << fdata.parent_range_bytes << std::endl;
+//        std::cout << "rank " << comm.rank() << "   inmem " << fdata.in_mem_range_bytes << std::endl;
+//        std::cout << "rank " << comm.rank() << "   search " << fdata.valid_range_bytes << std::endl;
+//
+//			 std::cout << "rank " << comm.rank() << " ";
+//			 for (auto ii = fdata.data.begin(); ii != (fdata.data.begin() + (fdata.in_mem_range_bytes.end - fdata.in_mem_range_bytes.start)); ++ii ) {
+//				 std::cout << static_cast<unsigned char>(*ii);
+//			 }
+//			 std::cout << std::endl;
+//        }
+//        comm.barrier();
+
+//		std::cout << " rank " << comm.rank() << " in mem " << fdata.in_mem_range_bytes << " valid " << fdata.valid_range_bytes << std::endl;
+
 		ASSERT_TRUE(fobj.size() > 0);
 
 		// parent range should match.
@@ -204,17 +220,20 @@ protected:
 			this->kmerCount = 0;
 
 		// from FileLoader type, get the block iter type and range type
-		using BlockIterType = unsigned char *;
+		using BlockIterType = typename ::bliss::io::file_data::const_iterator;
 		using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTQParser >;
 
 		ParserType l1parser;
 
-		size_t offset = l1parser.init_parser(fdata.data.data(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes, comm);
+		size_t offset = l1parser.init_parser(fdata.in_mem_cbegin(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes, comm);
 
 		  //==  and wrap the chunk inside an iterator that emits Reads.
 		  SeqIterType seqs_start(l1parser, fdata.begin(),
 				  fdata.in_mem_end(), offset);
 		  SeqIterType seqs_end(fdata.in_mem_end());
+
+//          std::cout << "rank " << comm.rank() << " offset = " << offset << " sequence " << *seqs_start << std::endl;
+
 
 	      bliss::index::kmer::KmerParser<KmerType > kmer_parser;
 	      std::vector<KmerType> result;
@@ -233,12 +252,19 @@ protected:
 
 		          result.clear();
 
+//		          std::cout << "rank " << comm.rank() << " sequence " << *seqs_start << std::endl;
+
 		          // generate kmers and save them
 		          kmer_parser(*seqs_start, emplace_iter);
 
 		          gold.clear();
 		          gold.resize(seqs_start->seq_size(), 0);
 		          this->readFilePOSIX(this->fileName, seqs_start->seq_global_offset(), seqs_start->seq_size(), gold.data());
+	//	          std::cout << "rank " << comm.rank() << " entire gold: ";
+	//	          for (size_t j = 0; j < seqs_start->seq_size(); ++j) {
+	//	          			        		  std::cout << gold[j];
+	//	          			        	  }
+	//	          std::cout << std::endl;
 
 		          // compare the results.
 		          for (size_t i = 0; i < result.size(); ++i) {
@@ -246,8 +272,9 @@ protected:
 		            localcomp = equal(bliss::utils::KmerUtils::toASCIIString(result[i]).begin(), &(gold[i]), kmer_size);
 
 			          if (!localcomp) {
-			        	  std::cout << "kmer: " << bliss::utils::KmerUtils::toASCIIString(result[i]) << std::endl;
-			        	  std::cout << "gold: ";
+
+			        	  std::cout << "rank " << comm.rank() << " kmer: " << bliss::utils::KmerUtils::toASCIIString(result[i]) << std::endl;
+			        	  std::cout << "rank " << comm.rank() << " gold: ";
 			        	  for (size_t j = 0; j < kmer_size; ++j) {
 			        		  std::cout << gold[i+j];
 			        	  }

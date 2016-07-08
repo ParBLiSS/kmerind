@@ -242,18 +242,18 @@ REGISTER_TYPED_TEST_CASE_P(FileMPILoadTest,
 
 
 typedef ::testing::Types<
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::BaseFileParser<unsigned char *> >, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ::bliss::io::BaseFileParser<unsigned char *> >, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::BaseFileParser<unsigned char *> >, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::BaseFileParser<unsigned char *> , ::bliss::io::parallel::base_shared_fd_file>, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::BaseFileParser<unsigned char *> , ::bliss::io::parallel::base_shared_fd_file>, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::mpiio_file<::bliss::io::BaseFileParser<unsigned char *> >, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::FASTAParser<unsigned char *> >, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ::bliss::io::FASTAParser<unsigned char *> >, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::FASTAParser<unsigned char *> >, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::FASTAParser<unsigned char *> , ::bliss::io::parallel::base_shared_fd_file>,  std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::FASTAParser<unsigned char *> , ::bliss::io::parallel::base_shared_fd_file>,  std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::mpiio_file<::bliss::io::FASTAParser<unsigned char *> >, std::integral_constant<size_t, 0> >
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::BaseFileParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ::bliss::io::BaseFileParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::BaseFileParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::BaseFileParser<typename ::bliss::io::file_data::const_iterator> , ::bliss::io::parallel::base_shared_fd_file>, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::BaseFileParser<typename ::bliss::io::file_data::const_iterator> , ::bliss::io::parallel::base_shared_fd_file>, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::mpiio_file<::bliss::io::BaseFileParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ::bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> , ::bliss::io::parallel::base_shared_fd_file>,  std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> , ::bliss::io::parallel::base_shared_fd_file>,  std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::mpiio_file<::bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >
 > FileMPILoadTestTypes;
 
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FileMPILoadTest, FileMPILoadTestTypes);
@@ -344,12 +344,12 @@ REGISTER_TYPED_TEST_CASE_P(FASTQMPILoadTest,
 
 
 typedef ::testing::Types<
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::FASTQParser<unsigned char *> >, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ::bliss::io::FASTQParser<unsigned char *> >, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::FASTQParser<unsigned char *> >, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::FASTQParser<unsigned char *> , ::bliss::io::parallel::base_shared_fd_file>, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::FASTQParser<unsigned char *> , ::bliss::io::parallel::base_shared_fd_file>, std::integral_constant<size_t, 0> >,
-	std::pair<::bliss::io::parallel::mpiio_file<::bliss::io::FASTQParser<unsigned char *> >, std::integral_constant<size_t, 0> >
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ::bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file,  ::bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator> , ::bliss::io::parallel::base_shared_fd_file>, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ::bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator> , ::bliss::io::parallel::base_shared_fd_file>, std::integral_constant<size_t, 0> >,
+	std::pair<::bliss::io::parallel::mpiio_file<::bliss::io::FASTQParser<typename ::bliss::io::file_data::const_iterator> >, std::integral_constant<size_t, 0> >
 > FASTQMPILoadTestTypes;
 
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, FASTQMPILoadTest, FASTQMPILoadTestTypes);

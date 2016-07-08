@@ -107,7 +107,7 @@ namespace io
    * @tparam Iterator   The underlying iterator to be traversed to generate a Sequence
    *
    */
-  template <typename Iterator = unsigned char* >
+  template <typename Iterator>
    class BaseFileParser {
 
       // let another BaseFileParser with some other iterator type be a friend so we can convert.
@@ -119,7 +119,7 @@ namespace io
       using SequenceType = typename ::bliss::common::Sequence<Iterator, ::bliss::common::SequenceId>;
       using SequenceIdType = typename SequenceType::IdType;
 
-      /// static constant for end of line.  note this is same for unicode as well
+      /// static constant for end of line. Iterator note this is same for unicode as well
       static constexpr unsigned char eol = '\n';
       /// static constant for carriage return.  note this is same for unicode as well
       static constexpr unsigned char cr = '\r';

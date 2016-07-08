@@ -708,11 +708,18 @@ namespace bliss
          t = RangeType::intersect(t, inMemRange); // intersection to bound target to between parent's ends.
 
 
-//         std::cout << "rank " << comm.rank()<< "   parent " << parentRange << std::endl;
-//         std::cout << "rank " << comm.rank()<< "   inmem " << inMemRange << std::endl;
-//         std::cout << "rank " << comm.rank()<< "   search " << searchRange << std::endl;
-//         std::cout << "rank " << comm.rank()<< "   intersect " << t << std::endl;
-
+//         if (comm.rank() == 1) {
+//         std::cout << "rank " << comm.rank() << "   parent " << parentRange << std::endl;
+//         std::cout << "rank " << comm.rank() << "   inmem " << inMemRange << std::endl;
+//         std::cout << "rank " << comm.rank() << "   search " << searchRange << std::endl;
+//         std::cout << "rank " << comm.rank() << "   intersect " << t << std::endl;
+//
+//			 std::cout << "rank " << comm.rank() << " ";
+//			 for (Iterator ii = _data; ii != (_data + (t.end - inMemRange.start)); ++ii ) {
+//				 std::cout << static_cast<unsigned char>(*ii);
+//			 }
+//			 std::cout << std::endl;
+//         }
 
          // set iterator for the data
          Iterator iter(_data);
@@ -761,7 +768,11 @@ namespace bliss
 
          // lines 1 through 4.  reorganized so that O3 optimization by gcc 5.2.1 does not skip over the whole loop (compiler bug?)
          for (int j = 0; j < 4; ++j) {
+//             if (comm.rank() == 1)
+//             std::cout << " rank " << comm.rank() << " iter dist: " << std::distance(_data, iter) << " offset diff = " << i - inMemRange.start << std::endl;
            iter = this->findNonEOL(iter, end, i);
+
+
            if (i >= t.end) break;
 
 
@@ -770,12 +781,14 @@ namespace bliss
            iter = this->findEOL(iter, end, i);
          }
 
+//         if (comm.rank() == 1) {
+//
 //         std::cout << " rank " << comm.rank() << " prev: " << tmp << " raw lines = " << offsets.size() << "|";
 //         for (uint8_t j = 0; j < offsets.size(); ++j) {
 //           std::cout << offsets[j] << ":" << first[j] << ", ";
 //         }
 //         std::cout << std::endl;
-
+//         }
 
          // find @ if present.
          size_t at_cnt = std::count(first.begin(), first.end(), '@');
@@ -842,7 +855,7 @@ namespace bliss
          }
 
 
-       virtual ::std::pair<size_t, size_t> get_record_size(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &validRange, mxx::comm const & comm, size_t const count) {
+       virtual ::std::pair<size_t, size_t> get_record_size(Iterator const &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &validRange, mxx::comm const & comm, size_t const count) {
 
          if (count == 0) throw std::invalid_argument("ERROR: called FASTQParser get_record_size with count == 0");
          if (!(parentRange.contains(inMemRange))) throw std::invalid_argument("ERROR: parentRange does not container inMemRange");
@@ -892,65 +905,6 @@ namespace bliss
 #endif
 
     };
-
-
-
-
-//    /**
-//     * @class FASTQLoader
-//     * @brief FileLoader subclass specialized for the FASTQ file format, uses CRTP to enforce interface consistency.
-//     * @details   FASTQLoader understands the FASTQ file format, and enforces that the
-//     *            L1 and L2 partition boundaries occur at FASTQ sequence record boundaries.
-//     *
-//     *            FASTQ files allow storage of per-base quality score and is typically used
-//     *              to store a collection of short sequences.
-//     *            Long sequences (such as complete genome) can be found in FASTQ formatted files
-//     *              these CAN be read using standard FileLoader, provided an appropriate overlap
-//     *              is specified (e.g. for kmer reading, overlap should be k-1).
-//     *
-//     *          for reads, expected lengths are maybe up to 1K in length, and files contain >> 1 seq
-//     *
-//     *          Majority of the interface is inherited from FileLoader.
-//     *          This class modifies the behaviors of GetNextL1Block and getNextL2Block,
-//     *            as described in FileLoader's "Advanced Usage".  Specifically, the range is modified
-//     *            for each block by calling "find_first_record" to align the start and end to FASTQ sequence
-//     *            record boundaries.
-//     *
-//     * @note    Processes 1 file at a time.  For paired end reads, a separate subclass is appropriate.
-//     *          Sequences are identified by the following set of attributes:
-//     *
-//     *             file id.          (via filename to id map)
-//     *             read id in file   (e.g. using the offset at whcih read occurs in the file as id)
-//     *             position in read  (useful for kmer)
-//     *
-//     *          using the offset as id allows us to avoid d assignment via prefix sum.
-//     *
-//     * @tparam  T                 type of each element read from file
-//     * @tparam  L1Buffering       bool indicating if L1 partition blocks should be buffered.  default to false
-//     * @tparam  L2Buffering       bool indicating if L2 partition blocks should be buffered.  default to true (to avoid contention between threads)
-//     * @tparam  L1PartitionerT    Type of the Level 1 Partitioner to generate the range of the file to load from disk
-//     * @tparam  L2PartitionerT    L2 partitioner, default to DemandDrivenPartitioner
-//     */
-//    template<typename T,
-//        bool L2Buffering = false,
-//        bool L1Buffering = true,
-//        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
-//    using DemandDrivenFASTQLoader =
-//        FileLoader<T, 0, SequentialFASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >;
-//
-//    template<typename T,
-//        bool L2Buffering = false,
-//        bool L1Buffering = true,
-//        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
-//    using RoundRobinFASTQLoader =
-//        FileLoader<T, 0, SequentialFASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::CyclicPartitioner<bliss::partition::range<size_t> > >;
-//
-//    template<typename T,
-//        bool L2Buffering = false,
-//        bool L1Buffering = true,
-//        typename L2PartitionerT = bliss::partition::DemandDrivenPartitioner<bliss::partition::range<size_t> > >
-//    using FASTQLoader =
-//        FileLoader<T, 0, FASTQParser, L2Buffering, L1Buffering, L2PartitionerT, bliss::partition::BlockPartitioner<bliss::partition::range<size_t> > >;
 
   } /* namespace io */
 } /* namespace bliss */

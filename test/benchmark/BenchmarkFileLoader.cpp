@@ -100,201 +100,6 @@ bool validate(const std::string &fileName, const size_t offset,
 #endif
 
 
-//
-//  /**
-//   * @brief read a file's content and generate kmers, place in a vector as return result.
-//   * @note  static so can be used wihtout instantiating a internal map.
-//   * @tparam SeqParser    parser type for extracting sequences.  supports FASTQ and FASTA.   template template parameter, param is iterator
-//   * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
-//   */
-//  template <template <typename> class SeqParser, bool prefetch = false>
-//  size_t read_file(const std::string & filename, const mxx::comm & _comm) {
-//
-//
-////    constexpr size_t overlap = KP::kmer_type::size;  specify as 0 - which allows overlap to be computed.
-//
-//    // prefetch makes little difference in performance, but memory use is much higher.
-//    using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, prefetch>; // raw data type :  use CharType
-//
-//    //====  now process the file, one L1 block (block partition by MPI Rank) at a time
-//    //if (_comm.rank() == 0) printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
-//
-//    typename FileLoaderType::L1BlockType partition;
-//    BL_BENCH_INIT(file);
-//    {  // ensure that fileloader is closed at the end.
-//
-//      BL_BENCH_START(file);
-//      //==== create file Loader
-//      FileLoaderType loader(filename, _comm, 1, sysconf(_SC_PAGE_SIZE));  // this handle is alive through the entire building process.
-//      partition = loader.getNextL1Block();
-//      BL_BENCH_END(file, "open", partition.getRange().size());
-//
-//
-//      // check partition is same
-//      size_t len = partition.getRange().size();
-//      size_t offset = partition.getRange().start;
-//
-//      BL_BENCH_START(file);
-//      bool same = validate(filename, offset, len, partition.begin(), partition.end());
-//      BL_BENCH_END(file, "compare", len);
-//
-//      if (!same) {
-//    	  std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! "
-//          	  << " range " << partition.getRange() << std::endl;
-//    	  exit(1);
-//      }
-//
-////      // not reusing the SeqParser in loader.  instead, reinitializing one.
-////      BL_BENCH_START(file);
-////      auto l1parser = loader.getSeqParser();
-////      l1parser.init_parser(partition.begin(), loader.getFileRange(), partition.getRange(), partition.getRange(), _comm);
-////      BL_BENCH_END(file, "mark_seqs", est_size);
-//
-//    }
-//
-//
-//    BL_BENCH_REPORT_MPI(file, _comm.rank(), _comm);
-//    return partition.getRange().size();
-//  }
-//
-//
-//  /**
-//   * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
-//   * @tparam SeqParser    parser type for extracting sequences.  supports FASTQ and FASTA.  template template parameter, param is iterator
-//   */
-//  template <template <typename> class SeqParser, bool prefetch = false>
-//  static size_t read_file_mpi_subcomm(const std::string & filename, const mxx::comm& _comm) {
-//
-//    // split the communcator so 1 proc from each host does the read, then redistribute.
-//    mxx::comm group = _comm.split_shared();
-//    mxx::comm group_leaders = _comm.split(group.rank() == 0);
-//
-////    constexpr size_t overlap = KP::kmer_type::size;  specify as 0 - which allows overlap to be computed.
-//    //if (_comm.rank() == 0) printf("using prefetch? %s\n", (prefetch ? "y" : "n"));
-//
-//    // raw data type :  use CharType.   block partition at L1 and L2.  no buffering at all, since we will be copying data to the group members anyways.
-//    using FileLoaderType = bliss::io::FileLoader<CharType, 0, SeqParser, false, prefetch,
-//        bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >,  bliss::partition::BlockPartitioner<bliss::partition::range<size_t> >>;
-//    using L2BlockType = bliss::io::DataBlock<unsigned char*, ::bliss::partition::range<size_t>, bliss::io::NoBuffer>;
-//
-//    typename FileLoaderType::RangeType file_range;
-//    L2BlockType block;
-//
-//
-//    BL_BENCH_INIT(file_subcomm);
-//    {
-//
-//      typename FileLoaderType::RangeType range;
-//      ::std::vector<CharType> data;
-//
-//      ::std::vector<typename FileLoaderType::RangeType> ranges;
-//      ::std::vector<size_t> send_counts;
-//      typename FileLoaderType::L1BlockType partition;
-//
-//
-//
-//      // first load the file using the group loader's communicator.
-//      if (group.rank() == 0) {  // ensure file loader is closed properly.
-//
-//
-//        BL_BENCH_START(file_subcomm);
-//        //==== create file Loader. this handle is alive through the entire building process.
-//        FileLoaderType loader(filename, group_leaders, group.size());  // for member of group_leaders, each create g_size L2blocks.
-//
-//        // modifying the local index directly here causes a thread safety issue, since callback thread is already running.
-//        partition = loader.getNextL1Block();
-//        BL_BENCH_END(file_subcomm, "L1 block", data.size());
-//
-//
-//        //====  now compute the send counts and ranges to be scattered.
-//
-//        BL_BENCH_START(file_subcomm);
-//        ranges.resize(group.size());
-//        send_counts.resize(group.size());
-//        for (int i = 0; i < group.size(); ++i) {
-//          auto b = loader.getNextL2Block(i);
-//          ranges[i] = b.getRange();
-//          send_counts[i] = ranges[i].size();
-//        }
-//        BL_BENCH_END(file_subcomm, "L2 range", data.size());
-//
-//
-//
-//        BL_BENCH_START(file_subcomm);
-//        // scatter the data .  this call here relies on FileLoader still having the memory mapped.
-//        data = mxx::scatterv(&(*partition.begin()), send_counts, 0, group);
-//        BL_BENCH_END(file_subcomm, "scatter", data.size());
-//
-//
-//        // send the file range.
-//        file_range = loader.getFileRange();
-//
-//      } else {
-//        // replicated here because the root's copy needs to be inside the if clause - requires FileLoader to be open for the sender.
-//
-//
-//    	  BL_BENCH_START(file_subcomm);
-//          BL_BENCH_END(file_subcomm, "L1 block", data.size());
-//
-//
-//          BL_BENCH_START(file_subcomm);
-//          BL_BENCH_END(file_subcomm, "L2 range", data.size());
-//
-//
-//        // scatter the data.  this is the receiver end of the thing.
-//          BL_BENCH_START(file_subcomm);
-//        data = mxx::scatterv(&(*partition.begin()), send_counts, 0, group);
-//        BL_BENCH_END(file_subcomm, "scatter", data.size());
-//
-//
-//
-//      }
-//      if (data[0] != '@') std::cout << "rank " << _comm.rank() << " mxx data begins with " << data[0] << std::endl;
-//
-//      BL_BENCH_START(file_subcomm);
-//
-//      // send the file range to rest of group
-//      mxx::datatype range_dt = mxx::get_datatype<typename FileLoaderType::RangeType >();
-//      MPI_Bcast(&file_range, 1, range_dt.type(), 0, group);
-//
-//
-//      // scatter the ranges to rest of group
-//      range = mxx::scatter_one(ranges, 0, group);
-//      // now create the L2Blocks from the data  (reuse block)
-//      block.assign(&(data[0]), &(data[0]) + range.size(), range);
-//      BL_BENCH_END(file_subcomm, "createL2", data.size());
-//
-//
-//
-//      // check partition is same
-//      size_t len = block.getRange().size();
-//      size_t offset = block.getRange().start;
-//
-//      BL_BENCH_START(file_subcomm);
-//      bool same = validate(filename, offset, len, block.begin(), block.end());
-//      BL_BENCH_END(file_subcomm, "compare", len);
-//
-//      if (!same) {
-//    	  std::cout << "ERROR: rank " << _comm.rank() << " NOT SAME (subcomm)! "
-//          	  << " range " << block.getRange() << std::endl;
-//    	  exit(1);
-//      }
-//
-////      // not reusing the SeqParser in loader.  instead, reinitializing one.
-////      BL_BENCH_START(file);
-////      SeqParser<typename L2BlockType::iterator> l2parser;
-////      l2parser.init_parser(block.begin(), file_range, range, range, comm);
-////      BL_BENCH_END(file, "mark_seqs", est_size);
-//
-//    }
-//
-//    BL_BENCH_REPORT_MPI(file_subcomm, _comm.rank(), _comm);
-//
-//
-//    return block.getRange().size();
-//  }
-
-
 
   /**
    * @brief read a file's content and generate kmers, place in a vector as return result.
@@ -483,65 +288,40 @@ int main(int argc, char** argv) {
 	  using KmerType = bliss::common::Kmer<21, Alphabet, WordType>;
 
 
-//	  if (which == -1 || which == 1)
-//	  {
-//		  testIndex<PARSER_TYPE, true > (comm, filename, "file loader, preload.");
-//		  comm.barrier();
-//	  }
-//
-//	  if (which == -1 || which == 2)
-//	  {
-//		  testIndex<PARSER_TYPE, false > (comm, filename, "file loader.");
-//		  comm.barrier();
-//	  }
-//
-//    if (which == -1 || which == 3)
-//    {
-//      testIndexSubComm< PARSER_TYPE, true > (comm, filename, "fileloader with mpi subcomm, preload.");
-//      comm.barrier();
-//    }
-//
-//    if (which == -1 || which == 4)
-//    {
-//      testIndexSubComm< PARSER_TYPE, false > (comm, filename, "fileloader with mpi subcomm.");
-//      comm.barrier();
-//    }
-
-
 	  if (which == -1 || which == 5)
 	  {
-		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi mmap");
+		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<typename ::bliss::io::file_data::const_iterator> >, KmerType> (comm, filename, "mpi mmap");
 		  comm.barrier();
 	  }
 
 	  if (which == -1 || which == 6)
 	  {
-		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::stdio_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi stdio");
+		  testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::stdio_file, PARSER_TYPE<typename ::bliss::io::file_data::const_iterator> >, KmerType> (comm, filename, "mpi stdio");
 		  comm.barrier();
 	  }
 
     if (which == -1 || which == 7)
     {
-      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi posix");
+      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE<typename ::bliss::io::file_data::const_iterator> >, KmerType> (comm, filename, "mpi posix");
       comm.barrier();
     }
 
     if (which == -1 || which == 8)
     {
-      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<unsigned char *>, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd mmap");
+      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::mmap_file, PARSER_TYPE<typename ::bliss::io::file_data::const_iterator>, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd mmap");
       comm.barrier();
     }
 
     if (which == -1 || which == 9)
     {
-      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE<unsigned char *>, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd posix");
+      testIndexDirect<bliss::io::parallel::partitioned_file<bliss::io::posix_file, PARSER_TYPE<typename ::bliss::io::file_data::const_iterator>, bliss::io::parallel::base_shared_fd_file >, KmerType> (comm, filename, "mpi fd posix");
       comm.barrier();
     }
 
 
 	  if (which == -1 || which == 10)
 	  {
-		  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE<unsigned char *> >, KmerType> (comm, filename, "mpi-io");
+		  testIndexDirect<bliss::io::parallel::mpiio_file<PARSER_TYPE<typename ::bliss::io::file_data::const_iterator> >, KmerType> (comm, filename, "mpi-io");
 		  comm.barrier();
 	  }
 

@@ -46,13 +46,14 @@
 #include "io/file.hpp"
 
 
-typedef bliss::io::FASTAParser<unsigned char *> ParserType;
 
 
 class FASTAParseTest : public KmerReaderTest
 {
 	// can't compare the sequences directly since offsets may be different.
 protected:
+
+	typedef bliss::io::FASTAParser<typename ::bliss::io::file_data::const_iterator> ParserType;
 
 	static constexpr size_t kmer_size = 35;
 	using KmerType = ::bliss::common::Kmer<kmer_size, bliss::common::DNA5, uint64_t>;
@@ -81,12 +82,12 @@ protected:
 			this->kmerCount = 0;
 
 			// from FileLoader type, get the block iter type and range type
-			using BlockIterType = unsigned char *;
+			using BlockIterType = typename bliss::io::file_data::const_iterator;
 			using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
 			ParserType l1parser;
 
-			size_t offset = l1parser.init_parser(fdata.data.data(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes);
+			size_t offset = l1parser.init_parser(fdata.in_mem_cbegin(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes);
 
 			  //==  and wrap the chunk inside an iterator that emits Reads.
 			  SeqIterType seqs_start(l1parser, fdata.begin(),
@@ -201,12 +202,12 @@ protected:
 			this->kmerCount = 0;
 
 		// from FileLoader type, get the block iter type and range type
-		using BlockIterType = unsigned char *;
+		using BlockIterType = typename ::bliss::io::file_data::const_iterator;
 		using SeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
 		ParserType l1parser;
 
-		size_t offset = l1parser.init_parser(fdata.data.data(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes, comm);
+		size_t offset = l1parser.init_parser(fdata.in_mem_cbegin(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes, comm);
 
 		  //==  and wrap the chunk inside an iterator that emits Reads.
 		  SeqIterType seqs_start(l1parser, fdata.begin(),
@@ -225,7 +226,7 @@ protected:
 		  //== loop over the reads
 		  for (; seqs_start != seqs_end; ++seqs_start)
 		  {
-	          std::cout << "rank " << comm.rank() << " seq: " << *(seqs_start) << std::endl;
+	          //std::cout << "rank " << comm.rank() << " seq: " << *(seqs_start) << std::endl;
 
 	          // only count sequences that started in this partition and has non-zero size.
 				if (((*seqs_start).record_size > 0) && ((*seqs_start).id.get_pos() >= fdata.valid_range_bytes.start)) ++(this->seqCount);
@@ -235,7 +236,7 @@ protected:
 
 		          // generate kmers and save them
 		          kmer_parser(*seqs_start, emplace_iter);
-		          std::cout << "rank " << comm.rank() << " seqs " << this->seqCount << " kmers: " << result.size() << std::endl;
+		          // std::cout << "rank " << comm.rank() << " seqs " << this->seqCount << " kmers: " << result.size() << std::endl;
 
 		          gold.clear();
 		          gold.resize(seqs_start->seq_size(), 0);
