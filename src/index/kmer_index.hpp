@@ -370,8 +370,6 @@ public:
 	      ::bliss::io::file_data partition = open_file<FileType>(filename, _comm);
         BL_BENCH_END(file, "open", partition.getRange().size());
 
-        std::cout << "rank " << _comm.size() << " in_mem " << partition.in_mem_range_bytes << " valid " << partition.valid_range_bytes << std::endl;
-
 	      // not reusing the SeqParser in loader.  instead, reinitializing one.
 	      BL_BENCH_START(file);
 	      parse_file_data<SeqParser, KP>(partition, result, _comm);
