@@ -1195,12 +1195,20 @@ public:
 		::std::tie(in_mem_partitioned, valid_partitioned) =
 				overlapped_partition(this->file_range_bytes, this->file_range_bytes);
 
+//		std::cout << " rank " << this->comm.rank() << " PRIMARY : in mem " << output.in_mem_range_bytes << " valid " << output.valid_range_bytes << std::endl;
+
+
 		// then read the range via sequential version
 		output.in_mem_range_bytes = reader.read_range(output.data, in_mem_partitioned);
 
 		output.valid_range_bytes = valid_partitioned;
 		output.parent_range_bytes = this->file_range_bytes;
 	}
+
+//	std::string get_class_name() {
+//		return std::string("partitioned_file<...>");
+//	}
+//
 };
 
 
@@ -1333,6 +1341,8 @@ public:
 	 */
 	virtual void read_file(::bliss::io::file_data & output) {
 
+//		std::cout << " rank " << this->comm.rank() << " FASTQ: in mem " << output.in_mem_range_bytes << " valid " << output.valid_range_bytes << std::endl;
+
 		// overlap is set to page size, so output will have sufficient space.
 		// note that this is same behavior as the serial mmap_file
 
@@ -1415,6 +1425,10 @@ public:
 
 	}
 
+
+//	std::string get_class_name() {
+//		return std::string("partitioned_file<FASTQ>");
+//	}
 };
 
 
@@ -1556,6 +1570,8 @@ public:
 		::std::tie(output.in_mem_range_bytes, output.valid_range_bytes) =
 				overlapped_partition(this->file_range_bytes, this->file_range_bytes);
 
+//		std::cout << " rank " << this->comm.rank() << " FASTA: in mem " << output.in_mem_range_bytes << " valid " << output.valid_range_bytes << std::endl;
+
 		// then read the range via sequential version
 		output.in_mem_range_bytes = reader.read_range(output.data, output.in_mem_range_bytes);
 
@@ -1585,6 +1601,9 @@ public:
 //		std::cout << "rank " << this->comm.rank() << " file  " << output.parent_range_bytes << std::endl;
 
 	}
+//	std::string get_class_name() {
+//		return std::string("partitioned_file<FASTA>");
+//	}
 
 };
 
@@ -1602,6 +1621,10 @@ class partitioned_file<::bliss::io::stdio_file, FileParser, ::bliss::io::paralle
 	};
 
 	~partitioned_file() {};
+
+//	std::string get_class_name() {
+//		return std::string("partitioned_file<stdio_file>");
+//	}
 };
 
 
@@ -1726,6 +1749,7 @@ public:
 	 */
 	virtual range_type read_range(typename ::bliss::io::file_data::container & output,
 				range_type const & range_bytes) {
+
 		if (fh == MPI_FILE_NULL) {
 			std::stringstream ss;
 			ss << "ERROR in mpiio: rank " << comm.rank() << " file " << this->filename << " not yet open " << std::endl;
@@ -1935,6 +1959,8 @@ public:
 		 */
 		virtual void read_file(::bliss::io::file_data & output) {
 
+//			std::cout << "mpiio_file primary template read_file" << std::endl;
+
 			// then read the range via sequential version
 			output.valid_range_bytes = read_range(output.data, this->file_range_bytes);
 
@@ -1949,6 +1975,10 @@ public:
 			output.parent_range_bytes = this->file_range_bytes;
 
 		}
+//		std::string get_class_name() {
+//			return std::string("mpiio_file<...>");
+//		}
+
 };
 
 /**
@@ -1984,6 +2014,9 @@ public:
 		 * @param output 		file_data object containing data and various ranges.
 		 */
 		virtual void read_file(::bliss::io::file_data & output) {
+
+//			std::cout << "mpiio_file fastq templated read_file" << std::endl;
+
 
 			// overlap is set to page size, so output will have sufficient space.
 			// note that this is same behavior as the serial mmap_file
@@ -2066,6 +2099,9 @@ public:
 //			std::cout << "rank " << this->comm.rank() << " file  " << output.parent_range_bytes << std::endl;
 
 		}
+//		std::string get_class_name() {
+//			return std::string("mpiio_file<FASTQ>");
+//		}
 };
 
 /**
@@ -2100,6 +2136,9 @@ public:
 		 * @param output 		file_data object containing data and various ranges.
 		 */
 		virtual void read_file(::bliss::io::file_data & output) {
+
+//			std::cout << "mpiio_file fasta templated read_file" << std::endl;
+
 
 			// overlap is set to page size, so output will have sufficient space.
 			// note that this is same behavior as the serial mmap_file
@@ -2142,6 +2181,9 @@ public:
 	//		std::cout << "rank " << this->comm.rank() << " file  " << output.parent_range_bytes << std::endl;
 
 		}
+//std::string get_class_name() {
+//	return std::string("mpiio_file<FASTA>");
+//}
 };
 
 

@@ -650,7 +650,8 @@ namespace bliss
 
           // no more.  return.
           if (seq_offset >= sequences.size()) {
-            BL_WARNINGF("FASTA LOADER did not find sequence for offset %lu.  last one ended at %lu\n", offset, std::get<2>(sequences.back()));
+        	  if (offset != std::get<2>(sequences.back()))
+        		  BL_WARNINGF("FASTA LOADER did not find sequence for offset %lu.  last one ended at %lu\n", offset, std::get<2>(sequences.back()));
             offset += input_dist;
             iter = end;
 

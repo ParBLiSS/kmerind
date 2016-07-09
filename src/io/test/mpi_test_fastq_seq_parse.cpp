@@ -159,6 +159,8 @@ protected:
 
 		::bliss::io::file_data fdata = fobj.read_file();
 
+//		std::cout << "rank " << comm.rank() << fobj.get_class_name() << std::endl;
+
 //		comm.barrier();
 //        if (comm.rank() == 1) {
 //        std::cout << "rank " << comm.rank() << "   parent " << fdata.parent_range_bytes << std::endl;
@@ -363,7 +365,7 @@ TEST_P(FASTQParseTest, parse_mmap_mpi)
 {
 	  ::mxx::comm comm;
 
-  ::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, ParserType> fobj(this->fileName, 0UL, comm);
+  ::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, bliss::io::FASTQParser> fobj(this->fileName, 0UL, comm);
 
   this->parse_mpi(fobj, 0UL, comm);
 
@@ -374,7 +376,7 @@ TEST_P(FASTQParseTest, parse_stdio_mpi)
 {
 	  ::mxx::comm comm;
 
-  ::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, ParserType> fobj(this->fileName, 0UL, comm);
+  ::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, bliss::io::FASTQParser> fobj(this->fileName, 0UL, comm);
 
   this->parse_mpi(fobj, 0UL, comm);
 
@@ -385,7 +387,7 @@ TEST_P(FASTQParseTest, parse_posix_mpi)
 {
 	  ::mxx::comm comm;
 
-  ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, ParserType> fobj(this->fileName, 0UL, comm);
+  ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, bliss::io::FASTQParser> fobj(this->fileName, 0UL, comm);
 
   this->parse_mpi(fobj, 0UL, comm);
 
