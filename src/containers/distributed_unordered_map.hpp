@@ -1238,22 +1238,22 @@ namespace dsc  // distributed std container
       size_t erase(LocalErase & erase_element, Predicate const& pred) {
           size_t count = 0;
 
-          if (this->local_empty()) return 0;
+          if (! this->local_empty()) {
 
 
-          if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
+            if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
 
-            auto keys = this->keys();  // already unique
+              auto keys = this->keys();  // already unique
 
-            auto dummy_iter = keys.end();  // process requires a reference.
-            count = QueryProcessor::process(c, keys.begin(), keys.end(), dummy_iter, erase_element, false, pred);
-          } else {
-            count = this->local_size();
-            this->local_clear();
+              auto dummy_iter = keys.end();  // process requires a reference.
+              count = QueryProcessor::process(c, keys.begin(), keys.end(), dummy_iter, erase_element, false, pred);
+            } else {
+              count = this->local_size();
+              this->local_clear();
+            }
+
+            if (count > 0) local_changed = true;
           }
-
-          if (count > 0) local_changed = true;
-
           if (this->comm.size() > 1) this->comm.barrier();
 
           return count;
@@ -1422,16 +1422,16 @@ namespace dsc  // distributed std container
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
 
-        if (this->local_empty()) return results;
+        if (! this->local_empty()) {
 
 
-        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > emplace_iter(results);
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > emplace_iter(results);
 
-        auto keys = this->keys();
-        results.reserve(keys.size());
+          auto keys = this->keys();
+          results.reserve(keys.size());
 
-        QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, count_element, false, pred);
-
+          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, count_element, false, pred);
+        }
         if (this->comm.size() > 1) this->comm.barrier();
         return results;
       }

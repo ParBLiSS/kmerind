@@ -1371,31 +1371,31 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
           // TODO: directly iterate over the vector?
 
-          if (this->local_empty()) return results;
+          if (! this->local_empty()) {
 
-          this->local_sort();
+            this->local_sort();
 
-          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+            ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
-          auto keys = this->keys();
+            auto keys = this->keys();
 
-          ::std::vector<::std::pair<Key, size_t> > count_results;
-          count_results.reserve(keys.size());
-          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+            ::std::vector<::std::pair<Key, size_t> > count_results;
+            count_results.reserve(keys.size());
+            ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
 
-          // count now.
-          QueryProcessor<false>::process(this->c.begin(), this->c.end(),
-        		  keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
-          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
-                                           [](size_t v, ::std::pair<Key, size_t> const & x) {
-                       return v + x.second;
-                     });
-          results.reserve(count);  // 1 result per key.
+            // count now.
+            QueryProcessor<false>::process(this->c.begin(), this->c.end(),
+                keys.begin(), keys.end(), count_emplace_iter, count_element, true, pred);
+            size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
+                                             [](size_t v, ::std::pair<Key, size_t> const & x) {
+                         return v + x.second;
+                       });
+            results.reserve(count);  // 1 result per key.
 
-          // within start-end, values are unique, so don't need to set unique to true.
-          QueryProcessor<false>::process(this->c.begin(), this->c.end(),
-        		  keys.begin(), keys.end(), emplace_iter, lf, true, pred);
-
+            // within start-end, values are unique, so don't need to set unique to true.
+            QueryProcessor<false>::process(this->c.begin(), this->c.end(),
+                keys.begin(), keys.end(), emplace_iter, lf, true, pred);
+          }
           if (this->comm.size() > 1) this->comm.barrier();
           return results;
       }
@@ -1612,21 +1612,21 @@ using SortedMapParams = ::dsc::DistributedMapParams<
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
 
-        if (this->local_empty()) return results;
+        if (! this->local_empty()) {;
 
-        // ensure that the container splitters are setup properly, and load balanced.
-        this->local_sort();
+          // ensure that the container splitters are setup properly, and load balanced.
+          this->local_sort();
 
 
-        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
 
-        auto keys = this->keys();
-        results.reserve(keys.size());
+          auto keys = this->keys();
+          results.reserve(keys.size());
 
-        // keys already unique
-        QueryProcessor<false>::process(c.begin(), c.end(), keys.begin(), keys.end(),
-        		emplace_iter, count_element, true, pred);
-
+          // keys already unique
+          QueryProcessor<false>::process(c.begin(), c.end(), keys.begin(), keys.end(),
+              emplace_iter, count_element, true, pred);
+        }
         if (this->comm.size() > 1) this->comm.barrier();
         return results;
       }
@@ -1801,26 +1801,25 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
       template <typename Predicate>
       size_t erase(Predicate const & pred = Predicate()) {
-
-        if (this->local_empty()) return 0;
-
         size_t before = c.size();
-        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
 
-          this->local_sort();
+        if (! this->local_empty()) {
+          if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
 
-          auto end = ::std::partition(c.begin(), c.end(), [&pred](value_type const &x) {
-        	  return !pred(x.first);
-          });
-          c.erase(end, c.end());
+            this->local_sort();
 
-        } else {
-          // identity predicate - all are erased.
-          this->local_clear();
+            auto end = ::std::partition(c.begin(), c.end(), [&pred](value_type const &x) {
+              return !pred(x.first);
+            });
+            c.erase(end, c.end());
+
+          } else {
+            // identity predicate - all are erased.
+            this->local_clear();
+          }
+
+          this->set_balanced(false);  // TODO: except when all are erasing with same identity predicate.
         }
-
-        this->set_balanced(false);  // TODO: except when all are erasing with same identity predicate.
-
         if (this->comm.size() > 1) this->comm.barrier();
 
         return before - c.size();
