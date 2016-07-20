@@ -76,7 +76,7 @@ namespace bliss
        */
       friend std::ostream& operator<<(std::ostream& ost, const FASTQSequence & seq)
       {
-        ost << " FASTQ Sequence: id=[" << seq.id << "] record_size=" << seq.record_size << " seq_offset=" << seq.seq_offset;
+        ost << " FASTQ Sequence: id=[" << seq.id << "] record_size=" << seq.record_size << " seq_begin_offset=" << seq.seq_begin_offset;
         return ost;
       }
 
@@ -84,23 +84,25 @@ namespace bliss
       FASTQSequence() = default;
 
       template <bool Q = HasQuality>
-      FASTQSequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_offset, Iterator const & _begin, Iterator const & _end,
+      FASTQSequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_begin_offset, Iterator const & _begin, Iterator const & _end,
                     typename ::std::enable_if<!Q>::type* = 0) :
-        BaseType(_id, _record_size, _seq_offset,  _begin, _end) {}
+        BaseType(_id, _record_size, _seq_begin_offset,  _seq_begin_offset, _begin, _end) {}
 
-      FASTQSequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_offset,
+      FASTQSequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_begin_offset,
                     Iterator const & _seq_begin, Iterator const & _seq_end,
                     Iterator const & _qual_begin, Iterator const & _qual_end) :
-        BaseType(_id, _record_size, _seq_offset,  _seq_begin, _seq_end), qual_begin(_qual_begin), qual_end(_qual_end) {}
+        BaseType(_id, _record_size, _seq_begin_offset, _seq_begin_offset, _seq_begin, _seq_end), qual_begin(_qual_begin), qual_end(_qual_end) {}
 
 
       FASTQSequence(FASTQSequence const & other) :
-        BaseType(other.id, other.record_size, other.seq_offset, other.seq_begin, other.seq_end), qual_begin(other.qual_begin), qual_end(other.qual_end) {}
+        BaseType(other.id, other.record_size, other.seq_begin_offset, other.seq_begin_offset, other.seq_begin, other.seq_end),
+        qual_begin(other.qual_begin), qual_end(other.qual_end) {}
 
       FASTQSequence& operator=(FASTQSequence const & other) {
 
         this->id = other.id;
         this->record_size = other.record_size;
+        this->seq_begin_offset = other.seq_begin_offset;
         this->seq_offset = other.seq_offset;
         this->seq_begin = other.seq_begin;
         this->seq_end = other.seq_end;

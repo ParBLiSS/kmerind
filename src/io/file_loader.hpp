@@ -315,7 +315,7 @@ namespace io
          offset += dist;
          iter = end;
 
-         return SequenceType(SequenceIdType(orig_offset), dist, 0, orig_iter, end);
+         return SequenceType(SequenceIdType(orig_offset), dist, 0, 0, orig_iter, end);
        }
 
 

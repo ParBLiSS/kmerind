@@ -624,6 +624,7 @@ namespace bliss
             return SequenceType(SequenceIdType(offset),
   	  	  	  	    0, // length
   	  	  	  	    0, // offset in record
+  	  	  	  	    0,
   	  	  	  	    iter, iter);
           }
 
@@ -658,6 +659,7 @@ namespace bliss
             return SequenceType(SequenceIdType(offset),
                     0, // length
                     0, // offset in record
+                    0,
                     iter, iter);
           }
 
@@ -688,7 +690,8 @@ namespace bliss
             iter = end;
             return SequenceType(SequenceIdType(std::get<0>(seq), std::get<3>(seq)),
 	  	  	  	      std::get<2>(seq) - std::get<0>(seq), // record length
-                    offset - std::get<0>(seq),  // offset in record
+	  	  	  	      std::get<1>(seq) - std::get<0>(seq),  // first offset of sequence in record
+                    offset - std::get<0>(seq),  // iter offset in record
                     iter, iter);
           } // else there is valid range of sequence data
 
@@ -702,6 +705,7 @@ namespace bliss
 
           return SequenceType(SequenceIdType(std::get<0>(seq), std::get<3>(seq)),
                               std::get<2>(seq) - std::get<0>(seq),
+                              std::get<1>(seq) - std::get<0>(seq),  // first offset of sequence in record
                                 valid.start - std::get<0>(seq),
                                 start, iter);
 

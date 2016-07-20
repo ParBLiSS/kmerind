@@ -204,7 +204,7 @@ namespace bliss
 
     /**
      * @class     bliss::common::LongSequenceKmerId
-     * @brief     an Id in a file with short sequences, e.g. genomic FASTA.  Can be used to id Sequence or Kmer
+     * @brief     an Id in a file with long sequences, e.g. genomic FASTA.  Can be used to id Sequence or Kmer
      * @details   Accessor functions are used to extract the sub fields.  bit shift and bitwise and/or are used.  they are endian-independent.
      *
      *            this keeps a 40 bit position within the sequence.  (1TBase sequence, max 1TB file size.  identifies kmer position inside sequence)
@@ -304,7 +304,7 @@ namespace bliss
      *                         id  seq_begin   seq_end
      *              |===[=====][==={===========}===]================|
      *                         |<-- record_size -->|
-     *                         |<->| seq_offset
+     *                         |<->| seq_begin_offset
      *
      * @tparam Iterator   allows walking through the sequence data.
      */
@@ -323,12 +323,12 @@ namespace bliss
         // length of full record.
         mutable size_t record_size;
 
-        /// offset of seq_begin in global coordinates. (TODO: does not appear to be used anywhere)
-        // size_t seq_begin_offset;
+        /// offset of seq in entire record
+        mutable size_t seq_offset;
 
         /// offset of seq_begin from the beginning of the record.
         /// NOTE THAT IF SEQUENCE IS TRUNCATED, seq_begin may start later than the full sequence's starting point (?)
-        mutable size_t seq_offset;
+        mutable size_t seq_begin_offset;
 
         /// begin iterator for the sequence (may not be at record's starting position)
         mutable Iterator seq_begin;
@@ -343,23 +343,24 @@ namespace bliss
          */
         friend std::ostream& operator<<(std::ostream& ost, const Sequence & seq)
         {
-          ost << " Sequence: id=[" << seq.id << "] record_size=" << seq.record_size << " seq_offset=" << seq.seq_offset << " size = " << std::distance(seq.seq_begin, seq.seq_end);
+          ost << " Sequence: id=[" << seq.id << "] record_size=" << seq.record_size << " seq_offset=" << seq.seq_offset <<
+              " seq_begin_offset=" << seq.seq_begin_offset << " size = " << std::distance(seq.seq_begin, seq.seq_end);
           return ost;
         }
 
 
         Sequence() = default;  // needed for copy
 
-        Sequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_offset, Iterator const & _begin, Iterator const & _end) :
-          id(_id), record_size(_record_size), seq_offset(_seq_offset), seq_begin(_begin), seq_end(_end) {}
+        Sequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_offset, size_t const& _seq_begin_offset, Iterator const & _begin, Iterator const & _end) :
+          id(_id), record_size(_record_size), seq_offset(_seq_offset), seq_begin_offset(_seq_begin_offset), seq_begin(_begin), seq_end(_end) {}
 
         Sequence(Sequence const & other) :
-          id(other.id), record_size(other.record_size), seq_offset(other.seq_offset), seq_begin(other.seq_begin), seq_end(other.seq_end) {}
+          id(other.id), record_size(other.record_size), seq_offset(other.seq_offset), seq_begin_offset(other.seq_begin_offset), seq_begin(other.seq_begin), seq_end(other.seq_end) {}
 
         Sequence& operator=(Sequence const & other) {
           id = other.id;
           record_size = other.record_size;
-          seq_offset = other.seq_offset;
+          seq_begin_offset = other.seq_begin_offset;
           seq_begin = other.seq_begin;
           seq_end = other.seq_end;
 
@@ -375,7 +376,7 @@ namespace bliss
         }
 
         size_t seq_global_offset() const  {
-          return this->id.get_pos() + seq_offset;
+          return this->id.get_pos() + seq_begin_offset;
         }
     };
 

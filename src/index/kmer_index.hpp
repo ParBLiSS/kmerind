@@ -789,10 +789,10 @@ struct KmerPositionTupleParser {
 
 
 		//== set up the position iterators
-		IdType seq_begin_id(read.id);
-		seq_begin_id += read.seq_offset;  // change id to point to start of sequence (in file coord)
+    IdType seq_begin_id(read.id);
+    seq_begin_id += read.seq_begin_offset;  // change id to point to start of sequence (in file coord)
 		IdType seq_end_id(seq_begin_id);
-		seq_end_id += std::distance(read.seq_begin, read.seq_end);
+		seq_end_id += read.seq_size();
 
 		// tie chars and id together
 		PairedIter pp_begin(read.seq_begin, IdIterType(seq_begin_id));
@@ -912,9 +912,9 @@ struct KmerPositionQualityTupleParser {
 
     //== set up the position iterators
     IdType seq_begin_id(read.id);
-    seq_begin_id += read.seq_offset;  // change id to point to start of sequence (in file coord)
+    seq_begin_id += read.seq_begin_offset;  // change id to point to start of sequence (in file coord)
     IdType seq_end_id(seq_begin_id);
-    seq_end_id += std::distance(read.seq_begin, read.seq_end);
+    seq_end_id += read.seq_size();
 
     // tie chars and id together
     PairedIter pp_begin(read.seq_begin, IdIterType(seq_begin_id));
