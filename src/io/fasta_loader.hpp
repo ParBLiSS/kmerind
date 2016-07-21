@@ -452,14 +452,23 @@ namespace bliss
 
             }
             //=====DONE===== NOW SPREAD THE LAST ENTRY FORWARD.  empty range (r) does not participate
+
+            // ============= finally, enforce that all entries need to start the sequence part within the current, nonoverlaping partition.
+            auto newend = ::std::remove_if(sequences.begin(), sequences.end(), [&r](SequenceOffsetsType const & x){
+            	return (std::get<1>(x) >= r.end) || (std::get<2>(x) <= r.start);  // check if any part of sequence is inside the search range.
+            });
+            sequences.erase(newend, sequences.end());
+            // ===== DONE ==== enforce all entries start the sequence part within the current, nonoverlapping partition
+
             size_t total_sequences = mxx::allreduce(sequences.size(), comm);
-            if (total_sequences == 0) throw std::logic_error("ERROR: no sequences found distributed.  wrong input file type?");
+            if (total_sequences == 0) throw std::logic_error("ERROR: no sequences found in distributed init.  wrong input file type?");
 
             //if (in_comm != MPI_COMM_NULL) MPI_Comm_free(&in_comm);
 
 
 //            for (auto x : sequences)
-//              BL_DEBUGF("R %d header range [%lu, %lu, %lu), id %lu\n", myRank, std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
+//              //BL_DEBUGF
+//            	printf("R %d header range [%lu, %lu, %lu), id %lu\n", comm.rank(), std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
 
             // no op, other than to use intersect to make sure that the start is valid and within parent, and in memry ranges.
             return RangeType::intersect(searchRange, inMemRange).start;

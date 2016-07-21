@@ -331,7 +331,9 @@ std::vector<KmerType> readForQuery_mpiio(const std::string & filename, MPI_Comm 
 
   ::std::vector<KmerType> query;
 
-  IndexType::template read_file_mpiio<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  IndexType idx(comm);
+
+  idx.template read_file_mpiio<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
 
   return query;
 }
@@ -340,9 +342,10 @@ template <typename IndexType, typename KmerType = typename IndexType::KmerType>
 std::vector<KmerType> readForQuery_mmap(const std::string & filename, MPI_Comm comm) {
 
   ::std::vector<KmerType> query;
+  IndexType idx(comm);
 
   // default to including quality score iterators.
-  IndexType::template read_file_mmap<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  idx.template read_file_mmap<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
 
   return query;
 }
@@ -352,9 +355,10 @@ template <typename IndexType, typename KmerType = typename IndexType::KmerType>
 std::vector<KmerType> readForQuery_posix(const std::string & filename, MPI_Comm comm) {
 
   ::std::vector<KmerType> query;
+  IndexType idx(comm);
 
   // default to including quality score iterators.
-  IndexType::template read_file_posix<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  idx.template read_file_posix<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
 
   return query;
 }
