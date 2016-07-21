@@ -1417,6 +1417,13 @@ using SortedMapParams = ::dsc::DistributedMapParams<
       }
 
       // ===================== overrides
+      // clears the sorted map and release memory.
+      virtual void local_reset() {
+        local_container_type tmp; tmp.swap(c);
+
+        this->sorted = true;
+        this->set_balanced(false);
+      }
 
       /// clears the sorted_map
       virtual void local_clear() {

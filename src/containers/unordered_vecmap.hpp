@@ -538,6 +538,12 @@ using allocator = std::allocator<T>;
         return s;
       }
 
+      void reset() {
+    	  s = 0;
+        decltype(map) tmp; tmp.swap(map);
+      }
+
+
       void clear() {
     	  s = 0;
         map.clear();
@@ -1275,6 +1281,11 @@ using allocator = std::allocator<T>;
 
       size_type size() const {
         return s;
+      }
+
+      void reset() {
+    	  s = 0;
+        decltype(map) tmp; tmp.swap(map);
       }
 
       void clear() {

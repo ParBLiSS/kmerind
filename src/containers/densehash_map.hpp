@@ -563,6 +563,11 @@ protected:
       return lower_map.size() + upper_map.size();
     }
 
+    void reset() {
+    	lower_map.clear();
+    	upper_map.clear();
+    }
+
     void clear() {
       lower_map.clear_no_resize();
       upper_map.clear_no_resize();
@@ -865,6 +870,10 @@ class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, fals
     }
     size_type unique_size() const {
       return map.size();
+    }
+
+    void reset() {
+    	map.clear();
     }
 
     void clear() {
@@ -1422,6 +1431,14 @@ class densehash_multimap {
       return lower_map.size() + upper_map.size();
     }
 
+    void reset() {
+    	decltype(vec1) tmp1;  vec1.swap(tmp1);
+    	decltype(vecX) tmpX;  vecX.swap(tmpX);
+    	lower_map.clear();
+    	upper_map.clear();
+    	s = 0UL;
+    }
+
     void clear() {
       vec1.clear();
       vecX.clear();
@@ -1701,6 +1718,13 @@ class densehash_multimap<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator,
 
     size_type unique_size() const {
       return map.size();
+    }
+
+    void reset() {
+    	decltype(vec1) tmp1;  vec1.swap(tmp1);
+    	decltype(vecX) tmpX;  vecX.swap(tmpX);
+    	map.clear();
+    	s = 0UL;
     }
 
     void clear() {

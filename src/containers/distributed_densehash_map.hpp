@@ -1139,6 +1139,12 @@ namespace dsc  // distributed std container
 
       // ================ local overrides
 
+      /// clears the densehash_map and release memory
+      virtual void local_reset() noexcept {
+        c.reset();
+      }
+
+
       /// clears the densehash_map
       virtual void local_clear() noexcept {
         c.clear();

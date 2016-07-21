@@ -1266,6 +1266,10 @@ namespace dsc  // distributed std container
       // ================ local overrides
 
       /// clears the unordered_map
+      virtual void local_reset() noexcept {
+        decltype(c) tmp; tmp.swap(c);
+      }
+
       virtual void local_clear() noexcept {
         c.clear();
       }

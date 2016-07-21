@@ -174,6 +174,7 @@ namespace dsc
       // ============= local modifiers.  not directly accessible publically.  meant to be called via collective calls.
 
       // abstract declarations - need to access the local containers, therefore override in subclases.
+      virtual void local_reset() = 0;
       virtual void local_clear() = 0;
       virtual void local_reserve(size_t n) = 0;
 
@@ -251,6 +252,13 @@ namespace dsc
         // direct reserve + barrier
         this->local_reserve(n);
         if (this->comm.size() > 1) comm.barrier();
+      }
+
+      virtual void reset() {
+    	  this->local_reset();
+          if (comm.size() > 1)
+            comm.barrier();
+
       }
 
       /// clears the distributed container.
