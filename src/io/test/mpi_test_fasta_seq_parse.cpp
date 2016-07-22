@@ -111,7 +111,7 @@ protected:
 //				  std::cout << " seq: " << *(seqs_start) << std::endl;
 
 
-//				if (fdata.valid_range_bytes.start <= (*seqs_start).id.get_pos()) {
+//				if (fdata.valid_range_bytes.start <= ((*seqs_start).seq_offset + (*seqs_start).id.get_pos())) {
 					++(this->seqCount);
 
 			          result.clear();
@@ -230,11 +230,14 @@ protected:
 		  //== loop over the reads
 		  for (; seqs_start != seqs_end; ++seqs_start)
 		  {
-	          //std::cout << "rank " << comm.rank() << " seq: " << *(seqs_start) << std::endl;
+//	          std::cout << "rank " << comm.rank() << " seq: " << *(seqs_start) << std::endl;
 
-	          // only count sequences that started in this partition and has non-zero size.
-				if (((*seqs_start).record_size > 0) && ((*seqs_start).id.get_pos() >= fdata.valid_range_bytes.start)) ++(this->seqCount);
-
+	          // only count sequences that has its DNA sequence starting in this partition and has non-zero size.  - avoid double counting across procs.
+				if (((*seqs_start).record_size > 0) && (((*seqs_start).seq_offset + (*seqs_start).id.get_pos()) >= fdata.valid_range_bytes.start))
+						++(this->seqCount);
+//				else {
+//					std::cout << "rank " << comm.rank() << " not counting " << *(seqs_start) << " valid range: " << fdata.valid_range_bytes << std::endl;
+//				}
 				// but generate kmers from all...
 		          result.clear();
 

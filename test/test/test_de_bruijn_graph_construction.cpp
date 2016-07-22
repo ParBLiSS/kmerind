@@ -64,7 +64,8 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
   std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
   if (extension.compare("fastq") == 0) {
     // default to including quality score iterators.
-    IndexType::template read_file_posix<::bliss::io::FASTQParser, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+	  IndexType idx(comm);
+    idx.template read_file_posix<::bliss::io::FASTQParser, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
   } else {
     throw std::invalid_argument("input filename extension is not supported.");
   }
