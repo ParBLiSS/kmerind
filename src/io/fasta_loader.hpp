@@ -625,8 +625,17 @@ namespace bliss
         SequenceType get_next_record(Iterator &iter, const Iterator &end, size_t &offset)
         {
 
-          if (sequences.size() == 0) throw std::logic_error("calling FASTAParser increment without first initializing for iterator.");
+          if (sequences.size() == 0) //throw std::logic_error("calling FASTAParser increment without first initializing for iterator.");
+          {
+        	  iter = end;
+        	  BL_WARNINGF("FASTA LOADER no local sequence\n");
+            return SequenceType(SequenceIdType(offset),
+  	  	  	  	    0, // length
+  	  	  	  	    0, // offset in record
+  	  	  	  	    0,
+  	  	  	  	    iter, iter);
 
+          }
           // end.  return.
           if (iter == end) {
         	  BL_WARNINGF("FASTA LOADER get next record iter == end\n");
@@ -735,11 +744,9 @@ namespace bliss
 
           size_t max = ::std::min(sequences.size(), count);
 
-          auto seq = sequences[0];
-
           size_t i = 0;
           for (; i < max; ++i) {
-            seq = sequences[i];
+            auto seq = sequences[i];
             record_size += ::std::get<2>(seq) - ::std::get<0>(seq);
             seq_data_len += ::std::get<2>(seq) - ::std::get<1>(seq);
           }
@@ -755,7 +762,7 @@ namespace bliss
         }
 #ifdef USE_MPI
        virtual ::std::pair<size_t, size_t> get_record_size(const Iterator &_data, const RangeType &parentRange, const RangeType &inMemRange, const RangeType &validRange, mxx::comm const & comm, size_t const count) {
-         if (sequences.size() == 0) throw std::logic_error("calling FASTAParser get_record_size without first initializing for iterator.");
+         //if (sequences.size() == 0) throw std::logic_error("calling FASTAParser get_record_size without first initializing for iterator.");
 
          if (count == 0) throw std::invalid_argument("ERROR: called FASTAParser get_record_size with count == 0");
 
@@ -766,11 +773,9 @@ namespace bliss
 
          size_t max = ::std::min(sequences.size(), (count + comm.size() - 1) / comm.size());
 
-         auto seq = sequences[0];
-
          size_t i = 0;
          for (; i < max; ++i) {
-           seq = sequences[i];
+           auto seq = sequences[i];
            record_size += ::std::get<2>(seq) - ::std::get<0>(seq);
            seq_data_len += ::std::get<2>(seq) - ::std::get<1>(seq);
          }
