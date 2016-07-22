@@ -1164,6 +1164,7 @@ namespace dsc  // distributed std container
 
       /// returns the local storage.  please use sparingly.
       local_container_type& get_local_container() { return c; }
+      local_container_type const & get_local_container() const { return c; }
 
 //      const_iterator cbegin() const
 //      {
