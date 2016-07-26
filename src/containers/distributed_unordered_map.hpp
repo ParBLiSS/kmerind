@@ -1467,7 +1467,7 @@ namespace dsc  // distributed std container
 
       /// get size of local container
       virtual size_t local_size() const {
-        if (this->comm.rank() == 0) printf("rank %d hashmap_base local size %lu\n", this->comm.rank(), this->c.size());
+//        if (this->comm.rank() == 0) printf("rank %d hashmap_base local size %lu\n", this->comm.rank(), this->c.size());
 
         return this->c.size();
       }
