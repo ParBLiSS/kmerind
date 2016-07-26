@@ -144,9 +144,9 @@ public:
 	 * @param result        output vector.  should be pre allocated.
 	 */
 	template <typename KP, template <typename> class SeqParser, typename BlockType>
-	size_t read_block(BlockType & partition,
+	size_t read_block(BlockType const & partition,
 			SeqParser<typename BlockType::iterator> const &seq_parser,
-			std::vector<typename KP::value_type>& result) {
+			std::vector<typename KP::value_type>& result) const {
 
 		// from FileLoader type, get the block iter type and range type
 		using BlockIterType = typename BlockType::const_iterator;
@@ -187,7 +187,8 @@ public:
 
 
 	template <template <typename> class SeqParser, typename KP, typename BlockType>
-	size_t parse_file_data(const BlockType & partition, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
+	size_t parse_file_data(const BlockType & partition,
+	                       std::vector<typename KP::value_type>& result, const mxx::comm & _comm) const {
 		 size_t before = result.size();
 
 	    BL_BENCH_INIT(file);
@@ -215,7 +216,7 @@ public:
 	      BL_BENCH_START(file);
 	      //=== copy into array
 	      if (partition.getRange().size() > 0) {
-	        read_block<KP>(partition, l1parser, result);
+	        read_block<KP, SeqParser>(partition, l1parser, result);
 	      }
 	      BL_BENCH_END(file, "read", result.size());
 	      // std::cout << "Last: pos - kmer " << result.back() << std::endl;
@@ -227,7 +228,7 @@ public:
 	}
 
 	template <typename FileType>
-	::bliss::io::file_data open_file(const std::string & filename, const mxx::comm & _comm) {
+	::bliss::io::file_data open_file(const std::string & filename, const mxx::comm & _comm) const {
 	      // file extension determines SeqParserType
 	      std::string extension = ::bliss::utils::file::get_file_extension(filename);
 	      std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
@@ -261,7 +262,9 @@ public:
 	 * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
 	 */
 	template <template <typename> class SeqParser, typename KP>
-	size_t read_file_mpiio(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
+	size_t read_file_mpiio(const std::string & filename,
+	                       std::vector<typename KP::value_type>& result,
+	                       const mxx::comm & _comm) const {
 
 	    size_t before = result.size();
 
@@ -297,7 +300,9 @@ public:
    * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
    */
   template <template <typename> class SeqParser, typename KP>
-  size_t read_file_mmap(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
+  size_t read_file_mmap(const std::string & filename,
+                        std::vector<typename KP::value_type>& result,
+                        const mxx::comm & _comm) const {
 
 //      // file extension determines SeqParserType
 //      std::string extension = ::bliss::utils::file::get_file_extension(filename);
@@ -347,7 +352,9 @@ public:
    * @tparam KmerParser   parser type for generating Kmer.  supports kmer, kmer+pos, kmer+count, kmer+pos/qual.
    */
   template <template <typename> class SeqParser, typename KP>
-  size_t read_file_posix(const std::string & filename, std::vector<typename KP::value_type>& result, const mxx::comm & _comm) {
+  size_t read_file_posix(const std::string & filename,
+                         std::vector<typename KP::value_type>& result,
+                         const mxx::comm & _comm) const {
 
 //      // file extension determines SeqParserType
 //      std::string extension = ::bliss::utils::file::get_file_extension(filename);

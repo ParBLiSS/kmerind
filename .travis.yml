@@ -64,40 +64,50 @@ matrix:
               - gcc-5
               - g++-5
         env: envCXX=g++-5 envCC=gcc-5
-# disabled for now, as llvm disabled the apt site so can't get clang.
-#      - compiler: clang
-#        addons:
-#          apt:
-#            sources:
-#              - ubuntu-toolchain-r-test
-#              - llvm-toolchain-precise-3.5
-#            packages:
-#              - openmpi-bin
-#              - libopenmpi-dev
-#              - clang-3.5
-#        env: envCXX=clang++-3.5 envCC=clang-3.5
-#      - compiler: clang
-#        addons:
-#          apt:
-#            sources:
-#              - ubuntu-toolchain-r-test
-#              - llvm-toolchain-precise-3.6
-#            packages:
-#              - openmpi-bin
-#              - libopenmpi-dev
-#              - clang-3.6
-#        env: envCXX=clang++-3.6 envCC=clang-3.6
-#      - compiler: clang
-#        addons:
-#          apt:
-#            sources:
-#              - ubuntu-toolchain-r-test
-#              - llvm-toolchain-precise-3.7
-#            packages:
-#              - openmpi-bin
-#              - libopenmpi-dev
-#              - clang-3.7
-#        env: envCXX=clang++-3.7 envCC=clang-3.7
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.5
+            packages:
+              - openmpi-bin
+              - libopenmpi-dev
+              - clang-3.5
+        env: envCXX=clang++-3.5 envCC=clang-3.5
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.6
+            packages:
+              - openmpi-bin
+              - libopenmpi-dev
+              - clang-3.6
+        env: envCXX=clang++-3.6 envCC=clang-3.6
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.7
+            packages:
+              - openmpi-bin
+              - libopenmpi-dev
+              - clang-3.7
+        env: envCXX=clang++-3.7 envCC=clang-3.7
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.8
+            packages:
+              - openmpi-bin
+              - libopenmpi-dev
+              - clang-3.8
+        env: envCXX=clang++-3.8 envCC=clang-3.8
       
 
 before_install:
