@@ -244,15 +244,17 @@ using CountType = uint32_t;
   #if (pKmerStore == SINGLE)  // single stranded
     template <typename Key>
     using MapParams = ::bliss::index::kmer::SingleStrandHashMapParams<Key, DistHash, StoreHash, DistTrans>;
+    using SpecialKeys = ::bliss::kmer::hash::sparsehash::special_keys<KmerType, false>;
   #elif (pKmerStore == CANONICAL)
     template <typename Key>
     using MapParams = ::bliss::index::kmer::CanonicalHashMapParams<Key, DistHash, StoreHash>;
+    using SpecialKeys = ::bliss::kmer::hash::sparsehash::special_keys<KmerType, true>;
   #elif (pKmerStore == BIMOLECULE)  // bimolecule
     template <typename Key>
     using MapParams = ::bliss::index::kmer::BimoleculeHashMapParams<Key, DistHash, StoreHash>;
+    using SpecialKeys = ::bliss::kmer::hash::sparsehash::special_keys<KmerType, false>;
   #endif
 
-  using SpecialKeys = ::bliss::kmer::hash::sparsehash::special_keys<KmerType>;
 
   // DEFINE THE MAP TYPE base on the type of data to be stored.
   #if (pINDEX == POS) || (pINDEX == POSQUAL)  // multimap

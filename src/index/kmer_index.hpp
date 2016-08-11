@@ -210,7 +210,7 @@ public:
 	      std::tie(record_size, seq_len) = l1parser.get_record_size(partition.cbegin(), partition.parent_range_bytes, partition.getRange(), partition.getRange(), _comm, 10);
 	      size_t est_size = (record_size == 0) ? 0 : (partition.getRange().size() + record_size - 1) / record_size;  // number of records
 	      est_size *= (seq_len < KmerType::size) ? 0 : (seq_len - KmerType::size + 1) ;  // number of kmers in a record
-	      result.reserve(est_size);
+	      result.reserve(result.size() + est_size);
 	      BL_BENCH_END(file, "reserve", est_size);
 
 	      BL_BENCH_START(file);

@@ -42,14 +42,15 @@ namespace bliss
 
     /**
      * @class    bliss::iterator::UnzipIterator
-     * @brief    iterator that returns one of elemenst from the tuple/pair in the tuple from a zip iterator
+     * @brief    iterator that returns one of elements from the tuple/pair in the tuple from a zip iterator
      * @details
      *
      * @note     This is a forward iterator only.
      *
-     * @tparam FirstIter    Type of first iterator to zip
-     * @tparam SecondIter   Type of second iterator to zip
-     *
+     * @tparam ZipIter    iterator to unzip (currently working with just pairs)
+     * @tparam select 	  the id of the element to extract.  0 means first element
+     * @tparam advance	  if more than 1 unzip iterators are attached to an iterator to extract different elements, only 1 should advance the
+     * 						target iterator (since it is a reference).
      */
     template<typename ZipIter, int select=0, bool advance=true>
     class UnzipIterator :  public std::iterator<std::input_iterator_tag,
@@ -58,7 +59,7 @@ namespace bliss
 											  	  typename std::iterator_traits<ZipIter>::value_type::second_type >::type >
     {
       protected:
-        // reference to underlying ZipIterator.  This is key that enables lock step increment of zip iterator components.
+        // reference to underlying ZipIterator.  This is key that enables lock-step increment of zip iterator components.
         ZipIter& iter;
 
 

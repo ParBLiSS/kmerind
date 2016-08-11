@@ -342,11 +342,11 @@ namespace bliss {
 
       	  };
 
-      	  template <typename Kmer>
+      	  template <typename Kmer, bool canonical = false>
       	  class special_keys;
 
-      	  template <unsigned int K, typename WordType>   // full specialization, using a templated class as parameter.
-      	  class special_keys< ::bliss::common::Kmer<K, ::bliss::common::DNA6, WordType> > :
+      	  template <unsigned int K, typename WordType, bool canonical>   // full specialization, using a templated class as parameter.
+      	  class special_keys< ::bliss::common::Kmer<K, ::bliss::common::DNA6, WordType>, canonical > :
 		  	  public special_keys_base<::bliss::common::Kmer<K, ::bliss::common::DNA6, WordType> > {
 
 		  	  protected:
@@ -372,8 +372,8 @@ namespace bliss {
 
       	  };
 
-      	  template <unsigned int K, typename WordType>   // full specialization, using a templated class as parameter.
-      	  class special_keys <::bliss::common::Kmer<K, ::bliss::common::DNA, WordType> > :
+      	  template <unsigned int K, typename WordType, bool canonical>   // full specialization, using a templated class as parameter.
+      	  class special_keys <::bliss::common::Kmer<K, ::bliss::common::DNA, WordType>, canonical > :
 		  	  public special_keys_base<::bliss::common::Kmer<K, ::bliss::common::DNA, WordType> > {
 
 		  	  protected:
@@ -381,11 +381,11 @@ namespace bliss {
       		  	  using Base = ::bliss::kmer::hash::sparsehash::special_keys_base<Kmer >;
 
 		  	  public:
-
-				  static constexpr bool need_to_split = ((Kmer::nWords * sizeof(typename Kmer::KmerWordType) * 8 - Kmer::nBits) <= 1);
+      		  	  static constexpr bool full = ((Kmer::nWords * sizeof(typename Kmer::KmerWordType) * 8 - Kmer::nBits) <= 1);
+				  static constexpr bool need_to_split = !canonical && full;
 
           		  /// kmer empty key for DNA, unfull kmer 10000000000000, or 110000000000
-          		  template <typename KM = Kmer, bool s = need_to_split, typename std::enable_if<!s, int>::type = 0>
+          		  template <typename KM = Kmer, bool s = full, typename std::enable_if<!s, int>::type = 0>
           		  inline KM generate(uint8_t id = 0) {
           			  assert(id < 2);
           			  KM em(true); // create an empty one
@@ -394,7 +394,7 @@ namespace bliss {
           		  }
 
           		  /// kmer empty key for DNA, full kmer 111111111111111, or 111111111111110
-          		  template <typename KM = Kmer, bool s = need_to_split, typename std::enable_if<s, int>::type = 0>
+          		  template <typename KM = Kmer, bool s = full, typename std::enable_if<s, int>::type = 0>
           		  inline KM generate(uint8_t id = 0) {
           			  assert(id < 2);
           			  KM em; // create an empty one
@@ -415,8 +415,8 @@ namespace bliss {
       	  };
 
 
-      	  template <unsigned int K, typename WordType>   // full specialization, using a templated class as parameter.
-      	  class special_keys< ::bliss::common::Kmer<K, ::bliss::common::DNA16, WordType> > :
+      	  template <unsigned int K, typename WordType, bool canonical>   // full specialization, using a templated class as parameter.
+      	  class special_keys< ::bliss::common::Kmer<K, ::bliss::common::DNA16, WordType>, canonical > :
 		  	  public special_keys_base<::bliss::common::Kmer<K, ::bliss::common::DNA16, WordType> > {
 
 		  	  protected:
@@ -424,10 +424,11 @@ namespace bliss {
       		  	  using Base = ::bliss::kmer::hash::sparsehash::special_keys_base<Kmer >;
 
 		  	  public:
-				  static constexpr bool need_to_split = ((Kmer::nWords * sizeof(typename Kmer::KmerWordType) * 8 - Kmer::nBits) <= 1);
+      		  	  static constexpr bool full = ((Kmer::nWords * sizeof(typename Kmer::KmerWordType) * 8 - Kmer::nBits) <= 1);
+				  static constexpr bool need_to_split = !canonical && full;
 
           		  /// kmer empty key for DNA, unfull kmer 10000000000000, or 110000000000
-          		  template <typename KM = Kmer, bool s = need_to_split, typename std::enable_if<!s, int>::type = 0>
+          		  template <typename KM = Kmer, bool s = full, typename std::enable_if<!s, int>::type = 0>
           		  inline KM generate(uint8_t id = 0) {
           			  assert(id < 2);
           			  KM em(true); // create an empty one
@@ -436,7 +437,7 @@ namespace bliss {
           		  }
 
           		  /// kmer empty key for DNA, full kmer 111111111111110, or 1111111111111100
-          		  template <typename KM = Kmer, bool s = need_to_split, typename std::enable_if<s, int>::type = 0>
+          		  template <typename KM = Kmer, bool s = full, typename std::enable_if<s, int>::type = 0>
           		  inline KM generate(uint8_t id = 0) {
           			  assert(id < 2);
           			  KM em; // create an empty one
