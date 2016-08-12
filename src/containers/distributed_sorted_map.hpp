@@ -491,7 +491,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_INIT(find);
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_a2a", this->comm);
             return results;
           }
@@ -612,7 +612,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_INIT(find);
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_overlap", this->comm);
             return results;
           }
@@ -811,7 +811,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           BL_BENCH_INIT(find);
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find", this->comm);
             return results;
           }
@@ -957,7 +957,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_sorted_map:find_sendrecv", this->comm);
             return results;
           }
@@ -1510,7 +1510,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <bool remove_duplicate = true, typename Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
@@ -1518,6 +1518,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
         BL_BENCH_INIT(count);
 
+        // still process - one input, one output
         if (::dsc::empty(keys, this->comm)) {
           BL_BENCH_REPORT_MPI_NAMED(count, "base_sorted_map:count", this->comm);
           return results;
@@ -1544,10 +1545,14 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
 
             BL_BENCH_START(count);
-            std::vector<size_t> recv_counts(
-            		::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
-          				  typename Base::StoreTransformedFunc(),
-          				  typename Base::StoreTransformedEqual()));
+            std::vector<size_t> recv_counts;
+            if (remove_duplicate)
+				::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
+							  typename Base::StoreTransformedFunc(),
+							  typename Base::StoreTransformedEqual()).swap(recv_counts);
+            else
+				::dsc::distribute_sorted(keys, this->key_to_rank, sorted_input, this->comm,
+							  typename Base::StoreTransformedFunc()).swap(recv_counts);
             BL_BENCH_END(count, "dist_query", keys.size());
 
 
@@ -1588,9 +1593,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
             BL_BENCH_START(count);
             // keep unique keys
-            ::fsc::sorted_unique(keys, sorted_input,
-  				  typename Base::StoreTransformedFunc(),
-  				  typename Base::StoreTransformedEqual());
+            if (remove_duplicate)
+				::fsc::sorted_unique(keys, sorted_input,
+					  typename Base::StoreTransformedFunc(),
+					  typename Base::StoreTransformedEqual());
             BL_BENCH_END(count, "uniq1", keys.size());
 
           BL_BENCH_START(count);
@@ -1733,7 +1739,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           BL_BENCH_INIT(erase);
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
             return 0;
           }
@@ -1766,10 +1772,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         }
 
 
-        if (this->empty() || keys.empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
-      	  return 0;
-        }
+//        if (this->empty() || keys.empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(erase, "base_sorted_map:erase", this->comm);
+//      	  return 0;
+//        }
 
         BL_BENCH_START(erase);
         // keep unique keys

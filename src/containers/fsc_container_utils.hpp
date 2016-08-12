@@ -408,8 +408,6 @@ namespace fsc {
                           const Less & less = Less()) {
 
     if (!sorted_input) {
-      auto newstart = input.begin();
-      auto newend = newstart;
       auto start = input.begin();
       auto end = start;
 

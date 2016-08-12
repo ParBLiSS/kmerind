@@ -315,7 +315,7 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_a2a", this->comm);
             return results;
           }
@@ -421,7 +421,7 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_overlap", this->comm);
             return results;
           }
@@ -607,7 +607,7 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find", this->comm);
             return results;
           }
@@ -727,7 +727,7 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find_sendrecv", this->comm);
             return results;
           }
@@ -1200,23 +1200,17 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class Predicate = ::fsc::TruePredicate>
+      template <bool remove_duplicate = true, class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
                                                         Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(count);
           ::std::vector<::std::pair<Key, size_type> > results;
 
+          // process even if local container is empty.
           if (::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(count, "base_densehash_map:count", this->comm);
             return results;
           }
-
-//          if (this->empty()) {
-//            BL_BENCH_REPORT_MPI_NAMED(count, "base_densehash_map:count", this->comm);
-//            return results;
-//          }
-
-
 
           BL_BENCH_START(count);
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
@@ -1229,10 +1223,14 @@ namespace dsc  // distributed std container
 
             BL_BENCH_START(count);
             // distribute (communication part)
-            std::vector<size_t> recv_counts(
-            		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-            				typename Base::StoreTransformedFunc(),
-            				typename Base::StoreTransformedEqual()));
+            std::vector<size_t> recv_counts;
+            if (remove_duplicate) {
+				::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+								typename Base::StoreTransformedFunc(),
+								typename Base::StoreTransformedEqual()).swap(recv_counts);
+            } else {
+            	::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm).swap(recv_counts);
+            }
             BL_BENCH_END(count, "dist_query", keys.size());
 
 
@@ -1265,10 +1263,12 @@ namespace dsc  // distributed std container
           } else {
 
             BL_BENCH_START(count);
-            // keep unique keys
-            ::fsc::unique(keys, sorted_input,
-    				typename Base::StoreTransformedFunc(),
-    				typename Base::StoreTransformedEqual());
+            if (remove_duplicate) {
+				// keep unique keys
+				::fsc::unique(keys, sorted_input,
+						typename Base::StoreTransformedFunc(),
+						typename Base::StoreTransformedEqual());
+            }
             BL_BENCH_END(count, "uniq1", keys.size());
 
 
@@ -1320,7 +1320,7 @@ namespace dsc  // distributed std container
 
           BL_BENCH_INIT(erase);
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(erase, "base_densehash:erase", this->comm);
             return 0;
           }
@@ -1340,11 +1340,6 @@ namespace dsc  // distributed std container
             sorted_input = false;
           }
 
-          if (this->empty() || keys.empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(erase, "base_densehash:erase", this->comm);
-            return 0;
-          }
-
 
 
           BL_BENCH_START(erase);
@@ -1356,14 +1351,14 @@ namespace dsc  // distributed std container
 
 
           BL_BENCH_START(erase);
-
-
-          BL_BENCH_END(erase, "erase", keys.size());
           if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
             this->c.erase(keys.begin(), keys.end(), pred);
           } else {
             this->c.erase(keys.begin(), keys.end());
           }
+          BL_BENCH_END(erase, "erase", keys.size());
+
+
 
           BL_BENCH_REPORT_MPI_NAMED(erase, "base_densehash:erase", this->comm);
 
@@ -1620,6 +1615,45 @@ namespace dsc  // distributed std container
         return count;
       }
 
+      /**
+       * @brief insert new elements in the distributed densehash_multimap.
+       * @param first
+       * @param last
+       */
+      template <typename V, typename Updater>
+      size_t update(std::vector<::std::pair<Key, V> >& input, bool sorted_input, Updater & op ) {
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
+        BL_BENCH_INIT(update);
+
+        if (this->empty() || ::dsc::empty(input, this->comm)) {
+          BL_BENCH_REPORT_MPI_NAMED(update, "hashmap:update", this->comm);
+          return 0;
+        }
+
+        BL_BENCH_START(update);
+        this->transform_input(input);
+        BL_BENCH_END(update, "transform_intput", input.size());
+
+        // communication part
+        if (this->comm.size() > 1) {
+          BL_BENCH_START(update);
+          // get mapping to proc
+          // TODO: keep unique only may not be needed - comm speed may be faster than we can compute unique.
+          auto recv_counts(::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm));
+          BLISS_UNUSED(recv_counts);
+          BL_BENCH_END(update, "dist_data", input.size());
+        }
+
+
+        BL_BENCH_START(update);
+        // local compute part.
+        size_t count = this->c.update(input, op);
+        BL_BENCH_END(update, "update", count);
+
+        BL_BENCH_REPORT_MPI_NAMED(update, "hashmap:update", this->comm);
+
+        return count;
+      }
 
   };
 

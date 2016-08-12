@@ -320,7 +320,7 @@ namespace bliss
         /// id of the sequence:  correspond to sequence_iter.  file_pos field points to beginning of record.
         mutable IdType id;
 
-        // length of full record.
+        /// length of full record.
         mutable size_t record_size;
 
         /// offset of seq in entire record
@@ -379,6 +379,18 @@ namespace bliss
         size_t seq_global_offset() const  {
           return this->id.get_pos() + seq_begin_offset;
         }
+
+        // indicate if this record is truncated.  never happens for FASTQ
+        bool is_record_truncated_at_begin() const {
+        	// current sequence's data offset relative to beginning of record, is greater than the record's first sequence data position.
+        	return seq_begin_offset > seq_offset;
+        }
+        bool is_record_truncated_at_end() const {
+        	// end of sequence data in record on this node relative to the start of record,
+        	// is smaller than total record size (max distance from record start in this record).
+        	return (seq_begin_offset + seq_size()) < record_size;
+        }
+
     };
 
   } /* namespace common */

@@ -363,7 +363,7 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_a2a", this->comm);
             return results;
           }
@@ -469,7 +469,7 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_overlap", this->comm);
             return results;
           }
@@ -655,7 +655,7 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find", this->comm);
             return results;
           }
@@ -775,7 +775,7 @@ namespace dsc  // distributed std container
 
           ::std::vector<::std::pair<Key, T> > results;
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(find, "base_unordered_map:find_sendrecv", this->comm);
             return results;
           }
@@ -1185,7 +1185,7 @@ namespace dsc  // distributed std container
           size_t before = this->c.size();
           BL_BENCH_INIT(erase);
 
-          if (::dsc::empty(keys, this->comm)) {
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
             BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
             return 0;
           }
@@ -1205,10 +1205,10 @@ namespace dsc  // distributed std container
             sorted_input = false;
           }
 
-          if (this->empty() || keys.empty()) {
-            BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
-            return 0;
-          }
+//          if (this->empty() || keys.empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(erase, "base_unordered_map:erase", this->comm);
+//            return 0;
+//          }
 
 
 
@@ -1332,7 +1332,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <class Predicate = ::fsc::TruePredicate>
+      template <bool remove_duplicate = true, class Predicate = ::fsc::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
                                                         Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(count);
@@ -1361,10 +1361,13 @@ namespace dsc  // distributed std container
 
             BL_BENCH_START(count);
             // distribute (communication part)
-            std::vector<size_t> recv_counts(
-            		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-            				typename Base::StoreTransformedFunc(),
-            				typename Base::StoreTransformedEqual()));
+            std::vector<size_t> recv_counts;
+            if (remove_duplicate)
+				::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+								typename Base::StoreTransformedFunc(),
+								typename Base::StoreTransformedEqual()).swap(recv_counts);
+            else
+				::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm).swap(recv_counts);
             BL_BENCH_END(count, "dist_query", keys.size());
 
 
@@ -1398,9 +1401,10 @@ namespace dsc  // distributed std container
 
             BL_BENCH_START(count);
             // keep unique keys
-            ::fsc::unique(keys, sorted_input,
-    				typename Base::StoreTransformedFunc(),
-    				typename Base::StoreTransformedEqual());
+            if (remove_duplicate)
+				::fsc::unique(keys, sorted_input,
+						typename Base::StoreTransformedFunc(),
+						typename Base::StoreTransformedEqual());
             BL_BENCH_END(count, "uniq1", keys.size());
 
 
