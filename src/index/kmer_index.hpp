@@ -170,13 +170,45 @@ public:
 		//== loop over the reads
 		for (; seqs_start != seqs_end; ++seqs_start)
 		{
-			if ((*seqs_start).seq_size() == 0) continue;
+			auto seq = *seqs_start;
+			if (seq.seq_size() == 0) continue;
 			//		  std::cout << "** seq: " << (*seqs_start).id.id << ", ";
 			//		  ostream_iterator<typename std::iterator_traits<typename SeqType::IteratorType>::value_type> osi(std::cout);
 			//		  std::copy((*seqs_start).seq_begin, (*seqs_start).seq_end, osi);
 			//		  std::cout << std::endl;
 
-			emplace_iter = kmer_parser(*seqs_start, emplace_iter);
+			size_t start_offset = seq.seq_global_offset();
+
+			// if seq data starts outside of valid, then skip
+			if (start_offset >= partition.valid_range_bytes.end) {
+				continue;
+			}
+
+			// check if last.  if yes, and seqParser is a FASTAParser, then inspect and change if needed
+			if (::std::is_same<SeqParser<BlockIterType>, ::bliss::io::FASTAParser<BlockIterType> >::value) {
+				// if seq data ends in overlap region, then go at most k-1 characters from end of valid range.
+				if ((start_offset + seq.seq_size()) >= partition.valid_range_bytes.end) {
+					// scan for k-1 characters, from the valid range end.
+					auto endd = seq.seq_begin + (partition.valid_range_bytes.end - start_offset);
+					size_t steps = KP::kmer_type::size - 1;
+					size_t count = 0;
+
+					// iterate and find the k-1 chars in overlap, starting from valid end.  should be less than current seq end.
+					while ((endd != seq.seq_end) && (count < steps)) {
+						if ((*endd != ::bliss::io::BaseFileParser<BlockIterType>::eol) &&
+								(*endd != ::bliss::io::BaseFileParser<BlockIterType>::cr)) {
+							++count;
+						}
+
+						++endd;
+					}
+
+
+					seq.seq_end = endd;
+				}
+			}
+
+			emplace_iter = kmer_parser(seq, emplace_iter);
 
 			//	    std::cout << "Last: pos - kmer " << result.back() << std::endl;
 
