@@ -263,10 +263,9 @@ namespace dsc  // distributed std container
       size_t local_insert(std::vector<KT> & input) {
           BL_BENCH_INIT(local_insert);
 
-    	  BL_BENCH_START(local_insert);
-          this->local_reserve(c.size() + input.size());  // before branching, because reserve calls collective "empty()"
-          BL_BENCH_END(local_insert, "reserve", this->c.size());
-
+//    	  BL_BENCH_START(local_insert);
+//          this->local_reserve(c.size() + input.size());  // before branching, because reserve calls collective "empty()"
+//          BL_BENCH_END(local_insert, "reserve", this->c.size());
 
           size_t before = c.size();
 
@@ -638,7 +637,7 @@ namespace dsc  // distributed std container
             // do for each src proc one at a time.
 
             BL_BENCH_START(find);
-            results.reserve(keys.size() * 10);                   // TODO:  should estimate coverage.
+            results.reserve(keys.size());                   // TODO:  should estimate coverage.
             BL_BENCH_END(find, "reserve", results.capacity());
 
             BL_BENCH_START(find);
@@ -1925,6 +1924,10 @@ namespace dsc  // distributed std container
         }
 
         //        count_unique(input);
+		  BL_BENCH_START(insert);
+		  this->local_reserve(this->c.size() + input.size());  // before branching, because reserve calls collective "empty()"
+		  BL_BENCH_END(insert, "reserve", this->c.size() + input.size());
+
 
         BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
@@ -2020,7 +2023,7 @@ namespace dsc  // distributed std container
       size_t local_insert(InputIterator first, InputIterator last) {
           size_t before = this->c.size();
 
-          this->local_reserve(before + ::std::distance(first, last));
+          //this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             auto result = this->c.insert(*it);
@@ -2044,7 +2047,7 @@ namespace dsc  // distributed std container
       size_t local_insert(InputIterator first, InputIterator last, Predicate const & pred) {
           size_t before = this->c.size();
 
-          this->local_reserve(before + ::std::distance(first, last));
+          //this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) {
