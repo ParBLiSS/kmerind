@@ -1620,7 +1620,7 @@ namespace dsc  // distributed std container
        * @param last
        */
       template <typename V, typename Updater>
-      size_t update(std::vector<::std::pair<Key, V> >& input, bool sorted_input, Updater & op ) {
+      size_t update(std::vector<::std::pair<Key, V> >& input, bool sorted_input, Updater const & op ) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(update);
 
@@ -1647,6 +1647,19 @@ namespace dsc  // distributed std container
         BL_BENCH_START(update);
         // local compute part.
         size_t count = this->c.update(input, op);
+        BL_BENCH_END(update, "update", count);
+
+        BL_BENCH_REPORT_MPI_NAMED(update, "hashmap:update", this->comm);
+
+        return count;
+      }
+
+      template <typename Filter, typename Updater>
+      size_t update(Filter const & fop, Updater const & op ) {
+        BL_BENCH_INIT(update);
+
+        BL_BENCH_START(update);
+        size_t count = this->c.update(fop, op);
         BL_BENCH_END(update, "update", count);
 
         BL_BENCH_REPORT_MPI_NAMED(update, "hashmap:update", this->comm);
