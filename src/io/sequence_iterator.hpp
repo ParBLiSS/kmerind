@@ -149,7 +149,7 @@ namespace bliss
          * @param end     end of the data to be parsed.
          * @param _range  the Range associated with the start and end of the source data.  coordinates relative to the file being processed.
          */
-        SequencesIterator(const Parser<Iterator> & f, const Iterator& start,
+        explicit SequencesIterator(const Parser<Iterator> & f, const Iterator& start,
                        const Iterator& end, const size_t &_offset)
             : seq(), _curr(start), _next(start), _end(end), parser(f), file_offset(_offset)
         {
@@ -176,7 +176,7 @@ namespace bliss
          * @brief default copy constructor
          * @param Other   The SequencesIterator to copy from
          */
-        explicit SequencesIterator(const type& Other)
+        SequencesIterator(const type& Other)
             : seq(Other.seq), _curr(Other._curr), _next(Other._next), _end(Other._end),
               parser(Other.parser),  file_offset(Other.file_offset)
         {}
@@ -202,7 +202,7 @@ namespace bliss
          * @brief default copy constructor
          * @param Other   The SequencesIterator to copy from
          */
-        explicit SequencesIterator(type && Other)
+        SequencesIterator(type && Other)
             : seq(std::move(Other.seq)), _curr(std::move(Other._curr)), _next(std::move(Other._next)), _end(std::move(Other._end)),
               parser(std::move(Other.parser)),  file_offset(std::move(Other.file_offset))
         {}
@@ -328,7 +328,7 @@ namespace bliss
          * @brief dereference operator
          * @return    a const reference to the cached sequence object
          */
-        const typename Parser<Iterator>::SequenceType &operator*() const
+        typename Parser<Iterator>::SequenceType &operator*()
         {
           return seq;
         }
@@ -337,7 +337,7 @@ namespace bliss
          * @brief pointer dereference operator
          * @return    a const reference to the cached sequence object
          */
-        const typename Parser<Iterator>::SequenceType *operator->() const {
+        typename Parser<Iterator>::SequenceType *operator->() {
           return &seq;
         }
 
