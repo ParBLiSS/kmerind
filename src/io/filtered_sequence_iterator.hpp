@@ -57,11 +57,93 @@ namespace bliss
      * @tparam Parser     Functoid type to parse data pointed by Iterator into sequence objects..
      * @tparam SequenceType  Sequence Type.  replaceable as long as it supports Quality if Parser requires it.
      */
-//    template<typename Iterator, template <typename> class Parser, typename Predicate>
-//    using FilteredSequencesIterator = ::bliss::iterator::filter_iterator<
-//        Predicate,
-//        ::bliss::io::SequencesIterator<Iterator, Parser> >;
-    // TODO - need to build full class later.
+    template<typename Iterator, template <typename> class Parser, typename Predicate>
+    class FilteredSequencesIterator : public ::bliss::iterator::filter_iterator<
+      Predicate,
+      ::bliss::io::SequencesIterator<Iterator, Parser> >
+    {
+      protected:
+        using SeqIterType = ::bliss::io::SequencesIterator<Iterator, Parser>;
+        using FilterIterType = ::bliss::iterator::filter_iterator<Predicate, SeqIterType>;
+
+      public:
+        using iterator_category = typename SeqIterType::iterator_category;
+        using value_type        = typename SeqIterType::value_type;
+        using difference_type   = typename SeqIterType::difference_type;
+        using pointer           = typename SeqIterType::pointer;
+        using reference         = typename SeqIterType::reference;
+
+        /**
+         * @brief constructor, initializes with a start and end.  this represents the start of the output iterator
+         * @details   at construction, the internal _curr, _next iterators are set to the input start iterator, and _end is set to the input end.
+         *            then immediately the first record is parsed, with output populated with the first entry and next pointer advanced.
+         *
+         * @param f       parser functoid for parsing the data.
+         * @param start   beginning of the data to be parsed
+         * @param end     end of the data to be parsed.
+         * @param _range  the Range associated with the start and end of the source data.  coordinates relative to the file being processed.
+         */
+        explicit FilteredSequencesIterator(const Parser<Iterator> & f, const Iterator& start,
+                       const Iterator& end, const size_t &_offset,
+                       const Predicate & pred = Predicate())
+            : FilterIterType(pred, SeqIterType(f, start, end, _offset), SeqIterType(end)) {};
+
+        /**
+         * @brief constructor, initializes with only the end.  this represents the end of the output iterator.
+         * @details   at construction, the internal _curr, _next, and _end iterators are set to the input end iterator.
+         *          this instance therefore does not traverse and only serves as marker for comparing to the traversing FilteredSequencesIterator.
+         * @param end     end of the data to be parsed.
+         */
+        explicit FilteredSequencesIterator(const Iterator& end,
+                                           const Predicate & pred = Predicate())
+            : FilterIterType(pred, SeqIterType(end)) {}
+
+        /**
+         * @brief default copy constructor
+         * @param Other   The FilteredSequencesIterator to copy from
+         */
+        FilteredSequencesIterator(const FilteredSequencesIterator& Other)
+            : FilterIterType(Other) {}
+
+        /**
+         * @brief  default copy assignment operator
+         * @param Other   The FilteredSequencesIterator to copy from
+         * @return  modified copy of self.
+         */
+        FilteredSequencesIterator& operator=(const FilteredSequencesIterator& Other)
+        {
+          this->FilterIterType::operator=(Other);
+          return *this;
+        }
+
+        /**
+         * @brief default copy constructor
+         * @param Other   The FilteredSequencesIterator to copy from
+         */
+        FilteredSequencesIterator(FilteredSequencesIterator && Other)
+            : FilterIterType(::std::forward<FilteredSequencesIterator>(Other)) {}
+
+        /**
+         * @brief  default copy assignment operator
+         * @param Other   The FilteredSequencesIterator to copy from
+         * @return  modified copy of self.
+         */
+        FilteredSequencesIterator& operator=(FilteredSequencesIterator && Other)
+        {
+          this->FilterIterType::operator=(::std::forward<FilteredSequencesIterator>(Other));
+          return *this;
+        }
+
+        /// default constructor deleted.
+        FilteredSequencesIterator() = delete;
+
+//        using operator++;
+//        using operator==;
+//        using operator*;
+//        using operator->;
+//        using operator();
+
+    };
 
     /**
      * @class bliss::io::SequenceNPredicate
@@ -77,8 +159,8 @@ namespace bliss
     };
 
 
-//    template <typename Iterator, template <typename> class Parser>
-//    using NFilterSequencesIterator = FilteredSequencesIterator<Iterator, Parser, SequenceNPredicate>;
+    template <typename Iterator, template <typename> class Parser>
+    using NFilterSequencesIterator = bliss::io::FilteredSequencesIterator<Iterator, Parser, bliss::io::SequenceNPredicate>;
 
     // TODO: filter for other characters.
     // TODO: quality score filter for sequences.

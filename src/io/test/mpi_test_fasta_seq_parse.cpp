@@ -400,7 +400,7 @@ INSTANTIATE_TEST_CASE_P(Bliss, FASTAParseTest, ::testing::Values(
     TestFileInfo(6,    246,    940, std::string("/test/data/test2.fasta")),
     TestFileInfo(4,    64,     512, std::string("/test/data/test.fasta")),
     TestFileInfo(5000, 335000, 1092580, std::string("/test/data/test.medium.fasta")),
-    TestFileInfo(2,    31155,  31245, std::string("/test/data/test.unitiqs.fasta"))
+    TestFileInfo(2,    31155,  31244, std::string("/test/data/test.unitiqs.fasta"))
 ));
 
 //INSTANTIATE_TEST_CASE_P(Bliss, FASTAParseProcedureTest, ::testing::Values(
@@ -444,17 +444,20 @@ protected:
 
       // from FileLoader type, get the block iter type and range type
       using BlockIterType = typename bliss::io::file_data::const_iterator;
-      using OrigSeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
-      using SeqIterType = ::bliss::iterator::filter_iterator<::bliss::io::SequenceNPredicate, OrigSeqIterType>;
+//      using OrigSeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
+//      using SeqIterType = ::bliss::iterator::filter_iterator<::bliss::io::SequenceNPredicate, OrigSeqIterType>;
+    using SeqIterType = ::bliss::io::NFilterSequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
       ParserType<typename ::bliss::io::file_data::const_iterator> l1parser;
 
       size_t offset = l1parser.init_parser(fdata.in_mem_cbegin(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes);
 
         //==  and wrap the chunk inside an iterator that emits Reads.
-        SeqIterType seqs_start(OrigSeqIterType(l1parser, fdata.begin(),
-            fdata.in_mem_end(), offset), OrigSeqIterType(fdata.in_mem_end()));
-        SeqIterType seqs_end(OrigSeqIterType(fdata.in_mem_end()));
+//        SeqIterType seqs_start(OrigSeqIterType(l1parser, fdata.begin(),
+//            fdata.in_mem_end(), offset), OrigSeqIterType(fdata.in_mem_end()));
+//        SeqIterType seqs_end(OrigSeqIterType(fdata.in_mem_end()));
+        SeqIterType seqs_start(l1parser, fdata.begin(), fdata.in_mem_end(), offset);
+        SeqIterType seqs_end(fdata.in_mem_end());
 
           bliss::index::kmer::KmerParser<KmerType > kmer_parser;
           std::vector<KmerType> result;
@@ -568,17 +571,20 @@ protected:
 
     // from FileLoader type, get the block iter type and range type
     using BlockIterType = typename ::bliss::io::file_data::const_iterator;
-    using OrigSeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
-    using SeqIterType = ::bliss::iterator::filter_iterator<::bliss::io::SequenceNPredicate, OrigSeqIterType>;
+//  using OrigSeqIterType = ::bliss::io::SequencesIterator<BlockIterType, bliss::io::FASTAParser >;
+//  using SeqIterType = ::bliss::iterator::filter_iterator<::bliss::io::SequenceNPredicate, OrigSeqIterType>;
+    using SeqIterType = ::bliss::io::NFilterSequencesIterator<BlockIterType, bliss::io::FASTAParser >;
 
     ParserType<typename ::bliss::io::file_data::const_iterator> l1parser;
 
     size_t offset = l1parser.init_parser(fdata.in_mem_cbegin(), fdata.parent_range_bytes, fdata.in_mem_range_bytes, fdata.valid_range_bytes, comm);
 
       //==  and wrap the chunk inside an iterator that emits Reads.
-      SeqIterType seqs_start(OrigSeqIterType(l1parser, fdata.begin(),
-          fdata.in_mem_end(), offset), OrigSeqIterType(fdata.in_mem_end()));
-      SeqIterType seqs_end(OrigSeqIterType(fdata.in_mem_end()));
+//      SeqIterType seqs_start(OrigSeqIterType(l1parser, fdata.begin(),
+//          fdata.in_mem_end(), offset), OrigSeqIterType(fdata.in_mem_end()));
+//      SeqIterType seqs_end(OrigSeqIterType(fdata.in_mem_end()));
+      SeqIterType seqs_start(l1parser, fdata.begin(), fdata.in_mem_end(), offset);
+      SeqIterType seqs_end(fdata.in_mem_end());
 
         bliss::index::kmer::KmerParser<KmerType > kmer_parser;
         std::vector<KmerType> result;
