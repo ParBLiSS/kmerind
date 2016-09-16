@@ -178,7 +178,7 @@ namespace bliss
          * @brief dereference function, *iter
          * @return  current value
          */
-        T operator*() {
+        inline T& operator*() {
           val.first = *iter1;
           val.second = *iter2;
           return val;

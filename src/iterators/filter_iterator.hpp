@@ -104,7 +104,7 @@ namespace bliss
             typename std::iterator_traits<Iterator>::iterator_category>::type iterator_category;
 
         /// DEFINE value type of iterator's elements.
-        typedef typename base_traits::value_type value_type;
+        using value_type = typename std::remove_reference<typename base_traits::reference>::type;
 
         /// DEFINE base iterator's value type, should be same as filter_iterator's
         typedef value_type base_value_type;
@@ -125,12 +125,25 @@ namespace bliss
             {
               ++_curr;
             }
-        }
-        ;
+        };
+        explicit filter_iterator(const Iterator& curr,
+                        const Iterator& end)
+            : _curr(curr), _start(curr), _end(end), before_start(false)
+        {
+          // find the first position that satisfies the predicate.
+          while (_curr != _end && !_f(*_curr)) // need to check to make sure we are not pass the end of the base iterator.
+            {
+              ++_curr;
+            }
+        };
+
 
         /// constructor, for creating end iterator
         filter_iterator(const Filter & f, const Iterator& curr) // for end iterator.
             : _curr(curr), _start(curr), _end(curr), _f(f), before_start(false)
+        {};
+        explicit filter_iterator(const Iterator& curr) // for end iterator.
+            : _curr(curr), _start(curr), _end(curr), before_start(false)
         {};
 
         /// copy constructor
@@ -208,9 +221,12 @@ namespace bliss
         }
 
         /// dereference operator.  returned entry passes the predicate test.  guaranteed to be at a valid position
-        inline value_type operator*()
-        {
+        inline value_type& operator*() {
           return *_curr;
+        }
+
+        inline value_type* operator->() {
+          return _curr.operator->();
         }
 
         /// referece operator.  returned entry passes the predicate test.  guaranteed to be at a valid position
