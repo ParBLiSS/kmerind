@@ -116,8 +116,8 @@ namespace bliss
         }
 
         /// constructor, for creating start iterator.
-        filter_iterator(const Filter & f, const Iterator& curr,
-                        const Iterator& end)
+        filter_iterator(const Filter & f, Iterator curr,
+                        Iterator end)
             : _curr(curr), _start(curr), _end(end), _f(f), before_start(false)
         {
           // find the first position that satisfies the predicate.
@@ -126,8 +126,8 @@ namespace bliss
               ++_curr;
             }
         };
-        explicit filter_iterator(const Iterator& curr,
-                        const Iterator& end)
+        filter_iterator(Iterator curr,
+                        Iterator end)
             : _curr(curr), _start(curr), _end(end), before_start(false)
         {
           // find the first position that satisfies the predicate.
@@ -139,10 +139,10 @@ namespace bliss
 
 
         /// constructor, for creating end iterator
-        filter_iterator(const Filter & f, const Iterator& curr) // for end iterator.
+        filter_iterator(const Filter & f, Iterator curr) // for end iterator.
             : _curr(curr), _start(curr), _end(curr), _f(f), before_start(false)
         {};
-        explicit filter_iterator(const Iterator& curr) // for end iterator.
+        explicit filter_iterator(Iterator curr) // for end iterator.
             : _curr(curr), _start(curr), _end(curr), before_start(false)
         {};
 

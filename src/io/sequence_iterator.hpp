@@ -149,8 +149,8 @@ namespace bliss
          * @param end     end of the data to be parsed.
          * @param _range  the Range associated with the start and end of the source data.  coordinates relative to the file being processed.
          */
-        explicit SequencesIterator(const Parser<Iterator> & f, const Iterator& start,
-                       const Iterator& end, const size_t &_offset)
+        explicit SequencesIterator(const Parser<Iterator> & f, Iterator start,
+                       Iterator end, const size_t &_offset)
             : seq(), _curr(start), _next(start), _end(end), parser(f), file_offset(_offset)
         {
           // parse the first entry, if start != end.
@@ -167,7 +167,7 @@ namespace bliss
          *          this instance therefore does not traverse and only serves as marker for comparing to the traversing SequencesIterator.
          * @param end     end of the data to be parsed.
          */
-        explicit SequencesIterator(const Iterator& end)
+        explicit SequencesIterator(Iterator end)
             : seq(), _curr(end), _next(end), _end(end), parser(), file_offset(std::numeric_limits<size_t>::max())
         {
         }
@@ -224,8 +224,7 @@ namespace bliss
         }
 
         /// default constructor deleted.
-        SequencesIterator() = delete;
-
+        SequencesIterator() = default;
 
         /**
          * @brief   iterator's pre increment operation
