@@ -32,6 +32,8 @@
 // C includes
 #include "io/sequence_iterator.hpp"
 #include "iterators/filter_iterator.hpp"
+#include "io/fastq_loader.hpp"
+#include "io/file_loader.hpp"
 
 #include <algorithm>
 
@@ -54,16 +56,19 @@ namespace bliss
      * @note this iterator is not a random access or bidirectional iterator, as traversing in reverse is not implemented.
      *
      * @tparam Iterator	  Base iterator type to be parsed into sequences
-     * @tparam Parser     Functoid type to parse data pointed by Iterator into sequence objects..
-     * @tparam SequenceType  Sequence Type.  replaceable as long as it supports Quality if Parser requires it.
+     * @tparam SeqParser     Functoid type to parse data pointed by Iterator into sequence objects..
+     * @tparam SequenceType  Sequence Type.  replaceable as long as it supports Quality if SeqParser requires it.
      */
-    template<typename Iterator, template <typename> class Parser, typename Predicate>
+    template<typename Iterator, template <typename> class SeqParser, typename Predicate>
     class FilteredSequencesIterator : public ::bliss::iterator::filter_iterator<
       Predicate,
-      ::bliss::io::SequencesIterator<Iterator, Parser> >
+      ::bliss::io::SequencesIterator<Iterator, SeqParser> >
     {
+        // TODO: for long sequence FASTA file, this likely will NOT behave correctly.
+        static_assert(!std::is_same<SeqParser<Iterator>, ::bliss::io::BaseFileParser<Iterator>>::value, "SplitSequencesIterator currently works only with FASTQ and FASTA files where sequences are defined." );
+
       protected:
-        using SeqIterType = ::bliss::io::SequencesIterator<Iterator, Parser>;
+        using SeqIterType = ::bliss::io::SequencesIterator<Iterator, SeqParser>;
         using FilterIterType = ::bliss::iterator::filter_iterator<Predicate, SeqIterType>;
 
       public:
@@ -83,7 +88,7 @@ namespace bliss
          * @param end     end of the data to be parsed.
          * @param _range  the Range associated with the start and end of the source data.  coordinates relative to the file being processed.
          */
-        explicit FilteredSequencesIterator(const Parser<Iterator> & f,
+        explicit FilteredSequencesIterator(const SeqParser<Iterator> & f,
                                            Iterator start,
                                            Iterator end,
                                            const size_t &_offset,
@@ -156,8 +161,8 @@ namespace bliss
     };
 
 
-    template <typename Iterator, template <typename> class Parser>
-    using NFilterSequencesIterator = bliss::io::FilteredSequencesIterator<Iterator, Parser, bliss::io::NSequenceFilter>;
+    template <typename Iterator, template <typename> class SeqParser>
+    using NFilterSequencesIterator = bliss::io::FilteredSequencesIterator<Iterator, SeqParser, bliss::io::NSequenceFilter>;
 
     /**
      * @class bliss::io::SplitSequencesIterator
@@ -168,26 +173,29 @@ namespace bliss
      * @note this iterator is a forward iterator only (for now).
      *
      * @tparam Iterator   Base iterator type to be parsed into sequences
-     * @tparam Parser     Functoid type to parse data pointed by Iterator into sequence objects..
-     * @tparam SequenceType  Sequence Type.  replaceable as long as it supports Quality if Parser requires it.
+     * @tparam SeqParser     Functoid type to parse data pointed by Iterator into sequence objects..
+     * @tparam SequenceType  Sequence Type.  replaceable as long as it supports Quality if SeqParser requires it.
      */
-    template<typename Iterator, template <typename> class Parser, typename Predicate>
+    template<typename Iterator, template <typename> class SeqParser, typename Predicate>
     class SplitSequencesIterator : public ::std::iterator<
       typename ::std::conditional<
             ::std::is_same<typename ::std::iterator_traits<Iterator>::iterator_category,
                            ::std::input_iterator_tag>::value,
             ::std::input_iterator_tag,
             ::std::forward_iterator_tag>::type,
-      typename Parser<Iterator>::SequenceType,
+      typename SeqParser<Iterator>::SequenceType,
       typename std::iterator_traits<Iterator>::difference_type
     >
     {
+        static_assert(!std::is_same<SeqParser<Iterator>, ::bliss::io::BaseFileParser<Iterator>>::value, "SplitSequencesIterator currently works only with FASTQ and FASTA files where sequences are defined." );
+
+
       protected:
         /// predicate function
         Predicate pred;
 
         /// internal sequence iterator type
-        using SeqIterType = ::bliss::io::SequencesIterator<Iterator, Parser>;
+        using SeqIterType = ::bliss::io::SequencesIterator<Iterator, SeqParser>;
 
         /// current position
         SeqIterType _curr;
@@ -196,10 +204,10 @@ namespace bliss
         SeqIterType _end;
 
         /// cache of the current result to return
-        typename Parser<Iterator>::SequenceType seq;
+        typename SeqParser<Iterator>::SequenceType seq;
 
         /// cache of the next result to check
-        typename Parser<Iterator>::SequenceType next;
+        typename SeqParser<Iterator>::SequenceType next;
 
         /// get next candidate sequence.
         void get_next() {
@@ -256,7 +264,7 @@ namespace bliss
          * @param end     end of the data to be parsed.
          * @param _range  the Range associated with the start and end of the source data.  coordinates relative to the file being processed.
          */
-        explicit SplitSequencesIterator(const Parser<Iterator> & f,
+        explicit SplitSequencesIterator(const SeqParser<Iterator> & f,
                                         Iterator start,
                        Iterator end, const size_t &_offset,
                        const Predicate & _pred = Predicate())
@@ -399,7 +407,7 @@ namespace bliss
          * @brief dereference operator
          * @return    a const reference to the cached sequence object
          */
-        typename Parser<Iterator>::SequenceType & operator*()
+        typename SeqParser<Iterator>::SequenceType & operator*()
         {
           return seq;
         }
@@ -408,7 +416,7 @@ namespace bliss
          * @brief pointer dereference operator
          * @return    a const reference to the cached sequence object
          */
-        typename Parser<Iterator>::SequenceType *operator->() {
+        typename SeqParser<Iterator>::SequenceType *operator->() {
           return &seq;
         }
 
@@ -428,8 +436,8 @@ namespace bliss
     };
 
 
-    template <typename Iterator, template <typename> class Parser>
-    using NSplitSequencesIterator = bliss::io::SplitSequencesIterator<Iterator, Parser, bliss::io::NCharFilter>;
+    template <typename Iterator, template <typename> class SeqParser>
+    using NSplitSequencesIterator = bliss::io::SplitSequencesIterator<Iterator, SeqParser, bliss::io::NCharFilter>;
 
 
     // TODO: filter for other characters.

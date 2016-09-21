@@ -132,7 +132,7 @@ namespace bliss
 		     if (read.seq_begin == read.seq_end) return output_iter;
 
 		     //== set up the kmer generating iterators.
-		     bliss::index::kmer::NotEOL neol;
+		     bliss::utils::file::NotEOL neol;
 		     KmerIter start(BaseCharIterator(CharIter(neol, read.seq_begin, read.seq_end), bliss::common::ASCII2<Alphabet>()), true);
 		     KmerIter end(BaseCharIterator(CharIter(neol, read.seq_end), bliss::common::ASCII2<Alphabet>()), false);
 
@@ -204,7 +204,7 @@ namespace bliss
            if (read.seq_begin == read.seq_end || read.qual_begin == read.qual_end) return output_iter;
 
            //== set up the kmer generating iterators.
-           bliss::index::kmer::NotEOL neol;
+           bliss::utils::file::NotEOL neol;
            KmerIter start(BaseCharIterator(CharIter(neol, read.seq_begin, read.seq_end), bliss::common::ASCII2<Alphabet>()), true);
            KmerIter end(BaseCharIterator(CharIter(neol, read.seq_end), bliss::common::ASCII2<Alphabet>()), false);
 

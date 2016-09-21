@@ -335,7 +335,7 @@ std::vector<KmerType> readForQuery_mpiio(const std::string & filename, MPI_Comm 
 
   IndexType idx(comm);
 
-  idx.template read_file_mpiio<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  ::bliss::io::KmerFileHelper::template read_file_mpiio<::bliss::index::kmer::KmerParser<KmerType>, PARSER_TYPE, bliss::io::SequencesIterator >(filename, query, comm);
 
   return query;
 }
@@ -347,7 +347,7 @@ std::vector<KmerType> readForQuery_mmap(const std::string & filename, MPI_Comm c
   IndexType idx(comm);
 
   // default to including quality score iterators.
-  idx.template read_file_mmap<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  ::bliss::io::KmerFileHelper::template read_file_mmap<::bliss::index::kmer::KmerParser<KmerType>, PARSER_TYPE, bliss::io::SequencesIterator >(filename, query, comm);
 
   return query;
 }
@@ -360,7 +360,7 @@ std::vector<KmerType> readForQuery_posix(const std::string & filename, MPI_Comm 
   IndexType idx(comm);
 
   // default to including quality score iterators.
-  idx.template read_file_posix<PARSER_TYPE, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+  ::bliss::io::KmerFileHelper::template read_file_posix<::bliss::index::kmer::KmerParser<KmerType>, PARSER_TYPE, bliss::io::SequencesIterator  >(filename, query, comm);
 
   return query;
 }
@@ -508,15 +508,15 @@ int main(int argc, char** argv) {
 //	  } else
 	  if (reader_algo == 5) {
 		if (comm.rank() == 0) printf("reading %s via mmap\n", filename.c_str());
-		idx.read_file_mmap<PARSER_TYPE, typename IndexType::KmerParserType>(filename, temp, comm);
+		::bliss::io::KmerFileHelper::read_file_mmap<typename IndexType::KmerParserType, PARSER_TYPE, bliss::io::SequencesIterator>(filename, temp, comm);
 
 	  } else if (reader_algo == 7) {
 		if (comm.rank() == 0) printf("reading %s via posix\n", filename.c_str());
-		idx.read_file_posix<PARSER_TYPE, typename IndexType::KmerParserType>(filename, temp, comm);
+		::bliss::io::KmerFileHelper::read_file_posix<typename IndexType::KmerParserType, PARSER_TYPE, bliss::io::SequencesIterator>(filename, temp, comm);
 
 	  } else if (reader_algo == 10){
 		if (comm.rank() == 0) printf("reading %s via mpiio\n", filename.c_str());
-		idx.read_file_mpiio<PARSER_TYPE, typename IndexType::KmerParserType>(filename, temp, comm);
+		::bliss::io::KmerFileHelper::read_file_mpiio<typename IndexType::KmerParserType, PARSER_TYPE, bliss::io::SequencesIterator>(filename, temp, comm);
 	  } else {
 		throw std::invalid_argument("missing file reader type");
 	  }

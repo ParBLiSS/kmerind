@@ -64,8 +64,7 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
   std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
   if (extension.compare("fastq") == 0) {
     // default to including quality score iterators.
-	  IndexType idx(comm);
-    idx.template read_file_posix<::bliss::io::FASTQParser, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+    ::bliss::io::KmerFileHelper::template read_file_posix<::bliss::index::kmer::KmerParser<KmerType>, ::bliss::io::FASTQParser, ::bliss::io::SequencesIterator >(filename, query, comm);
   } else {
     throw std::invalid_argument("input filename extension is not supported.");
   }
@@ -94,7 +93,7 @@ void testDeBruijnGraph(const mxx::comm& comm, const std::string & filename, cons
 		BL_INFOF("RANK %d / %d: Testing %s", comm.rank(), comm.size(), test.c_str());
 
 	BL_BENCH_START(test);
-	idx.template build_posix<SeqParser>(filename, comm);
+	idx.template build_posix<SeqParser, ::bliss::io::SequencesIterator>(filename, comm);
 	BL_BENCH_END(test, "build", idx.local_size());
 
 	BL_BENCH_START(test);

@@ -1084,6 +1084,109 @@ protected:
 
   }
 
+
+
+  template <typename file_loader>
+  void parse_seq_file_helper(file_loader & fobj ) {
+      bliss::io::file_data fdata = fobj.read_file();
+
+      ASSERT_TRUE(fobj.size() > 0);
+
+      ASSERT_EQ(fdata.getRange().size(), fobj.size());
+      ASSERT_EQ(fdata.getRange().end, fobj.size());
+
+      ASSERT_EQ(fdata.in_mem_range_bytes.size(), fobj.size());
+      ASSERT_EQ(fdata.in_mem_range_bytes.end, fobj.size());
+
+      ASSERT_EQ(fdata.parent_range_bytes.size(), fobj.size());
+      ASSERT_EQ(fdata.parent_range_bytes.end, fobj.size());
+
+      ASSERT_TRUE(fdata.data[0] == '@');
+
+
+      std::vector<KmerType> result;
+
+      std::tie(this->seqCount, this->kmerCount) = bliss::io::KmerFileHelper::parse_file_data<bliss::index::kmer::KmerParser<KmerType >,
+        bliss::io::FASTQParser, ::bliss::io::NSplitSequencesIterator>(fdata, result);
+
+  }
+
+
+  template <typename file_loader>
+  void parse_mpi_file_helper(file_loader & fobj, size_t const & overlap, mxx::comm const & comm) {
+
+      // get this->fileName
+
+    ::bliss::io::file_data fdata = fobj.read_file();
+
+//    std::cout << "rank " << comm.rank() << fobj.get_class_name() << std::endl;
+
+//    comm.barrier();
+//        if (comm.rank() == 1) {
+//        std::cout << "rank " << comm.rank() << "   parent " << fdata.parent_range_bytes << std::endl;
+//        std::cout << "rank " << comm.rank() << "   inmem " << fdata.in_mem_range_bytes << std::endl;
+//        std::cout << "rank " << comm.rank() << "   search " << fdata.valid_range_bytes << std::endl;
+//
+//       std::cout << "rank " << comm.rank() << " ";
+//       for (auto ii = fdata.data.begin(); ii != (fdata.data.begin() + (fdata.in_mem_range_bytes.end - fdata.in_mem_range_bytes.start)); ++ii ) {
+//         std::cout << static_cast<unsigned char>(*ii);
+//       }
+//       std::cout << std::endl;
+//        }
+//        comm.barrier();
+
+//    std::cout << " rank " << comm.rank() << " in mem " << fdata.in_mem_range_bytes << " valid " << fdata.valid_range_bytes << std::endl;
+
+    ASSERT_TRUE(fobj.size() > 0);
+
+    // parent range should match.
+    ASSERT_EQ(fdata.parent_range_bytes.size(), fobj.size());
+    ASSERT_EQ(fdata.parent_range_bytes.end, fobj.size());
+
+    // get the ranges to makes sure they are in memory.
+    ASSERT_TRUE(fdata.in_mem_range_bytes.start >= fdata.parent_range_bytes.start);
+    ASSERT_TRUE(fdata.in_mem_range_bytes.end <= fdata.parent_range_bytes.end);
+
+    ASSERT_TRUE(fdata.in_mem_range_bytes.start <= fdata.valid_range_bytes.start);
+    ASSERT_TRUE(fdata.in_mem_range_bytes.end >= fdata.valid_range_bytes.end);
+
+    if (fdata.valid_range_bytes.size() > 0) {
+      if (fdata.data[fdata.valid_range_bytes.start - fdata.in_mem_range_bytes.start] != '@') {
+        std::cout << "ERROR: first char should be @, but is " << static_cast<unsigned char>(fdata.data[0]) << std::endl;
+      }
+      ASSERT_TRUE(fdata.data[fdata.valid_range_bytes.start - fdata.in_mem_range_bytes.start] == '@');
+    }
+
+    // get all the sizes to make sure total is same as file size.
+    size_t region_size = fdata.valid_range_bytes.size();
+    region_size = ::mxx::allreduce(region_size, comm);
+    ASSERT_EQ(region_size, fobj.size());
+
+    // make sure the aggregate range is same as parent range.
+    std::vector<size_t> begins = mxx::allgather(fdata.valid_range_bytes.start, comm);
+    std::vector<size_t> ends = mxx::allgather(fdata.valid_range_bytes.end, comm);
+
+    ASSERT_EQ(begins.front(), 0UL);
+    ASSERT_EQ(ends.back(), fobj.size());
+
+    int j = 0;
+    for (int i = 1; i < comm.size(); ++i) {
+//      if (comm.rank() == 0) std::cout << "end "  << (i-1) << ": " << ends[i-1] << " begin next " << i << ": " << begins[i] << " overlap = " << overlap << std::endl;
+      if (begins[i] == ends[i]) continue;
+
+      ASSERT_TRUE(ends[j] == (begins[i]) );  // valid ranges do not include overlap.
+      j = i;
+    }
+  //    std::cout << " orig mem " << fdata.in_mem_range_bytes << " valid " << fdata.valid_range_bytes << std::endl;
+
+    std::vector<KmerType> result;
+
+    std::tie(this->seqCount, this->kmerCount) = bliss::io::KmerFileHelper::parse_file_data<bliss::index::kmer::KmerParser<KmerType >,
+      bliss::io::FASTQParser, ::bliss::io::NSplitSequencesIterator>(fdata, result, comm);
+
+  }
+
+
 };
 
 
@@ -1184,7 +1287,102 @@ TEST_P(SplitFASTQParseTest, parse_mpiio_mpi)
 }
 #endif
 
+TEST_P(SplitFASTQParseTest, parse_mmap_helper)
+{
+#ifdef USE_MPI
+    ::mxx::comm comm;
+  if (comm.rank() == 0) {
+#endif
 
+    bliss::io::mmap_file fobj(this->fileName);
+
+    this->parse_seq_file_helper(fobj);
+
+#ifdef USE_MPI
+  }
+#endif
+
+}
+
+TEST_P(SplitFASTQParseTest, parse_stdio_helper)
+{
+#ifdef USE_MPI
+    ::mxx::comm comm;
+  if (comm.rank() == 0) {
+#endif
+
+    bliss::io::stdio_file fobj(this->fileName);
+
+    this->parse_seq_file_helper(fobj);
+
+#ifdef USE_MPI
+  }
+#endif
+
+}
+
+TEST_P(SplitFASTQParseTest, parse_posix_helper)
+{
+#ifdef USE_MPI
+    ::mxx::comm comm;
+  if (comm.rank() == 0) {
+#endif
+
+    bliss::io::posix_file fobj(this->fileName);
+
+    this->parse_seq_file_helper(fobj);
+
+#ifdef USE_MPI
+  }
+#endif
+
+}
+
+#ifdef USE_MPI
+TEST_P(SplitFASTQParseTest, parse_mmap_mpi_helper)
+{
+    ::mxx::comm comm;
+
+  ::bliss::io::parallel::partitioned_file<::bliss::io::mmap_file, bliss::io::FASTQParser> fobj(this->fileName, 0UL, comm);
+
+  this->parse_mpi_file_helper(fobj, 0UL, comm);
+
+  comm.barrier();
+}
+
+TEST_P(SplitFASTQParseTest, parse_stdio_mpi_helper)
+{
+    ::mxx::comm comm;
+
+  ::bliss::io::parallel::partitioned_file<::bliss::io::stdio_file, bliss::io::FASTQParser> fobj(this->fileName, 0UL, comm);
+
+  this->parse_mpi_file_helper(fobj, 0UL, comm);
+
+  comm.barrier();
+}
+
+TEST_P(SplitFASTQParseTest, parse_posix_mpi_helper)
+{
+    ::mxx::comm comm;
+
+  ::bliss::io::parallel::partitioned_file<::bliss::io::posix_file, bliss::io::FASTQParser> fobj(this->fileName, 0UL, comm);
+
+  this->parse_mpi_file_helper(fobj, 0UL, comm);
+
+  comm.barrier();
+}
+
+TEST_P(SplitFASTQParseTest, parse_mpiio_mpi_helper)
+{
+    ::mxx::comm comm;
+
+  ::bliss::io::parallel::mpiio_file<bliss::io::FASTQParser> fobj(this->fileName, 0UL, comm);
+
+    this->parse_mpi_file_helper(fobj, 0UL, comm);
+
+    comm.barrier();
+}
+#endif
 
 // using 21-mer, first entry is number of records, second entry is file size.
 INSTANTIATE_TEST_CASE_P(Bliss, SplitFASTQParseTest, ::testing::Values(

@@ -40,7 +40,20 @@ namespace bliss {
           return filename.substr(pos + 1);  // from next char to end.
       }
 
+      struct NotEOL {
+        template <typename CharType>
+        bool operator()(CharType const & x) {
+        return (x != '\n') && (x != '\r' );
+        }
+
+        template <typename CharType, typename MDType>
+        bool operator()(std::pair<CharType, MDType> const & x) {
+          return (x.first != '\n') && (x.first != '\r');
+        }
+      };
+
     }
+
   }
 }
 
