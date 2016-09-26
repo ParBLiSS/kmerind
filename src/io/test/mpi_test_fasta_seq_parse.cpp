@@ -96,7 +96,7 @@ protected:
 					  fdata.in_mem_end(), offset);
 			  SeqIterType seqs_end(fdata.in_mem_end());
 
-		      bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+		      bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
 		      std::vector<KmerType> result;
 
 		      bool localcomp = true, comp = true;
@@ -219,7 +219,7 @@ protected:
 				  fdata.in_mem_end(), offset);
 		  SeqIterType seqs_end(fdata.in_mem_end());
 
-	      bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+	      bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
 	      std::vector<KmerType> result;
 
 	      bool localcomp = true, comp = true;
@@ -459,7 +459,7 @@ protected:
         SeqIterType seqs_start(l1parser, fdata.begin(), fdata.in_mem_end(), offset);
         SeqIterType seqs_end(fdata.in_mem_end());
 
-          bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+          bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
           std::vector<KmerType> result;
 
           bool localcomp = true, comp = true;
@@ -586,7 +586,7 @@ protected:
       SeqIterType seqs_start(l1parser, fdata.begin(), fdata.in_mem_end(), offset);
       SeqIterType seqs_end(fdata.in_mem_end());
 
-        bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+        bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
         std::vector<KmerType> result;
 
         bool localcomp = true, comp = true;
@@ -825,7 +825,7 @@ protected:
         SeqIterType seqs_start(l1parser, fdata.begin(), fdata.in_mem_end(), offset);
         SeqIterType seqs_end(fdata.in_mem_end());
 
-          bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+          bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
           std::vector<KmerType> result;
 
           std::vector<unsigned char> gold;
@@ -924,7 +924,7 @@ protected:
       SeqIterType seqs_start(l1parser, fdata.begin(), fdata.in_mem_end(), offset);
       SeqIterType seqs_end(fdata.in_mem_end());
 
-        bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+        bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
         std::vector<KmerType> result;
 
         std::vector<unsigned char> gold;
