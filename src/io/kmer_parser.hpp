@@ -87,9 +87,9 @@ struct KmerParser {
   using value_type = KmerType;
   using kmer_type = KmerType;
 
-  ::bliss::partition::range valid_range;
+  ::bliss::partition::range<size_t> valid_range;
 
-  KmerParser(::bliss::partition::range const & _valid_range) : valid_range(_valid_range) {};
+  KmerParser(::bliss::partition::range<size_t> const & _valid_range) : valid_range(_valid_range) {};
 
   /**
    * @brief generate kmers from 1 sequence.  result inserted into output_iter, which may be preallocated.
@@ -131,11 +131,30 @@ struct KmerParser {
 
 //    printf("First: pos %lu kmer %s\n", read.id.id, bliss::utils::KmerUtils::toASCIIString(*start).c_str());
 
+    ::bliss::partition::range<size_t> seq_range(read.seq_global_offset(), read.seq_global_offset() + read.seq_size());
+    if (seq_range.contains(valid_range.end)) {
+      // seq_range contains overlap.
+
+      // not checking by end iterator at valid_range.end, since the NonEOLIter is a filter iterator that may skip over that pos.
+      int64_t valid_dist = valid_range.end - seq_range.start;
+
+      for (auto it = start; it != end; ++it, ++output_iter) {
+        // check tail of window -> transform iterator, get base -> non EOL iterator, get base -> seq raw char iter.
+        if (std::distance(read.seq_begin, it.getTrailingIterator().getBaseIterator().getBaseIterator()) >= valid_dist) {
+          break;
+        }
+
+        *output_iter = *it;
+      }
+      return output_iter;
+
+    } else {
     if (::std::is_same<Predicate, ::fsc::TruePredicate>::value)
       return ::std::copy(start, end, output_iter);
     else
       return ::std::copy_if(start, end, output_iter, pred);
 
+  }
   }
 };
 
@@ -151,9 +170,9 @@ struct KmerPositionTupleParser {
   using kmer_type = typename ::std::tuple_element<0, value_type>::type;
 
 
-  ::bliss::partition::range valid_range;
+  ::bliss::partition::range<size_t> valid_range;
 
-  KmerPositionTupleParser(::bliss::partition::range const & _valid_range) : valid_range(_valid_range) {};
+  KmerPositionTupleParser(::bliss::partition::range<size_t> const & _valid_range) : valid_range(_valid_range) {};
 
 
   /**
@@ -237,10 +256,31 @@ struct KmerPositionTupleParser {
 //      *output_iter = tp;
 //
 //    }
+
+    ::bliss::partition::range<size_t> seq_range(read.seq_global_offset(), read.seq_global_offset() + read.seq_size());
+    if (seq_range.contains(valid_range.end)) {
+      // seq_range contains overlap.
+
+      // not checking by end iterator at valid_range.end, since the NonEOLIter is a filter iterator that may skip over that pos.
+
+      for (auto it = index_start; it != index_end; ++it, ++output_iter) {
+        // check tail of window -> transform iterator, get base -> non EOL iterator, get base -> seq raw char iter.
+        if ((*it).second.get_pos() >= valid_range.end) {
+          break;
+        }
+
+        *output_iter = *it;
+      }
+
+      return output_iter;
+
+    } else {
+
     if (::std::is_same<Predicate, ::fsc::TruePredicate>::value)
       return ::std::copy(index_start, index_end, output_iter);
     else
       return ::std::copy_if(index_start, index_end, output_iter, pred);
+  }
   }
 
 };
@@ -256,9 +296,9 @@ struct KmerPositionQualityTupleParser {
   using value_type = TupleType;
   using kmer_type = typename ::std::tuple_element<0, value_type>::type;
 
-  ::bliss::partition::range valid_range;
+  ::bliss::partition::range<size_t> valid_range;
 
-  KmerPositionQualityTupleParser(::bliss::partition::range const & _valid_range) : valid_range(_valid_range) {};
+  KmerPositionQualityTupleParser(::bliss::partition::range<size_t> const & _valid_range) : valid_range(_valid_range) {};
 
 
   /**
@@ -369,10 +409,31 @@ struct KmerPositionQualityTupleParser {
 
     //    printf("First: pos %lu kmer %s\n", read.id.id, bliss::utils::KmerUtils::toASCIIString(*start).c_str());
 
+    ::bliss::partition::range<size_t> seq_range(read.seq_global_offset(), read.seq_global_offset() + read.seq_size());
+    if (seq_range.contains(valid_range.end)) {
+      // seq_range contains overlap.
+
+      // not checking by end iterator at valid_range.end, since the NonEOLIter is a filter iterator that may skip over that pos.
+
+      for (auto it = index_start; it != index_end; ++it, ++output_iter) {
+        // check tail of window -> transform iterator, get base -> non EOL iterator, get base -> seq raw char iter.
+        if ((*it).second.first.get_pos() >= valid_range.end) {
+          break;
+        }
+
+        *output_iter = *it;
+      }
+
+      return output_iter;
+
+    } else {
+
+
     if (::std::is_same<Predicate, ::fsc::TruePredicate>::value)
       return ::std::copy(index_start, index_end, output_iter);
     else
       return ::std::copy_if(index_start, index_end, output_iter, pred);
+  }
   }
 };
 
@@ -388,9 +449,9 @@ struct KmerCountTupleParser {
   using value_type = TupleType;
   using kmer_type = typename ::std::tuple_element<0, value_type>::type;
 
-  ::bliss::partition::range valid_range;
+  ::bliss::partition::range<size_t> valid_range;
 
-  KmerCountTupleParser(::bliss::partition::range const & _valid_range) : valid_range(_valid_range) {};
+  KmerCountTupleParser(::bliss::partition::range<size_t> const & _valid_range) : valid_range(_valid_range) {};
 
   /**
    * @brief generate kmer-count pairs from 1 sequence.  result inserted into output_iter, which may be preallocated.
@@ -446,10 +507,31 @@ struct KmerCountTupleParser {
 
     //    printf("First: pos %lu kmer %s\n", read.id.id, bliss::utils::KmerUtils::toASCIIString(*start).c_str());
 
+    ::bliss::partition::range<size_t> seq_range(read.seq_global_offset(), read.seq_global_offset() + read.seq_size());
+    if (seq_range.contains(valid_range.end)) {
+      // seq_range contains overlap.
+
+      // not checking by end iterator at valid_range.end, since the NonEOLIter is a filter iterator that may skip over that pos.
+      int64_t valid_dist = valid_range.end - seq_range.start;
+
+      for (auto it = istart; it != iend; ++it, ++output_iter) {
+        // check tail of window -> transform iterator, get base -> non EOL iterator, get base -> seq raw char iter.
+        if (std::distance(read.seq_begin,
+                          it.get_first_iterator().getTrailingIterator().getBaseIterator().getBaseIterator()) >= valid_dist) {
+          break;
+        }
+
+        *output_iter = *it;
+      }
+
+      return output_iter;
+
+    } else {
     if (::std::is_same<Predicate, ::fsc::TruePredicate>::value)
       return ::std::copy(istart, iend, output_iter);
     else
       return ::std::copy_if(istart, iend, output_iter, pred);
+  }
   }
 
 };

@@ -100,6 +100,10 @@ namespace bliss
 
       using Alphabet = typename KmerType::KmerAlphabet;
 
+      ::bliss::partition::range<size_t> valid_range;
+
+      de_bruijn_parser(::bliss::partition::range<size_t> const & _valid_range) : valid_range(_valid_range) {};
+
 		 template <typename SeqType, typename OutputIt>
 		 OutputIt operator()(SeqType & read, OutputIt output_iter) {
 		   static_assert(std::is_same<value_type, typename ::std::iterator_traits<OutputIt>::value_type>::value,
