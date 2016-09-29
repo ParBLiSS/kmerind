@@ -97,6 +97,7 @@ namespace bliss
                                                   uint16_t, uint8_t>::type;
       using value_type = std::pair<KmerType, edge_type>;
       using kmer_type = KmerType;
+      static constexpr size_t window_size = kmer_type::size;
 
       using Alphabet = typename KmerType::KmerAlphabet;
 

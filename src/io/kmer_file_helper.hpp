@@ -153,10 +153,10 @@ struct KmerFileHelper {
         if ((start_offset + seq.seq_size()) >= partition.valid_range_bytes.end) {
           // scan for k-1 characters, from the valid range end.
           auto endd = seq.seq_begin + (partition.valid_range_bytes.end - start_offset);
-          size_t steps = KmerParser::kmer_type::size - 1;
+          size_t steps = KmerParser::window_size - 1;
           size_t count = 0;
 
-          // iterate and find the k-1 chars in overlap, starting from valid end.  should be less than current seq end.
+          // iterate and find the windows size - 1 chars in overlap, starting from valid end.  should be less than current seq end.
           while ((endd != seq.seq_end) && (count < steps)) {
             if (not_eol(*endd)) {
               ++count;
@@ -190,7 +190,7 @@ struct KmerFileHelper {
                          std::vector<typename KmerParser::value_type>& result) {
       std::pair<size_t, size_t> read = {0, 0};
 
-     constexpr int kmer_size = KmerParser::kmer_type::size;
+     constexpr int kmer_size = KmerParser::window_size;
 
       BL_BENCH_INIT(file);
       {
@@ -253,7 +253,7 @@ struct KmerFileHelper {
 
       std::pair<size_t, size_t> read = {0, 0};
 
-      constexpr int kmer_size = KmerParser::kmer_type::size;
+      constexpr int kmer_size = KmerParser::window_size;
 
       BL_BENCH_INIT(file);
       {  // ensure that fileloader is closed at the end.
@@ -339,7 +339,7 @@ struct KmerFileHelper {
                          std::vector<typename KmerParser::value_type>& result, const mxx::comm & _comm) {
       ::std::pair<size_t, size_t> read = {0,0};
 
-     constexpr int kmer_size = KmerParser::kmer_type::size;
+     constexpr int kmer_size = KmerParser::window_size;
 
       BL_BENCH_INIT(file);
       {
@@ -403,7 +403,7 @@ struct KmerFileHelper {
 
       ::std::pair<size_t, size_t> read = {0, 0};
 
-      constexpr int kmer_size = KmerParser::kmer_type::size;
+      constexpr int kmer_size = KmerParser::window_size;
 
       BL_BENCH_INIT(file);
       {  // ensure that fileloader is closed at the end.
