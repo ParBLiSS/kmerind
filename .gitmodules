@@ -9,7 +9,7 @@
 	url = https://github.com/sakra/cotire.git
 [submodule "ext/mxx"]
 	path = ext/mxx
-	url = https://bitbucket.org/tcpan/mxx.git 
+	url = https://cjain7@bitbucket.org/cjain7/mxx_metag_copy.git 
 [submodule "ext/sparsehash"]
 	path = ext/sparsehash
 	url = https://github.com/tcpan/sparsehash.git
