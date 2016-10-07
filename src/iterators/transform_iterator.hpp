@@ -607,7 +607,7 @@ public:
    * @param base_iter   The base iterator that is wrapped via this iterator.
    * @param f           The transforming functor.
    */
-  explicit transform_iterator(const Iterator& base_iter, const Transformer & f = Transform())
+  explicit transform_iterator(const Iterator& base_iter, const Transformer & f = Transformer())
       : base_class_type(base_iter, f)
   {
   }
@@ -627,30 +627,23 @@ public:
   transform_iterator& operator=(transform_iterator const & other) {
 	  this->_base = other._base;
 	  this->_f = other._f;
+
+	  return *this;
   }
 
   transform_iterator(transform_iterator && other) : base_class_type(std::move(other._base), std::move(other._f)) {};
 
-  transform_iterator& operator=(transform_iterator const & other) {
+  transform_iterator& operator=(transform_iterator && other) {
 	  this->_base = std::move(other._base);
 	  this->_f = std::move(other._f);
+
+	  return *this;
   }
 
 
 
   /// default destructor
   virtual ~transform_iterator() {}
-
-  /// copy assignment operator
-  transform_iterator& operator=(const transform_iterator& other)
-  {
-    if (this != &other)
-    {
-      this->_base = other._base;
-      this->_f = other._f;
-    }
-    return *this;
-  }
 
 
 };

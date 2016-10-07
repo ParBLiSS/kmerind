@@ -144,7 +144,7 @@ namespace bliss
          * @brief dereference function, *iter
          * @return  current value
          */
-        const T operator*() const {
+        const T & operator*() const {
           return val;
         }
 

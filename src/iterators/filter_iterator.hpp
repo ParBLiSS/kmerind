@@ -96,12 +96,12 @@ namespace bliss
       public:
 
         /// DEFINE iterator category. cannot be random access - mapped to bidirectional.
-//        typedef typename std::conditional<
-//            std::is_same<
-//                typename std::iterator_traits<Iterator>::iterator_category,
-//                std::random_access_iterator_tag>::value,
-//            std::bidirectional_iterator_tag,
-//            typename std::iterator_traits<Iterator>::iterator_category>::type iterator_category;
+        using iter_cat = typename std::conditional<
+            std::is_same<
+                typename std::iterator_traits<Iterator>::iterator_category,
+                std::random_access_iterator_tag>::value,
+            std::bidirectional_iterator_tag,
+            typename std::iterator_traits<Iterator>::iterator_category>::type;
 //
 //        /// DEFINE value type of iterator's elements.
 //        using value_type = typename std::remove_reference<typename base_traits::reference>::type;
@@ -221,20 +221,20 @@ namespace bliss
         }
 
         /// dereference operator.  returned entry passes the predicate test.  guaranteed to be at a valid position
-        inline value_type& operator*() {
-          return *_curr;
-        }
-
-        inline value_type* operator->() {
-          return _curr.operator->();
-        }
+//        inline typename base_traits::value_type& operator*() {
+//          return *_curr;
+//        }
+//
+//        inline typename base_traits::value_type* operator->() {
+//          return _curr.operator->();
+//        }
 
         /// dereference operator.  returned entry passes the predicate test.  guaranteed to be at a valid position
-        inline value_type& operator*() const {
+        inline typename base_traits::value_type const & operator*() const {
           return *_curr;
         }
 
-        inline const value_type * operator->() const {
+        inline const typename base_traits::value_type * operator->() const {
           return _curr.operator->();
         }
 
@@ -254,7 +254,7 @@ namespace bliss
         // NO support for output iterator at this point, since modifying a value can prevent multipass requirement of forward iterator.
 
         // forward iterator required default constructor
-        template<typename IterCat = iterator_category,
+        template<typename IterCat = iter_cat,
             typename = typename std::enable_if<
                 std::is_same<IterCat, std::forward_iterator_tag>::value ||
                 std::is_same<IterCat, std::bidirectional_iterator_tag>::value ||
@@ -269,7 +269,7 @@ namespace bliss
         /**
          * semantics of -- does not have a bound on the start side.
          */
-        template <typename IterCat = iterator_category,
+        template <typename IterCat = iter_cat,
             typename = typename std::enable_if<
               std::is_same<IterCat, std::bidirectional_iterator_tag>::value ||
               std::is_same<IterCat, std::random_access_iterator_tag>::value, int>::type >
@@ -292,7 +292,7 @@ namespace bliss
         /**
          * make a copy, then move it back 1.
          */
-        template <typename IterCat = iterator_category,
+        template <typename IterCat = iter_cat,
             typename = typename std::enable_if<
               std::is_same<IterCat, std::bidirectional_iterator_tag>::value ||
               std::is_same<IterCat, std::random_access_iterator_tag>::value, int>::type >

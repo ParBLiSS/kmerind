@@ -340,6 +340,24 @@ namespace bliss
           return &seq;
         }
 
+        /**
+         * @brief dereference operator
+         * @return    a const reference to the cached sequence object
+         */
+        typename Parser<Iterator>::SequenceType const & operator*() const
+        {
+          return seq;
+        }
+
+        /**
+         * @brief pointer dereference operator
+         * @return    a const reference to the cached sequence object
+         */
+        const typename Parser<Iterator>::SequenceType *operator->() const {
+          return &seq;
+        }
+
+
 
     };
 
