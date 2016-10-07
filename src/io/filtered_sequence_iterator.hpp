@@ -283,7 +283,7 @@ namespace bliss
          *          this instance therefore does not traverse and only serves as marker for comparing to the traversing SplitSequencesIterator.
          * @param end     end of the data to be parsed.
          */
-        SplitSequencesIterator(Iterator end,
+        explicit SplitSequencesIterator(Iterator end,
                                const Predicate & _pred = Predicate())
             : pred(_pred), _curr(end), _end(end) {}
 
@@ -291,7 +291,7 @@ namespace bliss
          * @brief default copy constructor
          * @param Other   The SplitSequencesIterator to copy from
          */
-        explicit SplitSequencesIterator(const SplitSequencesIterator& Other)
+        SplitSequencesIterator(const SplitSequencesIterator& Other)
             : pred(Other.pred), _curr(Other._curr), _end(Other._end),
               seq(Other.seq), next(Other.next) {}
 
@@ -314,7 +314,7 @@ namespace bliss
          * @brief default copy constructor
          * @param Other   The SplitSequencesIterator to copy from
          */
-        explicit SplitSequencesIterator(SplitSequencesIterator && Other)
+        SplitSequencesIterator(SplitSequencesIterator && Other)
             : pred(::std::move(Other.pred)),
               _curr(::std::move(Other._curr)), _end(::std::move(Other._end)),
               seq(::std::move(Other.seq)), next(::std::move(Other.next))  {}

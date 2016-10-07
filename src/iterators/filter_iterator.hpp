@@ -96,18 +96,18 @@ namespace bliss
       public:
 
         /// DEFINE iterator category. cannot be random access - mapped to bidirectional.
-        typedef typename std::conditional<
-            std::is_same<
-                typename std::iterator_traits<Iterator>::iterator_category,
-                std::random_access_iterator_tag>::value,
-            std::bidirectional_iterator_tag,
-            typename std::iterator_traits<Iterator>::iterator_category>::type iterator_category;
-
-        /// DEFINE value type of iterator's elements.
-        using value_type = typename std::remove_reference<typename base_traits::reference>::type;
-
-        /// DEFINE base iterator's value type, should be same as filter_iterator's
-        typedef value_type base_value_type;
+//        typedef typename std::conditional<
+//            std::is_same<
+//                typename std::iterator_traits<Iterator>::iterator_category,
+//                std::random_access_iterator_tag>::value,
+//            std::bidirectional_iterator_tag,
+//            typename std::iterator_traits<Iterator>::iterator_category>::type iterator_category;
+//
+//        /// DEFINE value type of iterator's elements.
+//        using value_type = typename std::remove_reference<typename base_traits::reference>::type;
+//
+//        /// DEFINE base iterator's value type, should be same as filter_iterator's
+//        typedef value_type base_value_type;
 
         // accessors
         Iterator& getBase()
@@ -229,8 +229,18 @@ namespace bliss
           return _curr.operator->();
         }
 
+        /// dereference operator.  returned entry passes the predicate test.  guaranteed to be at a valid position
+        inline value_type& operator*() const {
+          return *_curr;
+        }
+
+        inline const value_type * operator->() const {
+          return _curr.operator->();
+        }
+
+
         /// referece operator.  returned entry passes the predicate test.  guaranteed to be at a valid position
-        inline Iterator& operator()()
+        inline Iterator& operator()() const
         {
           return _curr;
         }

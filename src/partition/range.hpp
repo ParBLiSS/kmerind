@@ -211,17 +211,21 @@ namespace bliss
          *            then intersection is defined as R = [max(R1.s, R2.s), min(R1.e, R2.e))
          *            choice of end also chooses the overlap.
          * @note      result may be an empty range, which will contain start = end = min(R1.e, R2.e)
-         *
+         *			  this operation is not symmetric anymore.  if not intersecting,
+         *			  	will set range to one of the ends of *this.
          * @param other   the range to form the intersection with
          */
         void intersect(const range<T>& other)
         {
           // intersect when there are no intersections between even overlap region
-          start =       (start >= other.start            ) ? start : other.start;
-          end =         (end <= other.end                ) ? end : other.end;
+          auto lstart =       (start >= other.start            ) ? start : other.start;
+          auto lend =         (end <= other.end                ) ? end : other.end;
 
-          // in case the ranges do not intersect, set the end to start,
-          start = (start <= end) ? start : end;
+          // check new start and end to see if valid (lstart <= lend).  if so, use them.
+          // else set both start and end to end closer to other range.
+          auto closer = (lend == end) ? end : start;
+          start = (lstart <= lend) ? lstart : closer;  // second half = invalid intersection, then choose start to be closer to the other range.
+          end = (lstart <= lend) ? lend : closer;
         }
 
         /**
@@ -230,7 +234,8 @@ namespace bliss
          *            then intersection is defined as R = [max(R1.s, R2.s), min(R1.e, R2.e))
          *            choice of end also chooses the overlap.
          * @note      result may be an empty range, which will contain start = end = min(R1.e, R2.e)
-         *
+         *			  operation is not symmetric.  if not intersecting, both ends set to
+         *			  	one of the ends of first range.
          * @param first   the first range to form the intersection with
          * @param second   the second range to form the intersection with
          * @return        updated current range containing the intersection of this and "other".

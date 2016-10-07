@@ -34,6 +34,7 @@
 #include <cstdint> // for uint64_t, etc.
 #include <string>
 #include <limits>
+#include <chrono>
 
 #include "common/sequence.hpp"
 #include "io/sequence_iterator.hpp"
@@ -46,6 +47,8 @@
 
 #include "io/fastq_loader.hpp"
 #include "io/file.hpp"
+
+#include "utils/benchmark_utils.hpp"
 
 
 
@@ -106,16 +109,24 @@ protected:
 		      ::fsc::back_emplace_iterator<std::vector<KmerType> > emplace_iter(result);
 
 
+		      std::chrono::steady_clock::time_point t1, t2;
+		      double duration = 0.0;
+		      std::chrono::duration<double> time_span;
+
 			  //== loop over the reads
 			  for (; seqs_start != seqs_end; ++seqs_start)
 			  {
 				if (fdata.valid_range_bytes.start <= (*seqs_start).id.get_pos()) {
 					++(this->seqCount);
 
+			          t1 = std::chrono::steady_clock::now();
 			          result.clear();
 
 			          // generate kmers and save them
 			          kmer_parser(*seqs_start, emplace_iter);
+			          t2 = std::chrono::steady_clock::now();
+			          time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1));
+			          duration += time_span.count();
 
 			          gold.clear();
 			          gold.resize(seqs_start->seq_size(), 0);
@@ -150,6 +161,7 @@ protected:
 		  //            std::cout << std::distance((*seqs_start).seq_begin, (*seqs_start).seq_end) << std::endl;
 				//      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
 			  }
+			  std::cout << "parse time = " << duration << " s" << std::endl;
 
 	}
 
@@ -249,11 +261,17 @@ protected:
 
 	      ::fsc::back_emplace_iterator<std::vector<KmerType> > emplace_iter(result);
 
+	      std::chrono::steady_clock::time_point t1, t2;
+	      double duration = 0.0;
+	      std::chrono::duration<double> time_span;
+
 		  //== loop over the reads
 		  for (; seqs_start != seqs_end; ++seqs_start)
 		  {
 			if (fdata.valid_range_bytes.start <= (*seqs_start).id.get_pos()) {
 				++(this->seqCount);
+
+		          t1 = std::chrono::steady_clock::now();
 
 		          result.clear();
 
@@ -261,6 +279,9 @@ protected:
 
 		          // generate kmers and save them
 		          kmer_parser(*seqs_start, emplace_iter);
+		          t2 = std::chrono::steady_clock::now();
+		          time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1));
+		          duration += time_span.count();
 
 		          gold.clear();
 		          gold.resize(seqs_start->seq_size(), 0);
@@ -298,6 +319,8 @@ protected:
 	  //            std::cout << std::distance((*seqs_start).seq_begin, (*seqs_start).seq_end) << std::endl;
 			//      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
 		  }
+
+		  std::cout << "rank " << comm.rank() << "parse time = " << duration << " s" << std::endl;
 	//	  int rank;
 	//	  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	//	  std::cout << "rank " << rank << " elem count " << this->seqCount << std::endl;

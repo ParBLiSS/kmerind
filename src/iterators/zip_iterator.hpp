@@ -184,6 +184,12 @@ namespace bliss
           return val;
         }
 
+        inline T& operator*() const {
+          val.first = *iter1;
+          val.second = *iter2;
+          return val;
+        }
+
         /**
          * @brief dereference function, iter->
          * @return  pointer to current value, so can access internal members

@@ -164,7 +164,7 @@ public:
    ******************/
 
   /// Default contructor
-  sliding_window_iterator() = default;
+  sliding_window_iterator() {};
 
   /**
    * @brief Constructor, taking the base iterator and the many2one
