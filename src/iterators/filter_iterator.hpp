@@ -110,7 +110,12 @@ namespace bliss
 //        typedef value_type base_value_type;
 
         // accessors
-        Iterator& getBase()
+//        Iterator& getBaseIterator()
+//        {
+//          return _curr;
+//        }
+
+        Iterator const & getBaseIterator() const
         {
           return _curr;
         }

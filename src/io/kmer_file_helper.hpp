@@ -116,7 +116,7 @@ struct KmerFileHelper {
     //using SeqIterType = ::bliss::io::SequencesIterator<CharIterType, SeqParser >;
 
     //== sequence parser type
-    KmerParser kmer_parser;
+    KmerParser kmer_parser(partition.valid_range_bytes);
     ::bliss::utils::file::NotEOL not_eol;
 
     //== process the chunk of data
@@ -153,10 +153,10 @@ struct KmerFileHelper {
         if ((start_offset + seq.seq_size()) >= partition.valid_range_bytes.end) {
           // scan for k-1 characters, from the valid range end.
           auto endd = seq.seq_begin + (partition.valid_range_bytes.end - start_offset);
-          size_t steps = KmerParser::kmer_type::size - 1;
+          size_t steps = KmerParser::window_size - 1;
           size_t count = 0;
 
-          // iterate and find the k-1 chars in overlap, starting from valid end.  should be less than current seq end.
+          // iterate and find the windows size - 1 chars in overlap, starting from valid end.  should be less than current seq end.
           while ((endd != seq.seq_end) && (count < steps)) {
             if (not_eol(*endd)) {
               ++count;
@@ -190,7 +190,7 @@ struct KmerFileHelper {
                          std::vector<typename KmerParser::value_type>& result) {
       std::pair<size_t, size_t> read = {0, 0};
 
-     constexpr int kmer_size = KmerParser::kmer_type::size;
+     constexpr int kmer_size = KmerParser::window_size;
 
       BL_BENCH_INIT(file);
       {
@@ -211,7 +211,7 @@ struct KmerFileHelper {
         std::tie(record_size, seq_len) = seq_parser.get_record_size(partition.cbegin(), partition.parent_range_bytes, partition.getRange(), partition.getRange(), 10);
         size_t est_size = (record_size == 0) ? 0 : (partition.getRange().size() + record_size - 1) / record_size;  // number of records
         est_size *= (seq_len < kmer_size) ? 0 : (seq_len - kmer_size + 1) ;  // number of kmers in a record
-        result.reserve(result.size() + est_size);
+        result.reserve(result.size() + est_size + (est_size >> 3));
         BL_BENCH_END(file, "reserve", est_size);
 
         BL_BENCH_START(file);
@@ -233,7 +233,7 @@ struct KmerFileHelper {
         // file extension determines SeqParserType
         std::string extension = ::bliss::utils::file::get_file_extension(filename);
         std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-        if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+        if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0) && (extension.compare("fa") != 0)) {
           throw std::invalid_argument("input filename extension is not supported.");
         }
 
@@ -253,7 +253,7 @@ struct KmerFileHelper {
 
       std::pair<size_t, size_t> read = {0, 0};
 
-      constexpr int kmer_size = KmerParser::kmer_type::size;
+      constexpr int kmer_size = KmerParser::window_size;
 
       BL_BENCH_INIT(file);
       {  // ensure that fileloader is closed at the end.
@@ -339,7 +339,7 @@ struct KmerFileHelper {
                          std::vector<typename KmerParser::value_type>& result, const mxx::comm & _comm) {
       ::std::pair<size_t, size_t> read = {0,0};
 
-     constexpr int kmer_size = KmerParser::kmer_type::size;
+     constexpr int kmer_size = KmerParser::window_size;
 
       BL_BENCH_INIT(file);
       {
@@ -403,7 +403,7 @@ struct KmerFileHelper {
 
       ::std::pair<size_t, size_t> read = {0, 0};
 
-      constexpr int kmer_size = KmerParser::kmer_type::size;
+      constexpr int kmer_size = KmerParser::window_size;
 
       BL_BENCH_INIT(file);
       {  // ensure that fileloader is closed at the end.

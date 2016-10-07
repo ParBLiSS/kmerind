@@ -99,7 +99,7 @@ protected:
 					  fdata.in_mem_end(), offset);
 			  SeqIterType seqs_end(fdata.in_mem_end());
 
-		      bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+		      bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
 		      std::vector<KmerType> result;
 
 		      bool localcomp = true, comp = true;
@@ -252,7 +252,7 @@ protected:
 //          std::cout << "rank " << comm.rank() << " offset = " << offset << " sequence " << *seqs_start << std::endl;
 
 
-	      bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+	      bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
 	      std::vector<KmerType> result;
 
 	      bool localcomp = true, comp = true;
@@ -502,7 +502,7 @@ protected:
         SeqIterType seqs_start(l1parser, fdata.begin(), fdata.in_mem_end(), offset);
         SeqIterType seqs_end(fdata.in_mem_end());
 
-          bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+          bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
           std::vector<KmerType> result;
 
           bool localcomp = true, comp = true;
@@ -651,7 +651,7 @@ protected:
 //          std::cout << "rank " << comm.rank() << " offset = " << offset << " sequence " << *seqs_start << std::endl;
 
 
-        bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+        bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
         std::vector<KmerType> result;
 
         bool localcomp = true, comp = true;
@@ -888,7 +888,7 @@ protected:
         SeqIterType seqs_start(l1parser, fdata.begin(), fdata.in_mem_end(), offset);
         SeqIterType seqs_end(fdata.in_mem_end());
 
-          bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+          bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
           std::vector<KmerType> result;
 
           bool localcomp = true, comp = true;
@@ -1038,7 +1038,7 @@ protected:
 //          std::cout << "rank " << comm.rank() << " offset = " << offset << " sequence " << *seqs_start << std::endl;
 
 
-        bliss::index::kmer::KmerParser<KmerType > kmer_parser;
+        bliss::index::kmer::KmerParser<KmerType > kmer_parser(fdata.valid_range_bytes);
         std::vector<KmerType> result;
 
         bool localcomp = true, comp = true;

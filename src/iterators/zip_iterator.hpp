@@ -199,6 +199,17 @@ namespace bliss
           return &val;
         }
 
+        /// readonly accessor for first iterator
+        FirstIter const & get_first_iterator() const {
+          return iter1;
+        }
+
+        /// readonly accessor for second iterator
+        SecondIter const & get_second_iterator() const {
+          return iter2;
+        }
+
+
     };
 
 
