@@ -73,21 +73,21 @@ namespace bliss
         /**
          * @param _first      zip iterator reference.  note that we CANNOT make a copy nor move the input.
          */
-        UnzipIterator(ZipIter& _iter) : iter(_iter) {};
+        explicit UnzipIterator(ZipIter& _iter) : iter(_iter) {};
 
 
         /**
          * default copy constructor
          * @param other  instance of UnzipIterator to copy from
          */
-        UnzipIterator(const UnzipIterator<ZipIter, select, advance> & other) : iter(other.iter) {};
+        UnzipIterator(UnzipIterator const & other) : iter(other.iter) {};
 
         /**
          * default copy assignment operator
          * @param other  instance of UnzipIterator to copy from
          * @return reference to self
          */
-        UnzipIterator<ZipIter, select, advance>& operator=(const UnzipIterator<ZipIter, select, advance> & other) {
+        UnzipIterator& operator=(const UnzipIterator & other) {
           iter = other.iter;
           return *this;
         }
@@ -96,14 +96,14 @@ namespace bliss
          * default move constructor
          * @param other  instance of UnzipIterator to move from
          */
-        UnzipIterator(UnzipIterator<ZipIter, select, advance> && other) : iter(other.iter) {};
+        UnzipIterator(UnzipIterator && other) : iter(other.iter) {};
 
         /**
          * default move assignment operator.
          * @param other  instance of UnzipIterator to move from
          * @return reference to self
          */
-        UnzipIterator<ZipIter, select, advance>& operator=(UnzipIterator<ZipIter, select, advance> && other) {
+        UnzipIterator& operator=(UnzipIterator && other) {
           iter = other.iter;
           return *this;
         };
