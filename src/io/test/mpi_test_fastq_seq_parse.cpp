@@ -262,7 +262,7 @@ protected:
 	      ::fsc::back_emplace_iterator<std::vector<KmerType> > emplace_iter(result);
 
 	      std::chrono::steady_clock::time_point t1, t2;
-	      double duration = 0.0;
+	      double duration = 0.0, gold_duration = 0.0, compare_duration = 0.0;
 	      std::chrono::duration<double> time_span;
 
 		  //== loop over the reads
@@ -292,6 +292,11 @@ protected:
 	//	          			        	  }
 	//	          std::cout << std::endl;
 
+		          t1 = std::chrono::steady_clock::now();
+		          time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(t1 - t2));
+		          gold_duration += time_span.count();
+
+
 		          // compare the results.
 		          for (size_t i = 0; i < result.size(); ++i) {
 
@@ -311,6 +316,10 @@ protected:
 		          }  // end kmers for
 
 		          this->kmerCount += result.size();
+		          t2 = std::chrono::steady_clock::now();
+		          time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1));
+		          compare_duration += time_span.count();
+
 
 		          ASSERT_TRUE(comp);
 
@@ -320,7 +329,7 @@ protected:
 			//      std::cout << std::distance(l1.begin(), (*seqs_start).qual_begin) << ", " << std::distance(l1.begin(), (*seqs_start).qual_end) << std::endl;
 		  }
 
-		  std::cout << "rank " << comm.rank() << "parse time = " << duration << " s" << std::endl;
+		  std::cout << "rank " << comm.rank() << "parse time = " << duration << "s, gold parse time = " << gold_duration << "s, compare time = " << compare_duration << "s" << std::endl;
 	//	  int rank;
 	//	  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	//	  std::cout << "rank " << rank << " elem count " << this->seqCount << std::endl;
