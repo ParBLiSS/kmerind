@@ -73,52 +73,52 @@ namespace bliss
 
       };
     
-//      ///  ASCII alphabet.  note that TO_ASCII and FROM_ASCII do not do anything.  TO_COMPLEMENT more importantly does nothing.
-//      // dummy template parameter to take advantage of exemption for templated class - allowing definition of std::arrays to exist in header.  (declaration and initialization can be in header anyways)
-//      template <typename DUMMY = void>
-//      struct ASCII_T : BaseAlphabetChar
-//      {
-//        // This should make char and DNA useable interchangebly
-//        ASCII_T& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
-//        ASCII_T(const CharType& c) : BaseAlphabetChar(c) {}
-//        ASCII_T() : BaseAlphabetChar() {}
-//
-//        /// alphabet size
-//        static constexpr AlphabetSizeType SIZE = 256;
-//
-//        /// ascii to alphabet lookup table
-//        static constexpr std::array<uint8_t, 256> FROM_ASCII = bliss::utils::make_array<uint8_t, 256>();
-//
-//        /// alphabet to ascii lookup table
-//        static constexpr std::array<char, SIZE> TO_ASCII = bliss::utils::make_array<char, 256>();
-//
-//        /// complement lookup table
-//        static constexpr std::array<uint8_t, SIZE> TO_COMPLEMENT = bliss::utils::make_array<uint8_t, 256>();
-//
-//        /// linear mapping of ACGT
-//        static constexpr std::array<uint8_t, 6> FROM_INDEX =
-//        {{
-//          'A',  // = 0
-//          'C',  // = 1
-//          'G',  // = 2
-//          'T',  // = 3
-//          'N',  // = 4
-//          '.'   // = 5
-//        }};
-//
-//        static inline uint8_t to_complement(uint8_t const & x) {
-//        	return x;
-//        }
-//      };
-//
-//      template <typename DUMMY>
-//      constexpr std::array<uint8_t, 256> ASCII_T<DUMMY>::FROM_ASCII;
-//      template <typename DUMMY>
-//      constexpr std::array<char, ASCII_T<DUMMY>::SIZE> ASCII_T<DUMMY>::TO_ASCII;
-//      template <typename DUMMY>
-//      constexpr std::array<uint8_t, ASCII_T<DUMMY>::SIZE> ASCII_T<DUMMY>::TO_COMPLEMENT;
-//      template <typename DUMMY>
-//      constexpr std::array<uint8_t, 6> ASCII_T<DUMMY>::FROM_INDEX;
+      ///  ASCII alphabet.  note that TO_ASCII and FROM_ASCII do not do anything.  TO_COMPLEMENT more importantly does nothing.
+      // dummy template parameter to take advantage of exemption for templated class - allowing definition of std::arrays to exist in header.  (declaration and initialization can be in header anyways)
+      template <typename DUMMY = void>
+      struct ASCII_T : BaseAlphabetChar
+      {
+        // This should make char and DNA useable interchangebly
+        ASCII_T& operator=(const CharType& c){ BaseAlphabetChar::operator=(c); return *this;}
+        ASCII_T(const CharType& c) : BaseAlphabetChar(c) {}
+        ASCII_T() : BaseAlphabetChar() {}
+
+        /// alphabet size
+        static constexpr AlphabetSizeType SIZE = 256;
+
+        /// ascii to alphabet lookup table
+        static constexpr std::array<uint8_t, 256> FROM_ASCII = bliss::utils::make_array<uint8_t, 256>();
+
+        /// alphabet to ascii lookup table
+        static constexpr std::array<char, SIZE> TO_ASCII = bliss::utils::make_array<char, 256>();
+
+        /// complement lookup table
+        static constexpr std::array<uint8_t, SIZE> TO_COMPLEMENT = bliss::utils::make_array<uint8_t, 256>();
+
+        /// linear mapping of ACGT
+        static constexpr std::array<uint8_t, 6> FROM_INDEX =
+        {{
+          'A',  // = 0
+          'C',  // = 1
+          'G',  // = 2
+          'T',  // = 3
+          'N',  // = 4
+          '.'   // = 5
+        }};
+
+        static inline uint8_t to_complement(uint8_t const & x) {
+        	return x;
+        }
+      };
+
+      template <typename DUMMY>
+      constexpr std::array<uint8_t, 256> ASCII_T<DUMMY>::FROM_ASCII;
+      template <typename DUMMY>
+      constexpr std::array<char, ASCII_T<DUMMY>::SIZE> ASCII_T<DUMMY>::TO_ASCII;
+      template <typename DUMMY>
+      constexpr std::array<uint8_t, ASCII_T<DUMMY>::SIZE> ASCII_T<DUMMY>::TO_COMPLEMENT;
+      template <typename DUMMY>
+      constexpr std::array<uint8_t, 6> ASCII_T<DUMMY>::FROM_INDEX;
 
 
       ///  DNA alphabet: A T C G.  NOTE: DNA is configured so that negation is complement!
@@ -741,7 +741,7 @@ namespace bliss
 
     } // namespace alphabet
 
-//      using ASCII = ::bliss::common::alphabet::ASCII_T<>;
+      using ASCII = ::bliss::common::alphabet::ASCII_T<>;
       using DNA = ::bliss::common::alphabet::DNA_T<>;
       using DNA5 = ::bliss::common::alphabet::DNA6_T<>;
       using DNA6 = ::bliss::common::alphabet::DNA6_T<>;

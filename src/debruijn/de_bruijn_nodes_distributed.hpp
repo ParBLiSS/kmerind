@@ -44,6 +44,8 @@
 
 #include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
+#include "utils/filter_utils.hpp"
+#include "utils/transform_utils.hpp"
 
 
 namespace bliss{
@@ -225,7 +227,7 @@ namespace bliss{
 				* @param first
 				* @param last
 				*/
-			   template <typename InputEdgeType, typename Predicate = ::fsc::TruePredicate>
+			   template <typename InputEdgeType, typename Predicate = ::bliss::filter::TruePredicate>
 			   size_t insert(std::vector<::std::pair<Key, InputEdgeType> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
 				 // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 				 BL_BENCH_INIT(insert);
@@ -233,7 +235,7 @@ namespace bliss{
 //				 BL_BENCH_START(insert);
 //				 this->transform_input(input);
 //				 BL_BENCH_END(insert, "start", input.size());
-				 static_assert(std::is_same<typename Base::Base::Base::InputTransform, ::bliss::kmer::transform::identity<Key>>::value,
+				 static_assert(std::is_same<typename Base::Base::Base::InputTransform, ::bliss::transform::identity<Key>>::value,
 						 "de bruijn graph does not support transform of input Kmers. (e.g. canonicalizing).  Hash can use transformed values, though.");
 
 
@@ -250,7 +252,7 @@ namespace bliss{
 				 BL_BENCH_START(insert);
 				 // local compute part.  called by the communicator.
 				 size_t count = 0;
-				 if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
+				 if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
 				   count = this->local_insert(input.begin(), input.end(), pred);
 				 else
 				   count = this->local_insert(input.begin(), input.end());
