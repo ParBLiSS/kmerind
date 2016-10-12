@@ -63,6 +63,9 @@
 
 #include "utils/benchmark_utils.hpp"  // for timing.
 #include "utils/logging.h"
+#include "utils/transform_utils.hpp"
+#include "utils/filter_utils.hpp"
+
 
 #include "common/kmer_transform.hpp"
 
@@ -174,23 +177,22 @@ namespace dsc  // distributed std container
       struct QueryProcessor {  // assume unique, always.
 
           // assumes that container is sorted. and exact overlap region is provided.  do not filter output here since it's an output iterator.
-          template <class DB, class QueryIter, class OutputIter, class Operator, class Predicate = ::fsc::TruePredicate>
+          template <class DB, class QueryIter, class OutputIter, class Operator,
+		  	  class Predicate = ::bliss::filter::TruePredicate,
+		  	  class Transform = ::bliss::transform::identity<Key> >
           static size_t process(DB &db,
                                 QueryIter query_begin, QueryIter query_end,
                                 OutputIter &output, Operator & op,
-                                bool sorted_query = false, Predicate const &pred = Predicate()) {
+                                bool sorted_query = false,
+								Predicate const & pred = Predicate(),
+								Transform const & trans = Transform() ) {
 
               if (query_begin == query_end) return 0;
 
               size_t count = 0;  // before size.
-              if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
-                for (auto it = query_begin; it != query_end; ++it) {
-                  count += op(db, *it, output, pred);
-                }
-              else
-                for (auto it = query_begin; it != query_end; ++it) {
-                  count += op(db, *it, output);
-                }
+				for (auto it = query_begin; it != query_end; ++it) {
+				  count += op(db, *it, output, pred, trans);
+				}
               return count;
           }
 
@@ -228,28 +230,39 @@ namespace dsc  // distributed std container
       mutable bool local_changed;
 
       struct LocalCount {
-          // unfiltered.
-          template<class DB, typename Query, class OutputIter>
-          size_t operator()(DB &db, Query const &v, OutputIter &output) const {
-              *output = ::std::move(::std::make_pair(v, db.count(v)));
-              ++output;
-              return 1;
-          }
           // filtered element-wise.
-          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
+          template<class DB, typename Query, class OutputIter,
+		  	  	  	  	  typename Predicate = ::bliss::filter::TruePredicate,
+						  typename Transform = ::bliss::transform::identity<Key> >
           size_t operator()(DB &db, Query const &v, OutputIter &output,
-                            Predicate const& pred) const {
-              auto range = db.equal_range(v);
+        		  	  	  	  Predicate const& pred = Predicate(),
+							  Transform const & trans = Transform()
+                            ) const {
 
-              // add the output entry.
+          	static_assert(std::is_same<typename ::bliss::functional::function_traits<Predicate, typename DB::key_type>::return_type,
+          			bool>::value, "predicate is not returning boolean value");
+
+
               size_t count = 0;
-              if (pred(range.first, range.second))  // operator to decide if range matches.
-                count = ::std::count_if(range.first, range.second, pred);  // operator for each element in range.
+        	  if (std::is_same<Predicate, ::bliss::filter::TruePredicate>::value) {
+        		count = db.count(v);
+        	  } else {
+				  auto range = db.equal_range(v);
 
-              *output = ::std::move(::std::make_pair(v, count));
+				  // add the output entry.
+				  if (pred(range.first, range.second))  // operator to decide if range matches.
+					count = ::std::count_if(range.first, range.second, pred);  // operator for each element in range.
+        	  }
+        	  if (std::is_same<Transform, ::bliss::transform::identity<Key> >::value) {
+                  *output = ::std::move(::std::make_pair(v, count));
+        	  } else {
+                  *output = ::std::move(trans(::std::make_pair(v, count)));
+        	  }
+
               ++output;
               return 1;
           }
+
           // no filter by range AND elemenet for now.
       } count_element;
 
@@ -308,7 +321,7 @@ namespace dsc  // distributed std container
        * @param keys  content will be changed and reordered
        * @param last
        */
-      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
+      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
@@ -414,7 +427,7 @@ namespace dsc  // distributed std container
        * @param keys    content will be changed and reordered.
        * @param last
        */
-      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
+      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
@@ -600,8 +613,11 @@ namespace dsc  // distributed std container
        * @param keys  content will be changed and reordered
        * @param last
        */
-      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
+      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
+      ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element,
+    		  	  ::std::vector<Key>& keys,
+				   bool sorted_input = false,
+				   Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
           ::std::vector<::std::pair<Key, T> > results;
@@ -711,6 +727,172 @@ namespace dsc  // distributed std container
       }
 
 
+
+
+      /**
+       * @brief find elements with the specified keys in the distributed densehash_multimap.
+       * @param keys  content will be changed and reordered
+       * @param last
+       */
+      template <class LocalFind,
+    		  typename Predicate = ::bliss::filter::TruePredicate,
+			  typename Transform = ::bliss::transform::identity<Key>,
+			  typename std::enable_if<(sizeof(std::pair<Key, T>) >=
+      	  	  	  	  	  	  	  	  sizeof(typename ::bliss::functional::function_traits<Transform, std::pair<Key, T> >::return_type)),
+									  int>::type = 1>
+      ::std::vector<typename ::bliss::functional::function_traits<Transform, std::pair<Key, T> >::return_type >
+      find_transform(LocalFind & find_element,
+    		  	  ::std::vector<Key>& keys,
+				   bool sorted_input = false,
+				   Predicate const & pred = Predicate(),
+				   Transform const & trans = Transform()) const {
+          BL_BENCH_INIT(find);
+
+          ::std::vector<typename ::bliss::functional::function_traits<Transform, std::pair<Key, T> >::return_type > results;
+
+          if (this->empty() || ::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find", this->comm);
+            return results;
+          }
+
+//          if (this->empty()) {
+//            BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash_map:find", this->comm);
+//            return results;
+//          }
+
+          BL_BENCH_START(find);
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+          this->transform_input(keys);
+          BL_BENCH_END(find, "input_transform", keys.size());
+
+          if (this->comm.size() > 1) {
+
+            BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
+            // distribute (communication part)
+            std::vector<size_t> recv_counts(
+            		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+            				typename Base::StoreTransformedFunc(),
+            				typename Base::StoreTransformedEqual()));
+            BL_BENCH_END(find, "dist_query", keys.size());
+
+
+            // local find. memory utilization a potential problem.
+            // do for each src proc one at a time.
+
+            BL_BENCH_START(find);
+            results.reserve(keys.size());                   // TODO:  should estimate coverage.
+            BL_BENCH_END(find, "reserve", results.capacity());
+
+            BL_BENCH_START(find);
+            std::vector<size_t> send_counts(this->comm.size(), 0);
+            auto start = keys.begin();
+            auto end = start;
+            for (int i = 0; i < this->comm.size(); ++i) {
+              ::std::advance(end, recv_counts[i]);
+
+              // work on query from process i.
+              send_counts[i] = QueryProcessor::process(c, start, end, emplace_iter, find_element, sorted_input, pred, trans);
+              // if (this->comm.rank() == 0) BL_DEBUGF("R %d added %d results for %d queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+
+              // use the first one to estimate the rest.
+              //if (i == std::ceil(static_cast<double>(this->comm.size()) * 0.05)) {
+			  if ((results.size() + send_counts[i]) > results.capacity()) {  // guess that next batch is going to get us similar size, and that may cause results to resize too much.
+            	  // count so far
+            	  size_t new_est = std::ceil((static_cast<double>(results.size()) / static_cast<double>(std::distance(keys.begin(), end))) * static_cast<double>(keys.size()) * 1.1f);
+            	  if (this->comm.rank() == 0) printf("rank %d nkeys %lu nresuts %lu est result size %lu original estimate %lu\n", this->comm.rank(), keys.size(), results.size(), new_est, results.capacity());
+            	  results.reserve(new_est);
+              }
+
+              start = end;
+            }
+            BL_BENCH_END(find, "local_find", results.size());
+            if (this->comm.rank() == 0) printf("rank %d result size %lu capacity %lu\n", this->comm.rank(), results.size(), results.capacity());
+
+
+            BL_BENCH_COLLECTIVE_START(find, "a2a2", this->comm);
+            // send back using the constructed recv count
+            mxx::all2allv(results, send_counts, this->comm).swap(results);
+            BL_BENCH_END(find, "a2a2", results.size());
+
+          } else {
+
+            BL_BENCH_START(find);
+            // keep unique keys
+            ::fsc::unique(keys, sorted_input,
+            		typename Base::StoreTransformedFunc(),
+            		typename Base::StoreTransformedEqual());
+            BL_BENCH_END(find, "uniq1", keys.size());
+
+            BL_BENCH_START(find);
+            results.reserve(keys.size());                   // TODO:  should estimate coverage.
+            //printf("reserving %lu\n", keys.size() * this->key_multiplicity);
+            BL_BENCH_END(find, "reserve", results.capacity() );
+
+            size_t estimating = std::ceil(static_cast<double>(keys.size()) * 0.05);
+
+            BL_BENCH_START(find);
+            QueryProcessor::process(c, keys.begin(), keys.begin() + estimating, emplace_iter, find_element, sorted_input, pred, trans);
+            BL_BENCH_END(find, "local_find_0.1", estimating);
+
+            BL_BENCH_START(find);
+            size_t est = std::ceil((static_cast<double>(results.size()) / static_cast<double>(estimating)) * static_cast<double>(keys.size()) * 1.1f);
+            results.reserve(est);
+            BL_BENCH_END(find, "reserve_est", results.capacity());
+
+            BL_BENCH_START(find);
+            QueryProcessor::process(c, keys.begin() + estimating, keys.end(), emplace_iter, find_element, sorted_input, pred, trans);
+            BL_BENCH_END(find, "local_find", results.size());
+
+            if (this->comm.rank() == 0) printf("rank %d result size %lu capacity %lu\n", this->comm.rank(), results.size(), results.capacity());
+
+          }
+
+          BL_BENCH_REPORT_MPI_NAMED(find, "base_densehash:find", this->comm);
+
+          return results;
+
+      }
+
+      /**
+       * @brief find elements with the specified keys in the distributed densehash_multimap.
+       * @param keys  content will be changed and reordered
+       * @param last
+       */
+      template <class LocalFind,
+    		  typename Predicate = ::bliss::filter::TruePredicate, typename Transform = ::bliss::transform::identity<Key>,
+			  typename std::enable_if<(sizeof(std::pair<Key, T>) <
+      	  	  	  	  	  	  	  	  sizeof(typename ::bliss::functional::function_traits<Transform, std::pair<Key, T> >::return_type)),
+									  int>::type = 1>
+      ::std::vector<typename ::bliss::functional::function_traits<Transform, std::pair<Key, T> >::return_type >
+      find_transform(LocalFind & find_element,
+    		  	  ::std::vector<Key>& keys,
+				   bool sorted_input = false,
+				   Predicate const & pred = Predicate(),
+				   Transform const & trans = Transform()) const {
+
+          BL_BENCH_INIT(find_transform);
+
+          BL_BENCH_START(find_transform);
+    	  ::std::vector<std::pair<Key, T> > returned = this->find(find_element, keys, sorted_input, pred);
+          BL_BENCH_END(find_transform, "find", keys.size());
+
+          BL_BENCH_START(find_transform);
+    	  ::std::vector<typename ::bliss::functional::function_traits<Transform, std::pair<Key, T> >::return_type > results;
+
+    	  results.reserve(returned.size());
+    	  ::fsc::back_emplace_iterator<::std::vector<typename ::bliss::functional::function_traits<Transform, std::pair<Key, T> >::return_type > > emplacer(results);
+
+    	  std::transform(returned.begin(), returned.end(), emplacer, trans);
+          BL_BENCH_END(find_transform, "transform", keys.size());
+
+          BL_BENCH_REPORT_MPI_NAMED(find_transform, "base_densehash:find_transform", this->comm);
+
+    	  return results;
+      }
+
+
+
       /**
        * @brief find elements with the specified keys in the distributed densehash_multimap.
        *
@@ -720,7 +902,7 @@ namespace dsc  // distributed std container
        * @param keys    content will be changed and reordered.
        * @param last
        */
-      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
+      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
@@ -899,7 +1081,7 @@ namespace dsc  // distributed std container
 //       * @param keys    content will be changed and reordered.
 //       * @param last
 //       */
-//      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
+//      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
 //      ::std::vector<::std::pair<Key, T> > find_irecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
 //          BL_BENCH_INIT(find);
 //
@@ -1199,7 +1381,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <bool remove_duplicate = true, class Predicate = ::fsc::TruePredicate>
+      template <bool remove_duplicate = true, class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
                                                         Predicate const& pred = Predicate() ) const {
           BL_BENCH_INIT(count);
@@ -1289,7 +1471,142 @@ namespace dsc  // distributed std container
       }
 
 
-      template <typename Predicate = ::fsc::TruePredicate>
+
+      /**
+       * @brief count elements with the specified keys in the distributed densehash_multimap.
+       * @param first
+       * @param last
+       */
+      template <bool remove_duplicate = true,
+    		  class Predicate = ::bliss::filter::TruePredicate, class Transform = ::bliss::transform::identity<Key>,
+			  typename std::enable_if<(sizeof(std::pair<Key, size_type>) >=
+  	  	  	  	  	  	  sizeof(typename ::bliss::functional::function_traits<Transform, std::pair<Key, size_type> >::return_type)),
+					  int>::type = 1>
+      ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, size_type> >::return_type>
+      count_transform(::std::vector<Key>& keys, bool sorted_input = false,
+                                                        Predicate const& pred = Predicate(), Transform const & trans = Transform() ) const {
+          BL_BENCH_INIT(count);
+          ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, size_type> >::return_type> results;
+
+          // process even if local container is empty.
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(count, "base_densehash_map:count", this->comm);
+            return results;
+          }
+
+          BL_BENCH_START(count);
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_type> > > emplace_iter(results);
+          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+          this->transform_input(keys);
+          BL_BENCH_END(count, "transform_intput", keys.size());
+
+
+          if (this->comm.size() > 1) {
+
+            BL_BENCH_START(count);
+            // distribute (communication part)
+            std::vector<size_t> recv_counts;
+            if (remove_duplicate) {
+				::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+								typename Base::StoreTransformedFunc(),
+								typename Base::StoreTransformedEqual()).swap(recv_counts);
+            } else {
+            	::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm).swap(recv_counts);
+            }
+            BL_BENCH_END(count, "dist_query", keys.size());
+
+
+            // local count. memory utilization a potential problem.
+            // do for each src proc one at a time.
+            BL_BENCH_START(count);
+            results.reserve(keys.size() );                   // TODO:  should estimate coverage.
+            BL_BENCH_END(count, "reserve", results.capacity());
+
+            BL_BENCH_START(count);
+            auto start = keys.begin();
+            auto end = start;
+            for (int i = 0; i < this->comm.size(); ++i) {
+              ::std::advance(end, recv_counts[i]);
+
+              // within start-end, values are unique, so don't need to set unique to true.
+              QueryProcessor::process(c, start, end, emplace_iter, count_element, sorted_input, pred, trans);
+
+              if (this->comm.rank() == 0)
+                BL_DEBUGF("R %d added %lu results for %lu queries for process %d\n", this->comm.rank(), send_counts[i], recv_counts[i], i);
+
+              start = end;
+            }
+            BL_BENCH_END(count, "local_count", results.size());
+
+            // send back using the constructed recv count
+            BL_BENCH_COLLECTIVE_START(count, "a2a2", this->comm);
+            mxx::all2allv(results, recv_counts, this->comm).swap(results);
+            BL_BENCH_END(count, "a2a2", results.size());
+          } else {
+
+            BL_BENCH_START(count);
+            if (remove_duplicate) {
+				// keep unique keys
+				::fsc::unique(keys, sorted_input,
+						typename Base::StoreTransformedFunc(),
+						typename Base::StoreTransformedEqual());
+            }
+            BL_BENCH_END(count, "uniq1", keys.size());
+
+
+            BL_BENCH_START(count);
+            results.reserve(keys.size());                   // TODO:  should estimate coverage.
+            BL_BENCH_END(count, "reserve", results.capacity());
+
+
+            BL_BENCH_START(count);
+            // within start-end, values are unique, so don't need to set unique to true.
+            QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, count_element, sorted_input, pred, trans);
+            BL_BENCH_END(count, "local_count", results.size());
+          }
+
+          BL_BENCH_REPORT_MPI_NAMED(count, "base_densehash:count", this->comm);
+
+          return results;
+
+      }
+
+      template <class LocalFind, typename Transform = ::bliss::transform::identity<Key>,
+    		  typename Predicate = ::bliss::filter::TruePredicate,
+			  typename std::enable_if<(sizeof(std::pair<Key, size_type>) <
+      	  	  	  	  	  	  	  	  sizeof(typename ::bliss::functional::function_traits<Transform, std::pair<Key, size_type> >::return_type)),
+									  int>::type = 1>
+      ::std::vector<typename ::bliss::functional::function_traits<Transform, std::pair<Key, size_t> >::return_type >
+      count_transform(LocalFind & find_element,
+    		  	  ::std::vector<Key>& keys,
+				   bool sorted_input = false,
+				   Predicate const & pred = Predicate(),
+				   Transform const & trans = Transform()) const {
+
+          BL_BENCH_INIT(find_transform);
+
+          BL_BENCH_START(find_transform);
+    	  ::std::vector<std::pair<Key, size_type> > returned = this->count(count_element, keys, sorted_input, pred);
+          BL_BENCH_END(find_transform, "find", keys.size());
+
+          BL_BENCH_START(find_transform);
+    	  ::std::vector<typename ::bliss::functional::function_traits<Transform, std::pair<Key, T> >::return_type > results;
+
+    	  results.reserve(returned.size());
+    	  ::fsc::back_emplace_iterator<::std::vector<typename ::bliss::functional::function_traits<Transform, std::pair<Key, T> >::return_type > > emplacer(results);
+
+    	  std::transform(returned.begin(), returned.end(), emplacer, trans);
+          BL_BENCH_END(find_transform, "transform", keys.size());
+
+          BL_BENCH_REPORT_MPI_NAMED(find_transform, "base_densehash:find_transform", this->comm);
+
+    	  return results;
+      }
+
+
+
+
+      template <typename Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
 
@@ -1306,13 +1623,30 @@ namespace dsc  // distributed std container
       }
 
 
+      template <typename Predicate = ::bliss::filter::TruePredicate, typename Transform = ::bliss::transform::identity<Key> >
+      ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, size_type> >::return_type>
+      count_transform(Predicate const & pred = Predicate(), Transform const & trans = Transform()) const {
+        ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, size_type> >::return_type > results;
+
+        if (! this->local_empty()) {
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > emplace_iter(results);
+
+          auto keys = this->keys();
+          results.reserve(keys.size());
+
+          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, count_element, false, pred, trans);
+        }
+        if (this->comm.size() > 1) this->comm.barrier();
+        return results;
+      }
+
 
       /**
        * @brief erase elements with the specified keys in the distributed densehash_multimap.
        * @param first
        * @param last
        */
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           size_t before = this->c.size();
@@ -1350,7 +1684,7 @@ namespace dsc  // distributed std container
 
 
           BL_BENCH_START(erase);
-          if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
+          if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value) {
             this->c.erase(keys.begin(), keys.end(), pred);
           } else {
             this->c.erase(keys.begin(), keys.end());
@@ -1373,7 +1707,7 @@ namespace dsc  // distributed std container
         size_t count = 0;
 
         if (! this->local_empty()) {
-          if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
+          if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value) {
             count = this->c.erase(pred);
 
           } else {
@@ -1471,32 +1805,32 @@ namespace dsc  // distributed std container
     protected:
 
       struct LocalFind {
-        // unfiltered.
-        template<class DB, typename Query, class OutputIter>
-        size_t operator()(DB &db, Query const &v, OutputIter &output) const {
-            auto iters = db.equal_range(v);
-
-            if (iters.first != iters.second) {
-              *output = *(iters.first);
-              ++output;
-              return 1;
-            }  // no insert if can't find it.
-            return 0;
-        }
         // filtered element-wise.
-        template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
+        template<class DB, typename Query, class OutputIter,
+        		typename Predicate = ::bliss::filter::TruePredicate,
+				typename Transform = ::bliss::transform::identity<Key> >
         size_t operator()(DB &db, Query const &v, OutputIter &output,
-                          Predicate const& pred) const {
+                          Predicate const & pred = Predicate(),
+						  Transform const & trans = Transform() ) const {
+
             auto iters = db.equal_range(v);
 
-            if ((iters.first != iters.second) &&
-                pred(iters.first, iters.second) &&
-                pred(*(iters.first)) ) {
-              *output = *(iters.first);
-              ++output;
-              return 1;
-            }  // no insert if can't find it.
-            return 0;
+        	static_assert(std::is_same<typename ::bliss::functional::function_traits<Predicate, typename DB::key_type>::return_type,
+        			bool>::value, "predicate is not returning boolean value");
+
+            if (iters.first == iters.second) return 0;
+
+            // predicate is not a TruePredicate and does not satisfy the predicate
+            if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate >::value)
+            	if (!pred(iters.first, iters.second) || !pred(*(iters.first)) ) return 0;
+
+            if (::std::is_same<Transform, ::bliss::transform::identity<Key> >::value) {
+            	*output = *(iters.first);
+            } else {
+            	*output = trans(*(iters.first));
+            }
+			++output;
+			return 1;
         }
         // no filter by range AND elemenet for now.
       } find_element;
@@ -1524,29 +1858,35 @@ namespace dsc  // distributed std container
       using Base::unique_size;
 
 
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
                                                Predicate const& pred = Predicate()) const {
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Transform = ::bliss::transform::identity<Key>, class Predicate = ::bliss::filter::TruePredicate>
+      ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, T> >::return_type>
+      find_transform(::std::vector<Key>& keys, bool sorted_input = false,
+    		  Predicate const& pred = Predicate(), Transform const & trans = Transform()) const {
+          return Base::find(find_element, keys, sorted_input, pred, trans);
+      }
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           ::std::vector<::std::pair<Key, T> > results;
 
@@ -1569,13 +1909,36 @@ namespace dsc  // distributed std container
           return results;
       }
 
+      template <class Transform = ::bliss::transform::identity<Key>, class Predicate = ::bliss::filter::TruePredicate>
+      ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, T> >::return_type>
+      find_transform(Predicate const& pred = Predicate(), Transform const & trans = Transform()) const {
+          ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, T> >::return_type > results;
+
+          if (this->local_empty()) {
+            //printf("rank %d local is empty\n", this->comm.rank());
+            return results;
+          }
+          results.reserve(this->c.size());
+          size_t processed = 0;
+          size_t added = 0;
+          for (auto it = this->c.begin(); it != this->c.end(); ++it) {
+            ++processed;
+            if (pred(*it))  {
+              results.emplace_back(trans(*it));
+              ++added;
+            }
+          }
+//          printf("container size %ld, processed %ld, added %ld\n", this->c.size(), processed, added);
+
+          return results;
+      }
 
       /**
        * @brief insert new elements in the distributed densehash_multimap.
        * @param first
        * @param last
        */
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate = ::bliss::filter::TruePredicate>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
@@ -1603,7 +1966,7 @@ namespace dsc  // distributed std container
         BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
         size_t count = 0;
-        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
+        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
           count = this->Base::local_insert(input, pred);
         else
           count = this->Base::local_insert(input);
@@ -1732,40 +2095,43 @@ namespace dsc  // distributed std container
     protected:
 
       struct LocalFind {
-        // unfiltered.
-        template<class DB, typename Query, class OutputIter>
-        size_t operator()(DB &db, Query const &v, OutputIter &output) const {
-            auto range = db.equal_range(v);
 
-            // range's iterators are not random access iterators, so insert calling distance uses ++, slowing down the process.
-            // manually insert improves performance here.
-            size_t count = 0;
-            for (auto it2 = range.first; it2 != range.second; ++it2) {
-              *output = *it2;
-              ++output;
-              ++count;
-            }
-            return count;
-        }
         // filtered element-wise.
-        template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
+        template<class DB, typename Query, class OutputIter,
+        		typename Predicate = ::bliss::filter::TruePredicate,
+				typename Transform = ::bliss::transform::identity<Key> >
         size_t operator()(DB &db, Query const &v, OutputIter &output,
-                          Predicate const& pred) const {
-            auto range = db.equal_range(v);
+                          Predicate const & pred = Predicate(),
+						  Transform const & trans = Transform() ) const {
 
-            // add the output entry.
+        	static_assert(std::is_same<typename ::bliss::functional::function_traits<Predicate, typename DB::key_type>::return_type,
+        			bool>::value, "predicate is not returning boolean value");
+
+            auto iters = db.equal_range(v);
+
+            if (iters.first == iters.second) return 0;
+
+            // predicate is not a TruePredicate and does not satisfy the predicate
+            if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate >::value)
+            	if (!pred(iters.first, iters.second)) return 0;
+
             size_t count = 0;
-            if (pred(range.first, range.second)) {
-              for (auto it2 = range.first; it2 != range.second; ++it2) {
-                if (pred(*it2)) {
-                  *output = *it2;
-                  ++output;
-                  ++count;
-                }
-              }
-            }
-            return count;
+			for (auto it2 = iters.first; it2 != iters.second; ++it2) {
+				if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate >::value)
+					if (!pred(*it2)) continue;
+
+				if (::std::is_same<Transform, ::bliss::transform::identity<Key> >::value) {
+					*output = *it2;
+				} else {
+					*output = trans(*it2);
+				}
+				++output;
+				++count;
+			}
+
+			return count;
         }
+
         // no filter by range AND elemenet for now.
       } find_element;
 
@@ -1785,22 +2151,29 @@ namespace dsc  // distributed std container
       using Base::unique_size;
 
 
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
                                                Predicate const& pred = Predicate()) const {
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate, class Transform = ::bliss::transform::identity<Key>>
+      ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, T> >::return_type>
+      find_transform(::std::vector<Key>& keys, bool sorted_input = false,
+    		  Predicate const& pred = Predicate(),
+    		  Transform const & trans = Transform()) const {
+          return Base::find(find_element, keys, sorted_input, pred, trans);
+      }
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_sendrecv(find_element, keys, sorted_input, pred);
@@ -1808,10 +2181,43 @@ namespace dsc  // distributed std container
 
 
 
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
+
+      template <class Transform = ::bliss::transform::identity<Key>, class Predicate = ::bliss::filter::TruePredicate>
+      ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, T> >::return_type>
+      find_transform(Predicate const& pred = Predicate(), Transform const & trans = Transform()) const {
+
+              ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, T> >::return_type> results;
+
+              if (this->local_empty()) return results;
+
+              ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+
+              std::vector<Key> keys;
+              this->keys(keys);
+
+              ::std::vector<::std::pair<Key, size_t> > count_results;
+              count_results.reserve(keys.size());
+              ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+
+              // count now.
+              Base::QueryProcessor::process(this->c, keys.begin(), keys.end(), count_emplace_iter, this->count_element, false, pred);
+              size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
+                                               [](size_t v, ::std::pair<Key, size_t> const & x) {
+                return v + x.second;
+              });
+
+              // then reserve
+              results.reserve(count);                   // TODO:  should estimate coverage.
+
+              Base::QueryProcessor::process(this->c, keys.begin(), keys.end(), emplace_iter, this->find_element, false, pred, trans);
+
+              return results;
+          }
+
       /// access the current the multiplicity.  only multimap needs to override this.
       virtual float get_multiplicity() const {
         // multimaps would add a collective function to change the multiplicity
@@ -1907,7 +2313,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate = ::bliss::filter::TruePredicate>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
@@ -1945,7 +2351,7 @@ namespace dsc  // distributed std container
         BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
         size_t count = 0;
-        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
+        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
           count = this->Base::local_insert(input, pred);
         else
           count = this->Base::local_insert(input);
@@ -2130,7 +2536,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate = ::bliss::filter::TruePredicate>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
@@ -2162,7 +2568,7 @@ namespace dsc  // distributed std container
         // local compute part.  called by the communicator.
         BL_BENCH_START(insert);
         size_t count = 0;
-        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
+        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
           count = this->local_insert(input.begin(), input.end(), pred);
         else
           count = this->local_insert(input.begin(), input.end());
@@ -2256,7 +2662,7 @@ namespace dsc  // distributed std container
        * @param first
        * @param last
        */
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate = ::bliss::filter::TruePredicate>
       size_t insert(std::vector< Key >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
@@ -2266,6 +2672,44 @@ namespace dsc  // distributed std container
           return 0;
         }
 
+        sorted_input = false;
+
+//        typename Base::Base::Base::Base::InputTransform trans;
+//
+//        BL_BENCH_START(insert);
+//        ::std::vector<::std::pair<Key, T> > temp;
+//        temp.reserve(input.size());
+//        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
+//        ::std::transform(input.begin(), input.end(), emplace_iter, [&trans](Key const & x) {
+//        	return ::std::make_pair(trans(x), T(1));
+//        });
+//        BL_BENCH_END(insert, "convert", input.size());
+//
+//
+//        // communication part
+//        if (this->comm.size() > 1) {
+//          BL_BENCH_START(insert);
+//          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+//          auto recv_counts = ::dsc::distribute(temp, this->key_to_rank, sorted_input, this->comm);
+//          BLISS_UNUSED(recv_counts);
+//          BL_BENCH_END(insert, "dist_data", input.size());
+//        }
+//
+//        //
+//        //        // after communication, sort again to keep unique  - may not be needed
+//        //        local_reduction(input, sorted_input);
+//
+//        // local compute part.  called by the communicator.
+//        BL_BENCH_START(insert);
+//        size_t count = 0;
+//        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+//          count = this->Base::local_insert(temp.begin(), temp.end(), pred);
+//        else
+//          count = this->Base::local_insert(temp.begin(), temp.end());
+//        BL_BENCH_END(insert, "local_insert", this->local_size());
+//
+//
+//        ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
 
         typename Base::Base::Base::Base::InputTransform trans;
 
@@ -2295,8 +2739,28 @@ namespace dsc  // distributed std container
         // local compute part.  called by the communicator.
         BL_BENCH_START(insert);
         size_t count = 0;
-        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
-          count = this->Base::local_insert(temp.begin(), temp.end(), pred);
+        size_t step_size = 1000000;
+        size_t iters = input.size() / step_size;
+        size_t rem = input.size() % step_size;
+        auto it = input.begin();
+        // do in blocks of 1M...
+        ::std::vector<::std::pair<Key, T> > temp(step_size);
+        for (size_t i = 0; i < iters; ++i) {
+          ::std::transform(it, it + step_size, temp.begin(), [](Key const & x) {
+            return ::std::make_pair(x, T(1));
+          });
+          it += step_size;
+          if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+            count = this->Base::local_insert(temp.begin(), temp.end(), pred);
+          else
+            count = this->Base::local_insert(temp.begin(), temp.end());
+        }
+        // remainder
+        ::std::transform(it, it + rem, temp.begin(), [](Key const & x) {
+          return ::std::make_pair(x, T(1));
+        });
+        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+          count = this->Base::local_insert(temp.begin(), temp.begin() + rem, pred);
         else
           count = this->Base::local_insert(temp.begin(), temp.end());
         BL_BENCH_END(insert, "local_insert", this->local_size());
