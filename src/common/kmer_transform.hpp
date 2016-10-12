@@ -71,17 +71,21 @@ namespace bliss {
     namespace transform {
 
       // QUESTION:  xor of hash, or hash of xor?.  second is faster.  Also if there is GC-AT imbalance, xor of raw sequence kind of flattens the distribution, so hash input is now more even.
-
-      template <typename KMER>
-      struct identity {
-          inline KMER operator()(KMER const & x) const {
-            return x;
-          }
-          template <typename VAL>
-          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> & x) const {
-            return x;
-          }
-      };
+//
+//      template <typename KMER>
+//      struct identity {
+//          inline KMER operator()(KMER const & x) const {
+//            return std::forward<const KMER>(x);
+//          }
+//          template <typename VAL>
+//          inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> const & x) const {
+//            return std::forward<const ::std::pair<KMER, VAL> >(x);
+//          }
+//          template <typename VAL>
+//          inline ::std::pair<const KMER, VAL> operator()(std::pair<const KMER, VAL> const & x) const {
+//            return std::forward<const ::std::pair<const KMER, VAL> >(x);
+//          }
+//      };
 
       template <typename KMER>
       struct xor_rev_comp {
@@ -94,6 +98,10 @@ namespace bliss {
           template <typename VAL>
           inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> const & x) const {
               return std::pair<KMER, VAL>(operator()(x.first), x.second);
+          }
+          template <typename VAL>
+          inline ::std::pair<const KMER, VAL> operator()(std::pair<const KMER, VAL> const & x) const {
+              return std::pair<const KMER, VAL>(operator()(x.first), x.second);
           }
       };
 
@@ -110,6 +118,10 @@ namespace bliss {
           inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> const & x) const {
               return std::pair<KMER, VAL>(operator()(x.first), x.second);
           }
+          template <typename VAL>
+          inline ::std::pair<const KMER, VAL> operator()(std::pair<const KMER, VAL> const & x) const {
+              return std::pair<const KMER, VAL>(operator()(x.first), x.second);
+          }
       };
 
       template <typename KMER>
@@ -124,6 +136,10 @@ namespace bliss {
           template <typename VAL>
           inline ::std::pair<KMER, VAL> operator()(std::pair<KMER, VAL> const & x) const {
             return std::pair<KMER, VAL>(operator()(x.first), x.second);
+          }
+          template <typename VAL>
+          inline ::std::pair<const KMER, VAL> operator()(std::pair<const KMER, VAL> const & x) const {
+            return std::pair<const KMER, VAL>(operator()(x.first), x.second);
           }
 
       };
