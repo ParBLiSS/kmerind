@@ -44,6 +44,7 @@
 #include "containers/fsc_container_utils.hpp"
 
 #include "utils/logging.h"
+#include "utils/transform_utils.hpp"
 
 namespace fsc {  // fast standard container
 
@@ -222,7 +223,7 @@ namespace sparsehash {
 
   /// specialized sparsehash comparator for when there is no transform.
   template <typename Key, template <typename> class Comparator>
-  struct compare<Key, Comparator, fsc::identity> {
+  struct compare<Key, Comparator, bliss::transform::identity> {
       Comparator<Key> comp;
 
       // keys are not transformed.  so no need to treat them specially, and no need to store them.
@@ -277,7 +278,7 @@ namespace sparsehash {
 
   /// special comparison operator for sparsehash.  specialized for equal_to operator AND identity transform, here so that template is not ambiguous for previous 2 definitions.
   template <typename Key>
-  struct compare<Key, ::std::equal_to, ::fsc::identity> {
+  struct compare<Key, ::std::equal_to, ::bliss::transform::identity> {
 
       //====  since dense hash table makes copies of equal operators left and right
       // we need these constructors and assignment operators.
@@ -408,7 +409,7 @@ namespace sparsehash {
 template <typename Key,
 typename T,
 typename SpecialKeys = ::fsc::sparsehash::special_keys<Key>,   // holds keys, split flag  - can specialize for distributed.
-template<typename> class Transform = ::fsc::identity,
+template<typename> class Transform = ::bliss::transform::identity,
 typename Hash =  ::fsc::TransformedHash<Key, ::std::hash, Transform>,
 typename Equal = ::fsc::sparsehash::compare<Key, ::std::equal_to, Transform>,
 typename Allocator = ::std::allocator<::std::pair<const Key, T> >,
@@ -496,28 +497,31 @@ protected:
     virtual ~densehash_map() {};
 
 
-//
-//    iterator begin() {
-//    	return concat_iter<value_type>(lower_map, upper_map, lower_map.begin());
-//    }
-//    const_iterator begin() const {
-//      return cbegin();
-//    }
-//    const_iterator cbegin() const {
-//    	return concat_iter<const value_type>(lower_map, upper_map, lower_map.begin());
-//    }
-//
-//
-//
-//    iterator end() {
-//    	return concat_iter<value_type>(lower_map, upper_map);
-//    }
-//    const_iterator end() const {
-//      return cend();
-//    }
-//    const_iterator cend() const {
-//    	return concat_iter<const value_type>(lower_map, upper_map);
-//    }
+    iterator begin() {
+      return iterator(std::vector<container_range> { container_range{lower_map.begin(), lower_map.end()},
+                                                    container_range{upper_map.begin(), upper_map.end()} });
+    }
+    const_iterator begin() const {
+      return cbegin();
+    }
+    const_iterator cbegin() const {
+      return const_iterator(std::vector<container_const_range> { container_const_range{lower_map.begin(), lower_map.end()},
+                                                                 container_const_range{upper_map.begin(), upper_map.end()} });
+    }
+
+
+
+    iterator end() {
+      return iterator( upper_map.end() );
+    }
+    const_iterator end() const {
+      return cend();
+    }
+    const_iterator cend() const {
+      return const_iterator( upper_map.end() );
+    }
+
+
     std::vector<Key> keys() const  {
       std::vector<Key> ks;
 
@@ -634,7 +638,21 @@ protected:
     	insert(input.begin(), input.end());
     }
 
-    std::pair<typename supercontainer_type::iterator, bool> insert(::std::pair<Key, T> const & x) {
+    /// inserting a vector
+    void insert(::std::vector<value_type > & input) {
+    	insert(input.begin(), input.end());
+    }
+
+    std::pair<typename container_type::iterator, bool> insert(::std::pair<Key, T> const & x) {
+      if (splitter(x.first)) {
+        return lower_map.insert(x);
+      }
+      else {
+        return upper_map.insert(x);
+      }
+    }
+
+    std::pair<typename container_type::iterator, bool> insert(value_type const & x) {
       if (splitter(x.first)) {
         return lower_map.insert(x);
       }
@@ -1045,7 +1063,6 @@ class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, fals
     }
 
 
-
     // choices:  sort first, then insert in ranges, or no sort, insert one by one.  second is O(n) but pays the random access and mem realloc cost
     template <class InputIt>
     void insert(InputIt first, InputIt last) {
@@ -1060,10 +1077,17 @@ class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, fals
       insert(input.begin(), input.end());
     }
 
-    std::pair<typename supercontainer_type::iterator, bool> insert(::std::pair<Key, T> const & x) {
+    void insert(::std::vector<value_type > & input) {
+      insert(input.begin(), input.end());
+    }
+
+    std::pair<iterator, bool> insert(::std::pair<Key, T> const & x) {
       return map.insert(x);
     }
 
+    std::pair<iterator, bool> insert(value_type const & x) {
+      return map.insert(x);
+    }
 
     template <typename V, typename Updater>
     size_t update(::std::vector<::std::pair<Key, V> > & input, Updater const & op) {
@@ -1194,7 +1218,7 @@ class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, fals
 template <typename Key,
 typename T,
 typename SpecialKeys = ::fsc::sparsehash::special_keys<Key>,   // holds keys, split flag  - can specialize for distributed.
-template<typename> class Transform = ::fsc::identity,
+template<typename> class Transform = ::bliss::transform::identity,
 typename Hash = ::fsc::TransformedHash<Key, ::std::hash, Transform>,
 typename Equal = ::fsc::sparsehash::compare<Key, std::equal_to, Transform>,
 typename Allocator = ::std::allocator<::std::pair<const Key, T> >,
@@ -1705,6 +1729,14 @@ class densehash_multimap {
       insert(input.begin(), input.end());
     }
 
+    /// inserting sorted range
+    void insert(::std::vector<value_type> & input) {
+      // TODO: more memory efficient version of this.
+
+      insert(input.begin(), input.end());
+    }
+
+
     template <typename InputIt, typename Pred>
     size_t erase(InputIt first, InputIt last, Pred const & pred) {
       static_assert(::std::is_convertible<Key, typename ::std::iterator_traits<InputIt>::value_type>::value,
@@ -2045,6 +2077,13 @@ class densehash_multimap<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator,
 
     /// insert
     void insert(::std::vector<::std::pair<Key, T> > & input) {
+
+      if (input.size() == 0) return;
+        // there is data in there already.  so do normal insert
+        this->insert(input.begin(), input.end());
+    }
+    /// insert
+    void insert(::std::vector<value_type > & input) {
 
       if (input.size() == 0) return;
         // there is data in there already.  so do normal insert
