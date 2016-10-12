@@ -87,14 +87,7 @@ namespace bliss
         friend class FASTAParser;
 
       protected:
-//        struct NotEOL {
-//          bool operator()(typename std::iterator_traits<Iterator>::value_type const & x) {
-//            return (x != bliss::io::BaseFileParser<Iterator>::eol && x != bliss::io::BaseFileParser<Iterator>::cr );
-//          }
-//        } filter;
 
-        /// internal filter iterator to remove eol and cr characters.
-//        using BaseCharIterator = typename ::bliss::iterator::filter_iterator<NotEOL, Iterator>;
         using BaseCharIterator = Iterator;
 
       public:

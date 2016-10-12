@@ -30,8 +30,9 @@
 
 // max of 50 cases
 typedef ::testing::Types<
-    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint64_t>,  // 3 words, not full
-    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint8_t>  // 3 words, not full
+//    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint64_t>,  // 3 words, not full
+//    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint8_t>  // 3 words, not full
+    ::bliss::common::Kmer< 21, bliss::common::RNA5,  uint8_t>  // dummy. keeps this file alive
 > KmerTransformTestOtherTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss_other, KmerTransformTest, KmerTransformTestOtherTypes);
 

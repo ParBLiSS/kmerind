@@ -49,22 +49,6 @@ namespace bliss
         }
     };
 
-
-    template <typename KmerType>
-    struct KmerInLowerSpace {
-        using KmerWordType = typename KmerType::KmerWordType;
-
-        static constexpr KmerWordType high_bit_mask = ~(~(static_cast<KmerWordType>(0)) >> 1);
-
-        bool operator()(KmerType const & x) const {
-          return (x.getData()[KmerType::nWords - 1] & high_bit_mask) == 0; // lower is when high bit is 0 - so works with signed and unsigned.
-        }
-        template <typename V>
-        bool operator()(::std::pair<KmerType, V> const & x) const {
-          return (x.first.getData()[KmerType::nWords - 1] & high_bit_mask) == 0; // lower is when high bit is 0 - so works with signed and unsigned.
-        }
-      };
-
     /**
      * @class    bliss::io::KmerUtils
      * @brief	 collection of kmer related utility functions.
@@ -103,7 +87,7 @@ namespace bliss
 
     };
 
-  } /* namespace io */
+  } /* namespace utils */
 } /* namespace bliss */
 
 #endif /* KMERUTILS_HPP_ */

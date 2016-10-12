@@ -181,7 +181,7 @@ public:
 
 	template <typename Predicate>
 	void erase_if(std::vector<KmerType> &query, Predicate const &pred) {
-		map.erase(query, pred);
+		map.erase(query, false, pred);
 	}
 
 	template <typename Predicate>
@@ -238,14 +238,14 @@ public:
 		 // file extension determines SeqParserType
 		 std::string extension = ::bliss::utils::file::get_file_extension(filename);
 		 std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-		 if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+		 if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0) && (extension.compare("fa") != 0)) {
 			 throw std::invalid_argument("input filename extension is not supported.");
 		 }
 
 		 // check to make sure that the file parser will work
 		 if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
 			 throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
-		 } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
+		 } else if (((extension.compare("fasta") == 0) || (extension.compare("fa") == 0)) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
 			 throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
 		 }
      BL_BENCH_INIT(build);
@@ -283,14 +283,14 @@ public:
 	     // file extension determines SeqParserType
 	     std::string extension = ::bliss::utils::file::get_file_extension(filename);
 	     std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-	     if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+	     if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0) && (extension.compare("fa") != 0)) {
 	       throw std::invalid_argument("input filename extension is not supported.");
 	     }
 
 	     // check to make sure that the file parser will work
 	     if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
 	       throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
-	     } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
+	     } else if (((extension.compare("fasta") == 0) || (extension.compare("fa") == 0)) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
 	       throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
 	     }
 	     BL_BENCH_INIT(build);
@@ -330,14 +330,14 @@ public:
 			 // file extension determines SeqParserType
 			 std::string extension = ::bliss::utils::file::get_file_extension(filename);
 			 std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-			 if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0)) {
+			 if ((extension.compare("fastq") != 0) && (extension.compare("fasta") != 0) && (extension.compare("fa") != 0)) {
 				 throw std::invalid_argument("input filename extension is not supported.");
 			 }
 
 			 // check to make sure that the file parser will work
 			 if ((extension.compare("fastq") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTQParser<char*> >::value)) {
 				 throw std::invalid_argument("Specified File Parser template parameter does not support files with fastq extension.");
-			 } else if ((extension.compare("fasta") == 0) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
+			 } else if (((extension.compare("fasta") == 0) || (extension.compare("fa") == 0)) && (!std::is_same<SeqParser<char*>, ::bliss::io::FASTAParser<char*> >::value)) {
 				 throw std::invalid_argument("Specified File Parser template parameter does not support files with fasta extension.");
 			 }
 	     BL_BENCH_INIT(build);
@@ -447,8 +447,8 @@ using SingleStrandHashMapParams = ::dsc::HashMapParams<
 
 
 template <typename Key,
-	template <typename> class DistHash  = DistHashFarm,
-	template <typename> class StoreHash = StoreHashFarm
+	template <typename> class DistHash  = DistHashMurmur,
+	template <typename> class StoreHash = StoreHashMurmur
 >
 using CanonicalHashMapParams = ::dsc::HashMapParams<
 		Key,
@@ -462,8 +462,8 @@ using CanonicalHashMapParams = ::dsc::HashMapParams<
 		  >;
 
 template <typename Key,
-	template <typename> class DistHash  = DistHashFarm,
-	template <typename> class StoreHash = StoreHashFarm
+	template <typename> class DistHash  = DistHashMurmur,
+	template <typename> class StoreHash = StoreHashMurmur
 	>
 using BimoleculeHashMapParams = ::dsc::HashMapParams<
 		Key,
@@ -477,7 +477,7 @@ using BimoleculeHashMapParams = ::dsc::HashMapParams<
 		  >;
 
 //template <typename Key,
-//			template <typename> class DistHash = DistHashFarm,
+//			template <typename> class DistHash = DistHashMurmur,
 //			template <typename> class StoreLess = ::std::less,
 //			template <typename> class DistTrans = ::bliss::transform::identity >
 //using SingleStrandOrderedMapParams = ::dsc::OrderedMapParams<
@@ -493,7 +493,7 @@ using BimoleculeHashMapParams = ::dsc::HashMapParams<
 //
 //
 //template <typename Key,
-//			template <typename> class DistHash = DistHashFarm,
+//			template <typename> class DistHash = DistHashMurmur,
 //			template <typename> class StoreLess = ::std::less
 //			>
 //using CanonicalOrderedMapParams = ::dsc::OrderedMapParams<
@@ -508,7 +508,7 @@ using BimoleculeHashMapParams = ::dsc::HashMapParams<
 //		  >;
 //
 //template <typename Key,
-//			template <typename> class DistHash = DistHashFarm,
+//			template <typename> class DistHash = DistHashMurmur,
 //			template <typename> class StoreLess = ::std::less
 //			>
 //using BimoleculeOrderedMapParams = ::dsc::OrderedMapParams<

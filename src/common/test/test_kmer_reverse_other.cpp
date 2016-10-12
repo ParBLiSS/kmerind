@@ -34,8 +34,9 @@ typedef ::testing::Types<
 
 //    ::bliss::common::Kmer< 15, bliss::common::DNA_IUPAC,   uint64_t>,  // 1 word, not full.  not tested since it is not a bijection.
 //    ::bliss::common::Kmer< 40, bliss::common::DNA_IUPAC,   uint64_t>,  // 3 word, not full
-    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint64_t>,  // 3 words, not full
-    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint8_t>  // 3 words, not full
+//    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint64_t>,  // 3 words, not full  // not tested. ASCII is not useful.,
+//    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint8_t>  // 3 words, not full
+    ::bliss::common::Kmer< 21, bliss::common::RNA5,  uint8_t>  // dummy.  to keep this file alive.
 > KmerReverseTestOtherTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss_other, KmerReverseTest, KmerReverseTestOtherTypes);
 

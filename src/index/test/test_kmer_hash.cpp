@@ -185,10 +185,10 @@ typedef ::testing::Types<
     ::bliss::common::Kmer<  1, bliss::common::DNA16,  uint8_t>,  // 1 word, not full
     ::bliss::common::Kmer<  2, bliss::common::DNA16,  uint8_t>,  // 1 word, full
     ::bliss::common::Kmer<  3, bliss::common::DNA16,  uint8_t>,  // 2 words, not full
-    ::bliss::common::Kmer<  4, bliss::common::DNA16,  uint8_t>,   // 2 words, full
-    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint64_t>,  // 3 words, not full
-    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint8_t>,  // 3 words, not full
-    ::bliss::common::Kmer< 5120, bliss::common::ASCII,  uint64_t>  // 80 words - cpp_std should see collisions
+    ::bliss::common::Kmer<  4, bliss::common::DNA16,  uint8_t> //,   // 2 words, full
+//    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint64_t>,  // 3 words, not full
+//    ::bliss::common::Kmer< 21, bliss::common::ASCII,  uint8_t>,  // 3 words, not full
+//    ::bliss::common::Kmer< 5120, bliss::common::ASCII,  uint64_t>  // 80 words - cpp_std should see collisions
 
 > KmerHashTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, KmerHashTest, KmerHashTestTypes);

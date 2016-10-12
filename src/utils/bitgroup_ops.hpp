@@ -3397,7 +3397,11 @@ namespace bliss {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
           return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) >= 0;
       }
-
+      template <typename WORD_TYPE, size_t len>
+      BITS_INLINE int8_t compare(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
+          using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
+          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs);
+      }
     } // namespace bit_ops
 
 

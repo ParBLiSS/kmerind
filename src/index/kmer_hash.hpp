@@ -163,11 +163,10 @@ namespace bliss {
           ::std::hash<size_t> op;
 
         public:
-          static constexpr unsigned int default_init_value = (KMER::nBits < 64U) ? KMER::nBits : 64U;
+          // if nBits is more than 32, then default prefix should be 32.
+          static constexpr unsigned int default_init_value = 32U;
 
-          cpp_std(const unsigned int prefix_bits = default_init_value) : shift(default_init_value - prefix_bits) {
-            if (prefix_bits > default_init_value)  throw ::std::invalid_argument("ERROR: prefix larger than available hash size or kmer size.");
-          };
+          cpp_std(const unsigned int prefix_bits = default_init_value) : shift(std::min(KMER::nBits, 64U) - std::min(prefix_bits, KMER::nBits)) {};
 
           /// operator to compute hash
           inline size_t operator()(const KMER & kmer) const {
@@ -194,9 +193,7 @@ namespace bliss {
               // if single word, nBits <= 64, then min(nBits, 64) = nBits, and shift is the right thing.
               return h >> shift;
             else
-              // if multiword, nBits > 64, then the returned hash will have meaningful msb.  min(nBits, 64) == 64.
-              // if single word, nBits <= 64, then min(nBits, 64) = nBits, and shift is the right thing.
-              return h;
+              return h;  // suffix.  just return the whole thing.
           }
 
       };
@@ -212,20 +209,20 @@ namespace bliss {
         protected:
           unsigned int bits;
         public:
-          static constexpr unsigned int default_init_value = (KMER::nBits < 64U) ? KMER::nBits : 64U;
+          static constexpr unsigned int default_init_value = 24U;
+          static constexpr unsigned int suffix_bits = (KMER::nBits > 64U) ? 64U : KMER::nBits;
 
           /// constructor
-          identity(const unsigned int prefix_bits = default_init_value) : bits(prefix_bits) {
-            if (prefix_bits > default_init_value) throw ::std::invalid_argument("ERROR: prefix size outside of supported range");
+          identity(const unsigned int prefix_bits = default_init_value) : bits(std::min(KMER::nBits, prefix_bits)) {
           };
 
           /// operator to compute hash value
           inline uint64_t operator()(const KMER & kmer) const {
             if (Prefix)
-              return kmer.getPrefix(bits);  // get the first bits number of bits from kmer.
+              return kmer.getPrefix(bits);  // get the first 32 bits from kmer, or maybe the whole thing if nBits is less than 32.
             else
-              // if nBits < 64U, then it's padded with 0.  just get it.  else we want the entire 64bit.
-              return kmer.getSuffix(default_init_value);
+              // get the whole thing
+              return kmer.getSuffix(suffix_bits);
           }
       };
 
@@ -239,7 +236,7 @@ namespace bliss {
           static constexpr unsigned int nBytes = (KMER::nBits + 7) / 8;
 
         public:
-          static const unsigned int default_init_value = 64U;
+          static const unsigned int default_init_value = 24U;  // allow 16M processors.  but it's ignored here.
 
           murmur(const unsigned int prefix_bits = default_init_value) {};
 
@@ -278,10 +275,9 @@ namespace bliss {
           size_t shift;
 
         public:
-          static const unsigned int default_init_value = 64U;
+          static const unsigned int default_init_value = 24U;   // this allows 16M processors.
 
-          farm(const unsigned int prefix_bits = default_init_value) : shift(64U - prefix_bits) {
-            if (prefix_bits > default_init_value)  throw ::std::invalid_argument("ERROR: prefix larger than 64 bit.");
+          farm(const unsigned int prefix_bits = default_init_value) : shift(64U - std::min(prefix_bits, 64U)) {
           };
 
           /// operator to compute hash.  64 bit again.

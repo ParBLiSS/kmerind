@@ -226,6 +226,15 @@ namespace bliss
       do_sanitize();
     }
 
+    explicit Kmer(std::string const & ascii)
+    {
+    	size_t ss = std::min(ascii.length(), static_cast<size_t>(Kmer::size));
+
+    	for (size_t i = 0; i < ss; ++i) {
+    		this->nextFromChar(KmerAlphabet::FROM_ASCII[ascii[i]]);
+    	}
+    }
+
     /// copy constructor  - want result of iterator to be copiable here so no "explicit"
     Kmer(Kmer const& other) {
       memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
@@ -675,6 +684,15 @@ namespace bliss
       do_sanitize();
     }
   
+    /**
+     * @brief accessor to get a particular character in the kmer.
+     * @detail	 using the bitgroup_op's shift operator.  there is a copy involved and therefore may not be the fastest.
+     * @param idx	character index.  (not bit index)
+     */
+//    KMER_INLINE uint8_t operator[](const size_t idx) const {
+//    	return (idx < size) ? ((*this >> idx).getData()[0] & getLeastSignificantBitsMask<KmerWordType>(bitsPerChar)) : 0x0;
+//    }
+
   
     /* equality comparison operators */
   
@@ -758,6 +776,11 @@ namespace bliss
       return rhs < *this;
     }
   
+
+    KMER_INLINE int8_t compare(const Kmer& rhs) const {
+      return ::bliss::utils::bit_ops::compare<WORD_TYPE, nWords>(data, rhs.data);
+    }
+
     /* bit operators */
   
     /**
@@ -868,7 +891,7 @@ namespace bliss
      * @note  This shifts by the number of characters (which is a larger shift
      *        then bitwise).
      */
-    KMER_INLINE Kmer operator<<(const std::size_t shift_by)
+    KMER_INLINE Kmer operator<<(const std::size_t shift_by) const
     {
       Kmer result = *this;
       result <<= shift_by;
@@ -923,7 +946,7 @@ namespace bliss
      * @note  This shifts by the number of characters (which is a larger shift
      *        then bitwise).
      */
-    KMER_INLINE Kmer operator>>(const std::size_t shift_by)
+    KMER_INLINE Kmer operator>>(const std::size_t shift_by) const
     {
       Kmer result = *this;
       result >>= shift_by;
@@ -1013,7 +1036,7 @@ namespace bliss
       ss << ": MSB [";
       for (int64_t i = nWords - 1; i >=0; --i)
       {
-        ss << "0x" << std::hex << data[i] << " ";
+        ss << "0x" << std::hex << static_cast<size_t>(data[i]) << " ";
       }
       ss << "]";
       return ss.str();

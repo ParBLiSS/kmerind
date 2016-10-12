@@ -1283,36 +1283,6 @@ namespace dsc  // distributed std container
 //      }
 
 
-      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, Predicate const& pred = Predicate()) const {
-          ::std::vector<::std::pair<Key, T> > results;
-
-          if (this->local_empty()) return results;
-
-          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
-
-          auto keys = this->keys();
-
-          ::std::vector<::std::pair<Key, size_t> > count_results;
-          count_results.reserve(keys.size());
-          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
-
-          // count now.
-          QueryProcessor::process(c, keys.begin(), keys.end(), count_emplace_iter, count_element, false, pred);
-          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
-                                           [](size_t v, ::std::pair<Key, size_t> const & x) {
-            return v + x.second;
-          });
-
-          // then reserve
-          results.reserve(count);                   // TODO:  should estimate coverage.
-
-          QueryProcessor::process(c, keys.begin(), keys.end(), emplace_iter, find_element, false, pred);
-
-          return results;
-      }
-
-
       densehash_map_base(const mxx::comm& _comm) :
 		    Base(_comm), key_to_rank(_comm.size()),
 		    local_changed(false) {}
@@ -2183,7 +2153,32 @@ namespace dsc  // distributed std container
 
       template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
-          return Base::find(find_element, pred);
+          ::std::vector<::std::pair<Key, T> > results;
+
+          if (this->local_empty()) return results;
+
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
+
+          std::vector<Key> keys;
+          this->keys(keys);
+
+          ::std::vector<::std::pair<Key, size_t> > count_results;
+          count_results.reserve(keys.size());
+          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+
+          // count now.
+          Base::QueryProcessor::process(this->c, keys.begin(), keys.end(), count_emplace_iter, this->count_element, false, pred);
+          size_t count = ::std::accumulate(count_results.begin(), count_results.end(), static_cast<size_t>(0),
+                                           [](size_t v, ::std::pair<Key, size_t> const & x) {
+            return v + x.second;
+          });
+
+          // then reserve
+          results.reserve(count);                   // TODO:  should estimate coverage.
+
+          Base::QueryProcessor::process(this->c, keys.begin(), keys.end(), emplace_iter, this->find_element, false, pred);
+
+          return results;
       }
 
       template <class Transform = ::bliss::transform::identity<Key>, class Predicate = ::bliss::filter::TruePredicate>
@@ -2406,7 +2401,7 @@ namespace dsc  // distributed std container
   >
   class reduction_densehash_map : 
     public densehash_map<Key, T, MapParams, SpecialKeys, Alloc> {
-      static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
+      //static_assert(::std::is_arithmetic<T>::value, "mapped type has to be arithmetic");
 
     protected:
       using Base = densehash_map<Key, T, MapParams, SpecialKeys, Alloc>;
@@ -2530,6 +2525,7 @@ namespace dsc  // distributed std container
       using Base::find;
       using Base::erase;
       using Base::unique_size;
+      using Base::update;
 
       /**
        * @brief insert new elements in the distributed densehash_multimap.
@@ -2549,7 +2545,7 @@ namespace dsc  // distributed std container
 
         BL_BENCH_START(insert);
         this->transform_input(input);
-        BL_BENCH_END(insert, "transform_intput", input.size());
+        BL_BENCH_END(insert, "transform_input", input.size());
 
 
         // communication part
@@ -2656,6 +2652,7 @@ namespace dsc  // distributed std container
       using Base::find;
       using Base::erase;
       using Base::unique_size;
+      using Base::update;
 
       /**
        * @brief insert new elements in the distributed densehash_multimap.
@@ -2711,32 +2708,25 @@ namespace dsc  // distributed std container
 //
 //        ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
 
-        typename Base::Base::Base::Base::InputTransform trans;
 
+        //========== LOWER MEM VERSION
+
+        // transform input first.
         BL_BENCH_START(insert);
-        ::std::vector<::std::pair<Key, T> > temp;
-        temp.reserve(input.size());
-        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
-        ::std::transform(input.begin(), input.end(), emplace_iter, [&trans](Key const & x) {
-        	return ::std::make_pair(trans(x), T(1));
-        });
-        BL_BENCH_END(insert, "convert", input.size());
+        this->transform_input(input);
+        BL_BENCH_END(insert, "transform_input", input.size());
 
-
+        // then send the raw k-mers.
         // communication part
         if (this->comm.size() > 1) {
           BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          auto recv_counts = ::dsc::distribute(temp, this->key_to_rank, sorted_input, this->comm);
+          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
           BLISS_UNUSED(recv_counts);
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
-        //
-        //        // after communication, sort again to keep unique  - may not be needed
-        //        local_reduction(input, sorted_input);
-
-        // local compute part.  called by the communicator.
+        // once received, then transform and locally insert.
         BL_BENCH_START(insert);
         size_t count = 0;
         size_t step_size = 1000000;
@@ -2762,11 +2752,8 @@ namespace dsc  // distributed std container
         if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
           count = this->Base::local_insert(temp.begin(), temp.begin() + rem, pred);
         else
-          count = this->Base::local_insert(temp.begin(), temp.end());
+          count = this->Base::local_insert(temp.begin(), temp.begin() + rem);
         BL_BENCH_END(insert, "local_insert", this->local_size());
-
-
-        ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
 
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "count_densehash_map:insert_key", this->comm);

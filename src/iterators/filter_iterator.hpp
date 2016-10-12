@@ -95,7 +95,6 @@ namespace bliss
 
       public:
 
-        /// DEFINE iterator category. cannot be random access - mapped to bidirectional.
         using iter_cat = typename std::conditional<
             std::is_same<
                 typename std::iterator_traits<Iterator>::iterator_category,

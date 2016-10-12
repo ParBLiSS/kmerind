@@ -794,10 +794,12 @@ class DenseHashKmerMultimapTest : public ::testing::Test
       std::uniform_int_distribution<int> distribution1(min_val, max_val);
       std::uniform_int_distribution<int> distribution2(0, 3);
 
+      std::string acgt = "acgt";
+
       for (size_t i=0; i< iters; ++i) {
         T key;
         for (size_t j = 0; j < T::size; ++j) {
-        	key.nextFromChar(ALPHA::FROM_INDEX[distribution2(generator2)]);
+        	key.nextFromChar(ALPHA::FROM_ASCII[acgt[distribution2(generator2)]]);
         }
 
         uint32_t val = distribution1(generator1);
