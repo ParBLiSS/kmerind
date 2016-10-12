@@ -54,7 +54,7 @@
 #include "utils/benchmark_utils.hpp"
 
 template<typename IndexType, typename KmerType = typename IndexType::KmerType,
-		template<typename > class PreCanonicalizer = bliss::kmer::transform::identity>
+		template<typename > class PreCanonicalizer = bliss::transform::identity>
 std::vector<KmerType> readForQuery(const std::string & filename,
 		MPI_Comm comm) {
 
@@ -466,7 +466,7 @@ int main(int argc, char** argv) {
 	if (which == -1 || which == 11) {
 		using MapType = ::dsc::counting_unordered_map<
 		KmerType, uint32_t, int,
-		bliss::kmer::transform::identity,
+		bliss::transform::identity,
 		bliss::kmer::hash::cpp_std >;
 		testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>,
 				bliss::io::FASTQParser, bliss::kmer::transform::lex_less>(comm,
@@ -477,7 +477,7 @@ int main(int argc, char** argv) {
 	if (which == -1 || which == 12) {
 		using MapType = ::dsc::counting_unordered_map<
 		KmerType, uint32_t, int,
-		bliss::kmer::transform::identity,
+		bliss::transform::identity,
 		bliss::kmer::hash::identity >;
 		testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>,
 				bliss::io::FASTQParser, bliss::kmer::transform::lex_less>(comm,
@@ -488,7 +488,7 @@ int main(int argc, char** argv) {
 	if (which == -1 || which == 13) {
 		using MapType = ::dsc::counting_unordered_map<
 		KmerType, uint32_t, int,
-		bliss::kmer::transform::identity,
+		bliss::transform::identity,
 		bliss::kmer::hash::murmur >;
 		testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>,
 				bliss::io::FASTQParser, bliss::kmer::transform::lex_less>(comm,
@@ -499,7 +499,7 @@ int main(int argc, char** argv) {
 	if (which == -1 || which == 15) {
 		using MapType = ::dsc::counting_unordered_map<
 		KmerType, uint32_t, int,
-		bliss::kmer::transform::identity,
+		bliss::transform::identity,
 		bliss::kmer::hash::farm >;
 		testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>,
 				bliss::io::FASTQParser, bliss::kmer::transform::lex_less>(comm,
@@ -513,7 +513,7 @@ int main(int argc, char** argv) {
 		bliss::kmer::transform::xor_rev_comp,
 		bliss::kmer::hash::farm >;
 		testIndexPrecomputeCanonical<bliss::index::kmer::CountIndex<MapType>,
-				bliss::io::FASTQParser, bliss::kmer::transform::identity>(comm,
+				bliss::io::FASTQParser, bliss::transform::identity>(comm,
 				filename, "ST, hash, count index, xor in flight, farm hash.");
 		MPI_Barrier(comm);
 	}

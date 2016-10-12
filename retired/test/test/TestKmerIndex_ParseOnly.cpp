@@ -64,7 +64,7 @@ std::vector<KmerType> readForQuery(const std::string & filename, MPI_Comm comm) 
   std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
   if (extension.compare("fastq") == 0) {
     // default to including quality score iterators.
-    IndexType::template read_file<::bliss::io::FASTQParser, bliss::kmer::transform::identity, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+    IndexType::template read_file<::bliss::io::FASTQParser, bliss::transform::identity, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
   } else {
     throw std::invalid_argument("input filename extension is not supported.");
   }
@@ -83,7 +83,7 @@ std::vector<KmerType> readForQuery_direct(const std::string & filename, MPI_Comm
   std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
   if (extension.compare("fastq") == 0) {
     // default to including quality score iterators.
-    IndexType::template read_file_direct<::bliss::io::FASTQParser, bliss::kmer::transform::identity, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
+    IndexType::template read_file_direct<::bliss::io::FASTQParser, bliss::transform::identity, ::bliss::index::kmer::KmerParser<KmerType> >(filename, query, comm);
   } else {
     throw std::invalid_argument("input filename extension is not supported.");
   }

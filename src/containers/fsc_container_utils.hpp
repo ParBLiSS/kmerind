@@ -30,34 +30,37 @@
 #include <algorithm>  // upper bound, unique, sort, etc.
 
 #include "utils/benchmark_utils.hpp"
+#include "utils/filter_utils.hpp"
 
 namespace fsc {
 
-  struct TruePredicate {
-      template <typename T>
-      bool operator()(T const & x) const { return true; }
-      template <typename Iter>
-      bool operator()(Iter b, Iter e) const { return true; }
-  };
+//
+//  struct TruePredicate {
+//      template <typename T>
+//      bool operator()(T const & x) const { return true; }
+//      template <typename Iter>
+//      bool operator()(Iter b, Iter e) const { return true; }
+//  };
+//
+//
+//  // identity transform
+//  template <typename Key>
+//  struct identity {
+//      inline Key operator()(Key const & x) const {
+//        return std::forward<const Key>(x);
+//      }
+//      template <typename VAL>
+//      inline ::std::pair<Key, VAL> operator()(std::pair<Key, VAL> const & x) const {
+//        return std::forward<const std::pair<Key, VAL> >(x);
+//      }
+//      template <typename VAL>
+//      inline ::std::pair<const Key, VAL> operator()(std::pair<const Key, VAL> const & x) const {
+//        return std::forward<const std::pair<const Key, VAL> >(x);
+//      }
+//
+//  };
+//
 
-
-  // identity transform
-  template <typename Key>
-  struct identity {
-      inline Key operator()(Key const & x) const {
-        return x;
-      }
-      template <typename VAL>
-      inline ::std::pair<Key, VAL> operator()(std::pair<Key, VAL> const & x) const {
-        return x;
-      }
-  };
-
-
-//template <typename T>
-//struct IdentityTransform {
-//    inline T operator()(T const& v) const {return v;};
-//};
 
 
   template <typename Key, template <typename> class Hash, template <typename> class Transform>

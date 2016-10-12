@@ -64,6 +64,8 @@
 #include "common/alphabets.hpp"
 #include "common/kmer.hpp"
 
+#include "utils/transform_utils.hpp"
+
 // includ the murmurhash code.
 #ifndef _MURMURHASH3_H_
 #include <smhasher/MurmurHash3.cpp>
@@ -639,7 +641,7 @@ namespace bliss {
 //
 //      	      /// single or canonical (no transform), then compare raw values.  all k-mers are compared.
 //      	      template <typename KM = Kmer,
-//      	          typename std::enable_if<::std::is_same<Transform<KM>, ::bliss::kmer::transform::identity<KM> >::value, int>::type = 0>
+//      	          typename std::enable_if<::std::is_same<Transform<KM>, ::bliss::transform::identity<KM> >::value, int>::type = 0>
 //      	      inline bool operator()(Kmer const & x, Kmer const & y) const {
 //      	        return comp(x, y);
 //      	      }
@@ -647,7 +649,7 @@ namespace bliss {
 //      	      /// DNA or DNA16, partial k-mer (using unused bits), bimolecule (not identity transform).  keys are outside of input k-mer space
 //      	      template <typename KM = Kmer,
 //                  typename std::enable_if<
-//                  (!::std::is_same<Transform<Kmer>, ::bliss::kmer::transform::identity<Kmer> >::value) &&
+//                  (!::std::is_same<Transform<Kmer>, ::bliss::transform::identity<Kmer> >::value) &&
 //                      (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
 //                      ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value) &&
 //                       ((KM::nWords * sizeof(typename KM::KmerWordType) * 8 - KM::nBits) > 1), int>::type = 0>
@@ -663,7 +665,7 @@ namespace bliss {
 //              /// comparator for DNA6, bimolecule (not identity transform).  keys are outside of input k-mer space
 //              template <typename KM = Kmer,
 //                  typename std::enable_if<
-//                  (!::std::is_same<Transform<Kmer>, ::bliss::kmer::transform::identity<Kmer> >::value) &&
+//                  (!::std::is_same<Transform<Kmer>, ::bliss::transform::identity<Kmer> >::value) &&
 //                  ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA6>::value, int>::type = 0>
 //              inline bool operator()(Kmer const & x, Kmer const & y) const {
 //                typename KM::KmerWordType x_key_bits = (x.getData()[0] & 0x111);
@@ -678,7 +680,7 @@ namespace bliss {
 //      	      /// comparator for full DNA/DNA16 k-mers.  keys are inside input k-mer space.  compare explitictly.
 //              template <typename KM = Kmer,
 //                  typename std::enable_if<
-//                  (!::std::is_same<Transform<Kmer>, ::bliss::kmer::transform::identity<Kmer> >::value) &&
+//                  (!::std::is_same<Transform<Kmer>, ::bliss::transform::identity<Kmer> >::value) &&
 //                      (::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA>::value ||
 //                      ::std::is_same<typename KM::KmerAlphabet, ::bliss::common::DNA16>::value) &&
 //                       ((KM::nWords * sizeof(typename KM::KmerWordType) * 8 - KM::nBits) <= 1), int>::type = 0>

@@ -185,7 +185,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
       struct QueryProcessor {  // assume unique, always.
 
           // assumes that container is sorted. and exact overlap region is provided.  do not filter output here since it's an output iterator.
-          template <class DB, class QueryIter, class OutputIter, class Operator, class Predicate = ::fsc::TruePredicate>
+          template <class DB, class QueryIter, class OutputIter, class Operator, class Predicate = ::bliss::filter::TruePredicate>
           static size_t process(DB &db,
                                 QueryIter query_begin, QueryIter query_end,
                                 OutputIter &output, Operator & op,
@@ -194,7 +194,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
               if (query_begin == query_end) return 0;
 
               size_t count = 0;  // before size.
-              if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
+              if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
                 for (auto it = query_begin; it != query_end; ++it) {
                   count += op(db, *it, output, pred);
                 }
@@ -236,7 +236,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
               return 1;
           }
           // filtered element-wise.
-          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
+          template<class DB, typename Query, class OutputIter, class Predicate = ::bliss::filter::TruePredicate>
           size_t operator()(DB &db, Query const &v, OutputIter &output,
                             Predicate const& pred) const {
               auto range = db.equal_range(v);
@@ -262,7 +262,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
               return before - db.size();
           }
           /// Return how much was KEPT.
-          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
+          template<class DB, typename Query, class OutputIter, class Predicate = ::bliss::filter::TruePredicate>
           size_t operator()(DB &db, Query const &v, OutputIter &,
                             Predicate const & pred) {
               auto range = db.equal_range(v);
@@ -334,7 +334,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
+      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_a2a(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
         BL_BENCH_INIT(find);
 
@@ -432,7 +432,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
+      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
         BL_BENCH_INIT(find);
 
@@ -612,7 +612,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
+      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
         BL_BENCH_INIT(find);
 
@@ -732,7 +732,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
        * @param keys    content will be changed and reordered.
        * @param last
        */
-      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
+      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
           BL_BENCH_INIT(find);
 
@@ -909,7 +909,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
 //       * @param first
 //       * @param last
 //       */
-//      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
+//      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
 //      ::std::vector<::std::pair<Key, T> > find_irecv(LocalFind & find_element, ::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate()) const {
 //        BL_BENCH_INIT(find);
 //
@@ -1101,7 +1101,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
 //
 //      }
 
-      template <class LocalFind, typename Predicate = ::fsc::TruePredicate>
+      template <class LocalFind, typename Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(LocalFind & find_element, Predicate const& pred = Predicate()) const {
         ::std::vector<::std::pair<Key, T> > results;
 
@@ -1179,7 +1179,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(::std::vector<Key>& keys, bool sorted_input = false,
                                                         Predicate const& pred = Predicate() ) const {
         BL_BENCH_INIT(count);
@@ -1271,7 +1271,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
 
 
 
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, size_type> > count(Predicate const & pred = Predicate()) const {
         ::std::vector<::std::pair<Key, size_type> > results;
 
@@ -1295,7 +1295,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       size_t erase(::std::vector<Key>& keys, bool sorted_input = false, Predicate const& pred = Predicate() ) {
         // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return;
           size_t before = this->c.size();
@@ -1357,7 +1357,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
     	  size_t count = 0;
         if (this->local_empty()) return 0;
 
-          if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value) {
+          if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value) {
 
 
         auto keys = this->keys();  // already unique
@@ -1470,7 +1470,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
               return 0;
           }
           // filtered element-wise.
-          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
+          template<class DB, typename Query, class OutputIter, class Predicate = ::bliss::filter::TruePredicate>
           size_t operator()(DB &db, Query const &v, OutputIter &output,
                             Predicate const& pred) const {
               auto iter = db.find(v);
@@ -1507,28 +1507,28 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
       using Base::erase;
 
 
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate()) const {
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
@@ -1539,7 +1539,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate = ::bliss::filter::TruePredicate>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
@@ -1574,7 +1574,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
         BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
         size_t count = 0;
-        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
+        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
           count = this->Base::local_insert(input.begin(), input.end(), pred);
         else
           count = this->Base::local_insert(input.begin(), input.end());
@@ -1659,7 +1659,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
               return count;
           }
           // filtered element-wise.
-          template<class DB, typename Query, class OutputIter, class Predicate = ::fsc::TruePredicate>
+          template<class DB, typename Query, class OutputIter, class Predicate = ::bliss::filter::TruePredicate>
           size_t operator()(DB &db, Query const &v, OutputIter &output,
                             Predicate const& pred) const {
               auto range = db.equal_range(v);
@@ -1695,28 +1695,28 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
       using Base::erase;
 
 
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
           Predicate const& pred = Predicate()) const {
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find_a2a(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find_sendrecv(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = ::fsc::TruePredicate>
+      template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
           return Base::find(find_element, pred);
       }
@@ -1816,7 +1816,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate = ::bliss::filter::TruePredicate>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
@@ -1850,7 +1850,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
         BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
         size_t count = 0;
-        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
+        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
           count = this->Base::local_insert(input.begin(), input.end(), pred);
         else
           count = this->Base::local_insert(input.begin(), input.end());
@@ -2013,7 +2013,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate = ::bliss::filter::TruePredicate>
       size_t insert(std::vector<::std::pair<Key, T> >& input, bool sorted_input = false, Predicate const & pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
 
@@ -2051,7 +2051,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
         // local compute part.  called by the communicator.
         BL_BENCH_START(insert);
         size_t count = 0;
-        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
+        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
           count = this->local_insert(input.begin(), input.end(), pred);
         else
           count = this->local_insert(input.begin(), input.end());
@@ -2134,7 +2134,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
        * @param first
        * @param last
        */
-      template <typename Predicate = ::fsc::TruePredicate>
+      template <typename Predicate = ::bliss::filter::TruePredicate>
       size_t insert(std::vector< Key >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
         // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
         BL_BENCH_INIT(insert);
@@ -2179,7 +2179,7 @@ using OrderedMapParams = ::dsc::DistributedMapParams<
         // local compute part.  called by the communicator.
         BL_BENCH_START(insert);
         size_t count = 0;
-        if (!::std::is_same<Predicate, ::fsc::TruePredicate>::value)
+        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
           count = this->Base::local_insert(temp.begin(), temp.end(), pred);
         else
           count = this->Base::local_insert(temp.begin(), temp.end());

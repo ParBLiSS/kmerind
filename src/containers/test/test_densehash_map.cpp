@@ -31,6 +31,10 @@
 
 // include files to test
 #include "utils/logging.h"
+#include "utils/transform_utils.hpp"
+#include "utils/filter_utils.hpp"
+
+
 #include "common/kmer.hpp"
 #include "common/alphabets.hpp"
 #include "common/kmer_transform.hpp"
@@ -876,7 +880,7 @@ class DenseHashKmerMultimapTest : public ::testing::Test
     }
 
     template <typename Kmer = T, bool canonical,
-    		template <typename> class Transform = ::fsc::identity,
+    		template <typename> class Transform = ::bliss::transform::identity,
 			typename Hash, typename Equal>
     ::fsc::densehash_map<Kmer, uint32_t, ::bliss::kmer::hash::sparsehash::special_keys<Kmer, canonical>, Transform, Hash, Equal>
     make_kmer_map() {
@@ -913,7 +917,7 @@ class DenseHashKmerMultimapTest : public ::testing::Test
 
 
     template <typename Kmer = T, bool canonical,
-    		template <typename> class Transform = ::fsc::identity,
+    		template <typename> class Transform = ::bliss::transform::identity,
 			typename Hash, typename Equal>
     ::fsc::densehash_multimap<Kmer, uint32_t, ::bliss::kmer::hash::sparsehash::special_keys<Kmer, canonical>, Transform, Hash, Equal>
     make_kmer_multimap() {
@@ -950,7 +954,7 @@ class DenseHashKmerMultimapTest : public ::testing::Test
 
 
     template <typename Kmer = T, bool canonical = false,
-    		template <typename> class Transform = ::fsc::identity,
+    		template <typename> class Transform = ::bliss::transform::identity,
 			template <typename> class Hash = std::hash,
 			template <typename> class Equal = std::equal_to,
 			template <typename> class Less = std::less
@@ -1002,7 +1006,7 @@ class DenseHashKmerMultimapTest : public ::testing::Test
 
 
     template <typename Kmer = T, bool canonical = false,
-    		template <typename> class Transform = ::fsc::identity,
+    		template <typename> class Transform = ::bliss::transform::identity,
 			template <typename> class Hash = std::hash,
 			template <typename> class Equal = std::equal_to,
 			template <typename> class Less = std::less
@@ -1074,7 +1078,7 @@ class DenseHashKmerMultimapTest : public ::testing::Test
 
 
     template <typename Kmer = T, bool canonical = false,
-    		template <typename> class Transform = ::fsc::identity,
+    		template <typename> class Transform = ::bliss::transform::identity,
 			template <typename> class Hash = std::hash,
 			template <typename> class Equal = std::equal_to,
 			template <typename> class Less = std::less
@@ -1111,7 +1115,7 @@ class DenseHashKmerMultimapTest : public ::testing::Test
     }
 
     template <typename Kmer = T, bool canonical = false,
-    		template <typename> class Transform = ::fsc::identity,
+    		template <typename> class Transform = ::bliss::transform::identity,
 			template <typename> class Hash = std::hash,
 			template <typename> class Equal = std::equal_to,
 			template <typename> class Less = std::less
@@ -1164,7 +1168,7 @@ class DenseHashKmerMultimapTest : public ::testing::Test
 
 
     template <typename Kmer = T, bool canonical = false,
-    		template <typename> class Transform = ::fsc::identity,
+    		template <typename> class Transform = ::bliss::transform::identity,
 			template <typename> class Hash = std::hash,
 			template <typename> class Equal = std::equal_to,
 			template <typename> class Less = std::less
@@ -1238,7 +1242,7 @@ class DenseHashKmerMultimapTest : public ::testing::Test
 
 
     template <typename Kmer = T, bool canonical = false,
-    		template <typename> class Transform = ::fsc::identity,
+    		template <typename> class Transform = ::bliss::transform::identity,
 			template <typename> class Hash = std::hash,
 			template <typename> class Equal = std::equal_to,
 			template <typename> class Less = std::less
@@ -1290,7 +1294,7 @@ using HASH_K = ::bliss::kmer::hash::farm<K, false>;
 TYPED_TEST_P(DenseHashKmerMultimapTest, single_map_insert)
 {
 	this->template test_map_insert<TypeParam, false,
-									  ::fsc::identity,
+									  ::bliss::transform::identity,
 									  HASH_K, std::equal_to, std::less>();
 }
 
@@ -1299,7 +1303,7 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, single_map_equal_range)
 {
 
   this->template test_map_equal_range<TypeParam, false,
-								  ::fsc::identity,
+								  ::bliss::transform::identity,
 								  HASH_K, std::equal_to, std::less>();
 
 }
@@ -1307,14 +1311,14 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, single_map_equal_range)
 TYPED_TEST_P(DenseHashKmerMultimapTest, single_map_count)
 {
   this->template test_map_count<TypeParam, false,
-								  ::fsc::identity,
+								  ::bliss::transform::identity,
 								  HASH_K, std::equal_to, std::less>();
 }
 
 TYPED_TEST_P(DenseHashKmerMultimapTest, canonical_map_insert)
 {
 	this->template test_map_insert<TypeParam, true,
-									  ::fsc::identity,
+									  ::bliss::transform::identity,
 									  HASH_K, std::equal_to, std::less>();
 }
 
@@ -1323,14 +1327,14 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, canonical_map_insert)
 TYPED_TEST_P(DenseHashKmerMultimapTest, canonical_map_equal_range)
 {
 	  this->template test_map_equal_range<TypeParam, true,
-									  ::fsc::identity,
+									  ::bliss::transform::identity,
 									  HASH_K, std::equal_to, std::less>();
 }
 
 TYPED_TEST_P(DenseHashKmerMultimapTest, canonical_map_count)
 {
 	  this->template test_map_count<TypeParam, true,
-									  ::fsc::identity,
+									  ::bliss::transform::identity,
 									  HASH_K, std::equal_to, std::less>();
 
 }
@@ -1343,7 +1347,7 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, bimolecule_map_insert)
 									  HASH_K, std::equal_to, std::less>();
 
 	//  using SPLITTER = typename std::conditional<((TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits) > 1),
-//		  ::fsc::TruePredicate,
+//		  ::bliss::filter::TruePredicate,
 //		   ::fsc::TransformedPredicate<TypeParam, ::bliss::utils::KmerInLowerSpace, ::bliss::kmer::transform::lex_less> >::type;
 //
 //
@@ -1363,7 +1367,7 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, bimolecule_map_equal_range)
 	 									  HASH_K, std::equal_to, std::less>();
 
 //  using SPLITTER = typename std::conditional<((TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits) > 1),
-//      ::fsc::TruePredicate,
+//      ::bliss::filter::TruePredicate,
 //       ::fsc::TransformedPredicate<TypeParam, ::bliss::utils::KmerInLowerSpace, ::bliss::kmer::transform::lex_less> >::type;
 //
 //
@@ -1383,7 +1387,7 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, bimolecule_map_count)
 	  									  HASH_K, std::equal_to, std::less>();
 
 //  using SPLITTER = typename std::conditional<((TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits) > 1),
-//      ::fsc::TruePredicate,
+//      ::bliss::filter::TruePredicate,
 //       ::fsc::TransformedPredicate<TypeParam, ::bliss::utils::KmerInLowerSpace, ::bliss::kmer::transform::lex_less> >::type;
 //
 //
@@ -1398,31 +1402,31 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, bimolecule_map_count)
 TYPED_TEST_P(DenseHashKmerMultimapTest, single_multimap_insert)
 {
 //  using SPLITTER = typename std::conditional<((TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits) > 1),
-//      ::fsc::TruePredicate,  ::bliss::utils::KmerInLowerSpace<TypeParam> >::type;
+//      ::bliss::filter::TruePredicate,  ::bliss::utils::KmerInLowerSpace<TypeParam> >::type;
 //
 //  using HASH = ::bliss::kmer::hash::farm<TypeParam, false>;
 //
-//  using EQUAL = ::fsc::TransformedComparator<TypeParam, ::std::equal_to, ::bliss::kmer::transform::identity >;
-//  using LESS = ::fsc::TransformedComparator<TypeParam, ::std::less, ::bliss::kmer::transform::identity >;
+//  using EQUAL = ::fsc::TransformedComparator<TypeParam, ::std::equal_to, ::bliss::transform::identity >;
+//  using LESS = ::fsc::TransformedComparator<TypeParam, ::std::less, ::bliss::transform::identity >;
 //
 //  this->template test_multimap_insert<    TypeParam, false, SPLITTER, HASH, EQUAL, LESS>();
 
 	this->template test_multimap_insert<TypeParam, false,
-									  ::fsc::identity,
+									  ::bliss::transform::identity,
 									  HASH_K, std::equal_to, std::less>();
 
 }
 TYPED_TEST_P(DenseHashKmerMultimapTest, single_multimap_equal_range)
 {
 	  this->template test_multimap_equal_range<TypeParam, false,
-									  ::fsc::identity,
+									  ::bliss::transform::identity,
 									  HASH_K, std::equal_to, std::less>();
 
 }
 TYPED_TEST_P(DenseHashKmerMultimapTest, single_multimap_count)
 {
 	  this->template test_multimap_count<TypeParam, false,
-									  ::fsc::identity,
+									  ::bliss::transform::identity,
 									  HASH_K, std::equal_to, std::less>();
 
 }
@@ -1431,7 +1435,7 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, single_multimap_count)
 TYPED_TEST_P(DenseHashKmerMultimapTest, canonical_multimap_insert)
 {
 	this->template test_multimap_insert<TypeParam, true,
-									  ::fsc::identity,
+									  ::bliss::transform::identity,
 									  HASH_K, std::equal_to, std::less>();
 
 }
@@ -1440,7 +1444,7 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, canonical_multimap_insert)
 TYPED_TEST_P(DenseHashKmerMultimapTest, canonical_multimap_equal_range)
 {
 	  this->template test_multimap_equal_range<TypeParam, true,
-									  ::fsc::identity,
+									  ::bliss::transform::identity,
 									  HASH_K, std::equal_to, std::less>();
 
 }
@@ -1448,7 +1452,7 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, canonical_multimap_equal_range)
 TYPED_TEST_P(DenseHashKmerMultimapTest, canonical_multimap_count)
 {
 	  this->template test_multimap_count<TypeParam, true,
-									  ::fsc::identity,
+									  ::bliss::transform::identity,
 									  HASH_K, std::equal_to, std::less>();
 
 }
@@ -1461,7 +1465,7 @@ TYPED_TEST_P(DenseHashKmerMultimapTest, bimolecule_multimap_insert)
 
 
 	//  using SPLITTER = typename std::conditional<((TypeParam::nWords * sizeof(typename TypeParam::KmerWordType) * 8 - TypeParam::nBits) > 1),
-//      ::fsc::TruePredicate,
+//      ::bliss::filter::TruePredicate,
 //       ::fsc::TransformedPredicate<TypeParam, ::bliss::utils::KmerInLowerSpace, ::bliss::kmer::transform::lex_less> >::type;
 //
 //

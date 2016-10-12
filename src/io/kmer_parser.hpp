@@ -52,6 +52,8 @@
 #include "common/base_types.hpp"
 #include "common/sequence.hpp"
 #include "utils/kmer_utils.hpp"
+#include "utils/filter_utils.hpp"
+
 #include "index/kmer_hash.hpp"
 #include "common/kmer_transform.hpp"
 
@@ -117,7 +119,7 @@ public:
 	  // not symmetric - want to keep seq_range values preferentially.
 	  ::bliss::partition::range<size_t> valid_seq_range = ::bliss::partition::range<size_t>::intersect(seq_range, valid_r);
 
-	  //std::cout << "valid seq range " << valid_seq_range << std::endl;
+	  //std::cout << "valid seq range: " << valid_seq_range << std::endl;
 
 	  typename SeqType::IteratorType seq_begin = read.seq_begin;
 	  std::advance(seq_begin, (valid_seq_range.start - seq_range.start));  // the new positions.
@@ -147,7 +149,10 @@ public:
 //	  std::cout << " dist from front " << std::distance(read.seq_begin, seq_begin) << " to end " << std::distance(seq_end, read.seq_end) << std::endl;
 //	  std::cout << " read dist  " << std::distance(read.seq_begin, read.seq_end) << " valid " << std::distance(seq_begin, seq_end) << std::endl;
 //	  std::cout << " has window size? " << i << " of window " << window << std::endl;
-
+//	  std::cout << " seq valid range: [" << (read.seq_global_offset() + std::distance(read.seq_begin, seq_begin)) << "-" << (read.seq_global_offset() + std::distance(read.seq_begin, seq_end)) << ")" <<
+//			  " assigned range: [" << read.seq_global_offset() << "-" << (read.seq_global_offset() + std::distance(read.seq_begin, read.seq_end)) << ")" <<
+//			  " full range: [" << read.id.get_pos() << "-" << (read.id.get_pos() + read.record_size) << ")" <<
+//			  std::endl;
 	  return std::make_tuple(seq_begin, seq_end, i >= window);
   }
 
@@ -224,7 +229,7 @@ public:
    * @tparam SeqType      type of sequence.  inferred.
    * @tparam OutputIt     output iterator type, inferred.
    */
-  template <typename SeqType, typename OutputIt, typename Predicate = ::fsc::TruePredicate>
+  template <typename SeqType, typename OutputIt, typename Predicate = ::bliss::filter::TruePredicate>
   OutputIt operator()(SeqType const & read, OutputIt output_iter, Predicate const & pred = Predicate()) {
 
     static_assert(std::is_same<KmerType, typename ::std::iterator_traits<OutputIt>::value_type>::value,
@@ -276,7 +281,7 @@ public:
 //      return output_iter;
 //
 //    } else {
-////      if (::std::is_same<typename std::remove_reference<typename std::remove_cv<Predicate>::type>::type, ::fsc::TruePredicate>::value)
+////      if (::std::is_same<typename std::remove_reference<typename std::remove_cv<Predicate>::type>::type, ::bliss::filter::TruePredicate>::value)
 //        return ::std::copy(start, end, output_iter);
 ////      else
 ////        return ::std::copy_if(start, end, output_iter, pred);
@@ -456,7 +461,7 @@ public:
    * @tparam SeqType      type of sequence.  inferred.
    * @tparam OutputIt     output iterator type, inferred.
    */
-  template <typename SeqType, typename OutputIt, typename Predicate = ::fsc::TruePredicate>
+  template <typename SeqType, typename OutputIt, typename Predicate = ::bliss::filter::TruePredicate>
   OutputIt operator()(SeqType const & read, OutputIt output_iter, Predicate const & pred = Predicate()) {
 
     static_assert(std::is_same<TupleType, typename ::std::iterator_traits<OutputIt>::value_type>::value,
@@ -763,7 +768,7 @@ public:
    * @tparam SeqType      type of sequence.  inferred.
    * @tparam OutputIt     output iterator type, inferred.
    */
-  template <typename SeqType, typename OutputIt, typename Predicate = ::fsc::TruePredicate>
+  template <typename SeqType, typename OutputIt, typename Predicate = ::bliss::filter::TruePredicate>
   OutputIt operator()(SeqType const & read, OutputIt output_iter, Predicate const & pred = Predicate()) {
 
 
@@ -1000,7 +1005,7 @@ public:
    * @tparam SeqType      type of sequence.  inferred.
    * @tparam OutputIt     output iterator type, inferred.
    */
-  template <typename SeqType, typename OutputIt, typename Predicate = ::fsc::TruePredicate>
+  template <typename SeqType, typename OutputIt, typename Predicate = ::bliss::filter::TruePredicate>
   OutputIt operator()(SeqType const & read, OutputIt output_iter, Predicate const & pred = Predicate()) {
 
     static_assert(std::is_same<TupleType, typename ::std::iterator_traits<OutputIt>::value_type>::value,

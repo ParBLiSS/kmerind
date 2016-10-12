@@ -37,11 +37,13 @@
 #include <iostream>  // for system("pause");
 
 #include "utils/logging.h"
+#include "utils/transform_utils.hpp"
 
 #include "common/alphabets.hpp"
 #include "common/kmer.hpp"
 #include "common/base_types.hpp"
 #include "utils/kmer_utils.hpp"
+#include "utils/transform_utils.hpp"
 
 #include "io/mxx_support.hpp"
 
@@ -155,7 +157,7 @@ using CountType = uint32_t;
 	using DistTrans = bliss::kmer::transform::xor_rev_comp<KM>;
 #else //if (pDistTrans == IDEN)
 	template <typename KM>
-	using DistTrans = bliss::kmer::transform::identity<KM>;
+	using DistTrans = bliss::transform::identity<KM>;
 #endif
 
 // distribution hash

@@ -29,6 +29,9 @@
 #include "iterators/filter_iterator.hpp"
 #include "iterators/transform_iterator.hpp"
 
+#include "utils/transform_utils.hpp"
+#include "utils/filter_utils.hpp"
+
 namespace bliss
 {
 
@@ -40,8 +43,8 @@ namespace bliss
   	   * @details	e.g. get kmers from kmer_count pair whose count is above threshold.
   	   */
   	  template<typename Iterator,
-			 typename Filter = ::fsc::TruePredicate,
-			 typename Transform = ::bliss::kmer::transform::Identity<typename ::std::iterator_traits<Iterator>::value_type>
+			 typename Filter = ::bliss::filter::TruePredicate,
+			 typename Transform = ::bliss::transform::identity<typename ::std::iterator_traits<Iterator>::value_type>
   		>
   	  using filter_transform_iterator = ::bliss::iterator::transform_iterator<
   			  ::bliss::iterator::filter_iterator<Filter, Iterator>,
@@ -49,8 +52,8 @@ namespace bliss
 
   	  // make start iterator
   	  template<typename Iterator,
-			 typename Filter = ::fsc::TruePredicate,
-			 typename Transform = ::bliss::kmer::transform::Identity<typename ::std::iterator_traits<Iterator>::value_type>
+			 typename Filter = ::bliss::filter::TruePredicate,
+			 typename Transform = ::bliss::transform::identity<typename ::std::iterator_traits<Iterator>::value_type>
   		>
   	  filter_transform_iterator<Iterator, Filter, Transform>
   	  make_filter_transform_iterator(Iterator curr, Iterator end,
@@ -60,8 +63,8 @@ namespace bliss
   	  }
   	  // make end iterator
   	  template<typename Iterator,
-			 typename Filter = ::fsc::TruePredicate,
-			 typename Transform = ::bliss::kmer::transform::Identity<typename ::std::iterator_traits<Iterator>::value_type>
+			 typename Filter = ::bliss::filter::TruePredicate,
+			 typename Transform = ::bliss::transform::identity<typename ::std::iterator_traits<Iterator>::value_type>
   		>
   	  filter_transform_iterator<Iterator, Filter, Transform>
   	  make_filter_transform_iterator(Iterator end,
@@ -79,8 +82,8 @@ namespace bliss
   	   * @tparam Predicate   operates on PredicateInputIterator and return true or false.
   	   */
   	  template <typename Iterator, typename PredicateInputIterator,
-	  	  	  	typename Predicate = ::fsc::TruePredicate,
-				typename Transform = ::bliss::kmer::transform::Identity<
+	  	  	  	typename Predicate = ::bliss::filter::TruePredicate,
+				typename Transform = ::bliss::transform::identity<
 					std::pair<typename ::std::iterator_traits<Iterator>::value_type,
 					          typename ::std::iterator_traits<PredicateInputIterator>::value_type
 							 >
@@ -97,8 +100,8 @@ namespace bliss
 
   	  /// make start elemental_filter_transform_iterator
   	  template<typename Iterator, typename PredicateInputIterator,
-			 typename Predicate = ::fsc::TruePredicate,
-				typename Transform = ::bliss::kmer::transform::Identity<
+			 typename Predicate = ::bliss::filter::TruePredicate,
+				typename Transform = ::bliss::transform::identity<
 					std::pair<typename ::std::iterator_traits<Iterator>::value_type,
 					          typename ::std::iterator_traits<PredicateInputIterator>::value_type
 							 >
@@ -121,8 +124,8 @@ namespace bliss
 
   	  /// make end elemental_filter_transform_iterator
   	  template<typename Iterator, typename PredicateInputIterator,
-			 typename Predicate = ::fsc::TruePredicate,
-				typename Transform = ::bliss::kmer::transform::Identity<
+			 typename Predicate = ::bliss::filter::TruePredicate,
+				typename Transform = ::bliss::transform::identity<
 					std::pair<typename ::std::iterator_traits<Iterator>::value_type,
 					          typename ::std::iterator_traits<PredicateInputIterator>::value_type
 							 >
@@ -153,7 +156,7 @@ namespace bliss
 
   	  /// make start elemental_filter_transform_iterator
   	  template<typename Iterator, typename PredicateInputIterator,
-			 typename Predicate = ::fsc::TruePredicate
+			 typename Predicate = ::bliss::filter::TruePredicate
   		>
   	  elemental_filter_transform_iterator<Iterator, PredicateInputIterator, Predicate,
 	  	  ::bliss::iterator::tuple_element_extractor<0> >
@@ -173,7 +176,7 @@ namespace bliss
 
   	  /// make end elemental_filter_iterator
   	  template<typename Iterator, typename PredicateInputIterator,
-			 typename Predicate = ::fsc::TruePredicate
+			 typename Predicate = ::bliss::filter::TruePredicate
   		>
   	  elemental_filter_transform_iterator<Iterator, PredicateInputIterator, Predicate,
 	  	  ::bliss::iterator::tuple_element_extractor<0> >

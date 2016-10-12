@@ -26,6 +26,7 @@
 #include "mxx/comm.hpp"
 
 #include "utils/benchmark_utils.hpp"
+#include "utils/transform_utils.hpp"
 
 // comparison of some hash tables.  note that this is not exhaustive and includes only the well tested ones and my own.  not so much
 // the one-off ones people wrote.
@@ -358,7 +359,7 @@ void benchmark_densehash_map(size_t const count, size_t const query_frac, ::mxx:
   // no transform involved.
   ::fsc::densehash_map<Kmer, Value, 
 	::bliss::kmer::hash::sparsehash::special_keys<Kmer, false>,
-	::fsc::identity,
+	::bliss::transform::identity,
 	::bliss::kmer::hash::farm<Kmer, false> > map(count);
   BL_BENCH_END(map, "reserve", count);
 
@@ -423,7 +424,7 @@ void benchmark_densehash_full_map(size_t const count, size_t const query_frac, :
   // no transform involved.
   ::fsc::densehash_map<Kmer, Value, 
 	::bliss::kmer::hash::sparsehash::special_keys<Kmer, canonical>,
-	::fsc::identity,
+	::bliss::transform::identity,
 	::bliss::kmer::hash::farm<Kmer, false> > map(count);
 
   BL_BENCH_END(map, "reserve", count);
@@ -555,7 +556,7 @@ void benchmark_densehash_multimap(size_t const count, size_t const query_frac, :
   // no transform involved.
   ::fsc::densehash_multimap<Kmer, Value, 
 	::bliss::kmer::hash::sparsehash::special_keys<Kmer, false>,
-	::fsc::identity,
+	::bliss::transform::identity,
 	::bliss::kmer::hash::farm<Kmer, false> > map(count);
 
   BL_BENCH_END(map, "reserve", count);
@@ -618,7 +619,7 @@ void benchmark_densehash_full_multimap(size_t const count, size_t const query_fr
   // no transform involved.
   ::fsc::densehash_multimap<Kmer, Value, 
 	::bliss::kmer::hash::sparsehash::special_keys<Kmer, canonical>,
-	::fsc::identity,
+	::bliss::transform::identity,
 	::bliss::kmer::hash::farm<Kmer, false> > map(count);
 
   BL_BENCH_END(map, "reserve", count);

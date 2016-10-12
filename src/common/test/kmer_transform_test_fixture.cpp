@@ -38,6 +38,7 @@
 #include "common/alphabet_traits.hpp"
 #include "common/kmer_transform.hpp"
 
+#include "utils/transform_utils.hpp"
 
 
 // include files to test
@@ -74,7 +75,7 @@ TYPED_TEST_P(KmerTransformTest, identity)
   auto km = this->kmer;
   auto gold = this->kmer;
 
-  bliss::kmer::transform::identity<TypeParam> op;
+  bliss::transform::identity<TypeParam> op;
 
   bool same = true;
   bool local_same;
