@@ -260,7 +260,7 @@ target_link_libraries(benchmark_hashtables ${EXTRA_LIBS})
 
 endif(BL_BENCHMARK)
 
-if (BUILD_TEST_APPLICATIONS)
+if (BUILD_EXAMPLE_APPLICATIONS)
 
 
   add_executable(testKmerIndex-fastq BenchmarkKmerIndex.cpp)
@@ -393,5 +393,5 @@ endif(Boost_FOUND)
 
 
 
-endif(BUILD_TEST_APPLICATIONS)
+endif(BUILD_EXAMPLE_APPLICATIONS)
 

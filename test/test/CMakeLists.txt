@@ -4,7 +4,7 @@ include("${PROJECT_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 
 
-if (BUILD_TEST_APPLICATIONS)
+if (BUILD_EXAMPLE_APPLICATIONS)
 
 #----------------
 # COMMENTED OUT because the template parameters are not yet updated.

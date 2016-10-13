@@ -904,7 +904,8 @@ add_subdirectory(test/compiler_tests)
 add_subdirectory(test/benchmark)
 add_subdirectory(utils)
 
-add_subdirectory(ext/mxx)
+#disabled on EDISON so that the gtest libs are not linked.
+#add_subdirectory(ext/mxx)
 
 # Install Settings
 
