@@ -887,7 +887,10 @@ include_directories("${EXT_PROJECTS_DIR}/sparsehash/src")
 
 
 add_subdirectory(src/utils)
-set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)
+if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+	set(EXTRA_LIBS ${EXTRA_LIBS} bliss-utils)
+endif()
 
 add_subdirectory(src/containers)
 add_subdirectory(src/partition)

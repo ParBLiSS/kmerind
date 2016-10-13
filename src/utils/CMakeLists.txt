@@ -4,8 +4,12 @@ include("${PROJECT_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 
 ## EXECUTABLES
-add_library(bliss-utils logging.cpp)
-target_link_libraries(bliss-utils ${EXTRA_LIBS})
+if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
+                LOG_ENGINE STREQUAL "BOOST_CUSTOM")
+
+	add_library(bliss-utils logging.cpp)
+	target_link_libraries(bliss-utils ${EXTRA_LIBS})
+endif()
 
 if (ENABLE_TESTING)
 
@@ -13,7 +17,7 @@ if (ENABLE_TESTING)
 if (IS_DIRECTORY ./test)
     # get all files from ./test
     FILE(GLOB TEST_FILES test/test_*.cpp)
-    bliss_add_test(${TEST_NAME} TRUE ${TEST_FILES})
+    bliss_add_test(${TEST_NAME} FALSE ${TEST_FILES})
     
 if (BL_BENCHMARK)
     FILE(GLOB BENCHMARK_FILES test/benchmark_*.cpp)
@@ -22,7 +26,7 @@ endif()
     
     # get all mpi test files from ./test
     FILE(GLOB MPI_TEST_FILES test/mpi_test_*.cpp)
-    bliss_add_mpi_test(${TEST_NAME} TRUE ${MPI_TEST_FILES})
+    bliss_add_mpi_test(${TEST_NAME} FALSE ${MPI_TEST_FILES})
 endif()
 
 # load the testing:
