@@ -226,7 +226,7 @@ namespace dsc {
       BL_BENCH_INIT(distribute);
         // go for speed.   mxx::bucketing uses extra copy.  okay, since all2all also does.
 
-  	if (_comm.rank() == 0) printf("start\n");  fflush(stdout);
+  	if (_comm.rank() == 0) { printf("start\n");  fflush(stdout); }
 
 
         BL_BENCH_START(distribute);
@@ -234,7 +234,7 @@ namespace dsc {
         std::vector<size_t> send_counts = mxx::bucketing_inplace(vals, to_rank, _comm.size());
         BL_BENCH_END(distribute, "bucket", vals.size());
 
-    	if (_comm.rank() == 0) printf("bucket\n");  fflush(stdout);
+    	if (_comm.rank() == 0) { printf("bucket\n");  fflush(stdout); }
 
     	double mean, stdev;
     	for (auto it = send_counts.begin(), max = send_counts.end(); it != max; ++it) {
@@ -243,7 +243,7 @@ namespace dsc {
     	}
     	mean /= _comm.size();
     	stdev -= sqrt((stdev / _comm.size()) - (mean * mean));
-    	if (_comm.rank() == 0) printf("mean: %f, stdev %f\n", mean, stdev);
+    	if (_comm.rank() == 0) { printf("mean: %f, stdev %f\n", mean, stdev); fflush(stdout); }
 
 
         // using set is okay.
@@ -252,7 +252,7 @@ namespace dsc {
         ::fsc::bucket_reduce(vals, send_counts, sorted_input, reducer);
         BL_BENCH_END(distribute, "reduce", vals.size());
 
-    	if (_comm.rank() == 0) printf("reduce\n");  fflush(stdout);
+    	if (_comm.rank() == 0) { printf("reduce\n");  fflush(stdout); }
 
 
         // distribute (communication part)
@@ -261,13 +261,13 @@ namespace dsc {
         BL_BENCH_END(distribute, "a2a", vals.size());
 
 
-    	if (_comm.rank() == 0) printf("a2a\n");  fflush(stdout);
+    	if (_comm.rank() == 0) { printf("a2a\n");  fflush(stdout); }
 
         BL_BENCH_START(distribute);
         std::vector<size_t> recv_counts= mxx::all2all(send_counts, _comm);
         BL_BENCH_END(distribute, "a2a_counts", vals.size());
 
-    	if (_comm.rank() == 0) printf("a2acounts\n");  fflush(stdout);
+    	if (_comm.rank() == 0) { printf("a2acounts\n");  fflush(stdout); }
 
         BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute_reduce", _comm);
 

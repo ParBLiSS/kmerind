@@ -365,9 +365,10 @@ using SortedMapParams = ::dsc::DistributedMapParams<
       bool is_globally_sorted() const {
         if (this->comm.size() == 1)
           return globally_sorted;
-        else // all reduce
+        else { // all reduce
           globally_sorted = mxx::all_of(globally_sorted, this->comm);
           return globally_sorted;
+        }
       }
 
 
