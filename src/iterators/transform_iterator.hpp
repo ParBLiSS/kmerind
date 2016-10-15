@@ -648,6 +648,14 @@ public:
 
 };
 
+
+  /// convenience function to make a transform iterator.  this allows types to be autodeduced.
+  template <typename Iterator, typename Transform>
+  transform_iterator<Iterator, Transform> make_transform_iterator(Iterator iter, Transform const & trans) {
+    return transform_iterator<Iterator, Transform>(iter, trans);
+  }
+
+
 } // iterator
 } // bliss
 #endif /* BLISS_ITERATORS_TRANSFORM_ITERATOR_HPP */

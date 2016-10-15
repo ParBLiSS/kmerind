@@ -1477,7 +1477,7 @@ namespace dsc  // distributed std container
             // distribute (communication part)
             std::vector<size_t> recv_counts;
             if (remove_duplicate) {
-				::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+              ::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
 								typename Base::StoreTransformedFunc(),
 								typename Base::StoreTransformedEqual()).swap(recv_counts);
             } else {
@@ -1517,9 +1517,9 @@ namespace dsc  // distributed std container
             BL_BENCH_START(count);
             if (remove_duplicate) {
 				// keep unique keys
-				::fsc::unique(keys, sorted_input,
-						typename Base::StoreTransformedFunc(),
-						typename Base::StoreTransformedEqual());
+              ::fsc::unique(keys, sorted_input,
+                            typename Base::StoreTransformedFunc(),
+                            typename Base::StoreTransformedEqual());
             }
             BL_BENCH_END(count, "uniq1", keys.size());
 
@@ -1609,6 +1609,80 @@ namespace dsc  // distributed std container
         if (this->comm.size() > 1) this->comm.barrier();
         return results;
       }
+
+
+
+      /**
+       * @brief count elements with the specified keys in the distributed densehash_multimap.
+       * @details does not remove duplicate during the processing since that is slow.
+       * @note  depend on STABLE bucketing by mxx.
+       *
+       *
+       * @param first
+       * @param last
+       * @param return 0 if does not exist, 1 if does.  one to one to input.
+       */
+      template <class Predicate = ::bliss::filter::TruePredicate>
+      ::std::vector<unsigned char> exists(::std::vector<Key>& keys, bool sorted_input = false,
+                                                        Predicate const& pred = Predicate() ) const {
+          BL_BENCH_INIT(exists);
+          using result_type = std::vector<unsigned char>;
+          result_type results;
+
+          // process even if local container is empty.
+          if (::dsc::empty(keys, this->comm)) {
+            BL_BENCH_REPORT_MPI_NAMED(exists, "base_densehash_map:exists", this->comm);
+            return results;
+          }
+
+          ::fsc::back_emplace_iterator<result_type > emplace_iter(results);
+          BL_BENCH_START(exists);
+          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+          this->transform_input(keys);
+          BL_BENCH_END(exists, "transform_intput", keys.size());
+
+
+          std::vector<size_t> recv_counts;
+          if (this->comm.size() > 1) {
+
+            BL_BENCH_START(exists);
+            // distribute (communication part)
+            ::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm).swap(recv_counts);
+            BL_BENCH_END(exists, "dist_query", keys.size());
+
+//            for (int p = 0; p < this->comm.size(); ++p) {
+//              std::cout << "rank " << this->comm.rank() << "->" << p << ":" << recv_counts[p] << std::endl;
+//            }
+          }
+
+          // local count. memory utilization a potential problem.
+          // do for each src proc one at a time.
+          BL_BENCH_START(exists);
+          results.reserve(keys.size() );                   // TODO:  should estimate coverage.
+          BL_BENCH_END(exists, "reserve", results.capacity());
+
+          BL_BENCH_START(exists);
+          for (auto it = keys.begin(); it != keys.end(); ++it) {
+            if (::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+              results.emplace_back(this->c.exists(*it) ? 1 : 0);
+            else
+              results.emplace_back((pred(*it) && this->c.exists(*it)) ? 1 : 0);
+          }
+          BL_BENCH_END(exists, "local_count", results.size());
+
+          if (this->comm.size() > 1) {
+            // send back using the constructed recv count
+            BL_BENCH_COLLECTIVE_START(exists, "a2a2", this->comm);
+            mxx::all2allv(results, recv_counts, this->comm).swap(results);
+            BL_BENCH_END(exists, "a2a2", results.size());
+          }
+
+          BL_BENCH_REPORT_MPI_NAMED(exists, "base_densehash:exists", this->comm);
+
+          return results;
+
+      }
+
 
 
       /**
@@ -1935,11 +2009,22 @@ namespace dsc  // distributed std container
 
         BL_BENCH_START(insert);
         // local compute part.  called by the communicator.
+        this->c.resize(input.size() / 2);
+
         size_t count = 0;
         if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
           count = this->Base::local_insert(input, pred);
         else
           count = this->Base::local_insert(input);
+
+        std::cout << "rank " << this->comm.rank() <<
+          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+
+        this->c.resize(0);
+        std::cout << "rank " << this->comm.rank() <<
+          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+
+
         BL_BENCH_END(insert, "insert", this->c.size());
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "hashmap:insert", this->comm);
@@ -2350,6 +2435,8 @@ namespace dsc  // distributed std container
           count = this->Base::local_insert(input, pred);
         else
           count = this->Base::local_insert(input);
+
+
         BL_BENCH_END(insert, "insert", this->c.size());
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "hash_multimap:insert", this->comm);
@@ -2440,10 +2527,12 @@ namespace dsc  // distributed std container
           //this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
-            auto result = this->c.insert(*it);
+            auto v = *it;
+
+            auto result = this->c.insert(v);
             if (!(result.second)) {
               // failed insertion - means an entry is already there, so reduce
-              result.first->second = r(result.first->second, it->second);
+              result.first->second = r(result.first->second, v.second);
             }
           }
 
@@ -2464,11 +2553,12 @@ namespace dsc  // distributed std container
           //this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
-            if (pred(*it)) {
-              auto result = this->c.insert(*it);
+            auto v = *it;
+            if (pred(v)) {
+              auto result = this->c.insert(v);
               if (!(result.second)) {
                 // failed insertion - means an entry is already there, so reduce
-                result.first->second = r(result.first->second, it->second);
+                result.first->second = r(result.first->second, v.second);
               }
             }
           }
@@ -2563,12 +2653,24 @@ namespace dsc  // distributed std container
 
         // local compute part.  called by the communicator.
         BL_BENCH_START(insert);
+        this->c.resize(input.size() / 2);
+
         size_t count = 0;
         if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
           count = this->local_insert(input.begin(), input.end(), pred);
         else
           count = this->local_insert(input.begin(), input.end());
+
+        std::cout << "rank " << this->comm.rank() <<
+          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+
+        this->c.resize(0);
+
+        std::cout << "rank " << this->comm.rank() <<
+          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+
         BL_BENCH_END(insert, "local_insert", this->local_size());
+
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "reduction_densehash:insert", this->comm);
 
@@ -2726,34 +2828,108 @@ namespace dsc  // distributed std container
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
-        // once received, then transform and locally insert.
-        BL_BENCH_START(insert);
-        size_t count = 0;
-        size_t step_size = 1000000;
-        size_t iters = input.size() / step_size;
-        size_t rem = input.size() % step_size;
-        auto it = input.begin();
-        // do in blocks of 1M...
-        ::std::vector<::std::pair<Key, T> > temp(step_size);
-        for (size_t i = 0; i < iters; ++i) {
-          ::std::transform(it, it + step_size, temp.begin(), [](Key const & x) {
+//        // once received, then transform and locally insert.
+//        BL_BENCH_START(insert);
+//        size_t count = 0;
+//        size_t step_size = 1000000;
+//        size_t iters = input.size() / step_size;
+//        size_t rem = input.size() % step_size;
+//        auto it = input.begin();
+//        // do in blocks of 10M...
+//        ::std::vector<::std::pair<Key, T> > temp(step_size);
+//        for (size_t i = 0; i < iters; ++i) {
+//          auto lbegin = ::std::transform(it, it + step_size, temp.begin(), [](Key const & x) {
+//            return ::std::make_pair(x, T(1));
+//          });
+//          it += step_size;
+//          if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+//            count = this->Base::local_insert(temp.begin(), temp.end(), pred);
+//          else
+//            count = this->Base::local_insert(temp.begin(), temp.end());
+//
+//          // after the first step was inserted, we can now estimate the total size and do 1 resize.
+//
+//        }
+//        // remainder
+//        ::std::transform(it, it + rem, temp.begin(), [](Key const & x) {
+//          return ::std::make_pair(x, T(1));
+//        });
+//        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+//          count = this->Base::local_insert(temp.begin(), temp.begin() + rem, pred);
+//        else
+//          count = this->Base::local_insert(temp.begin(), temp.begin() + rem);
+//        BL_BENCH_END(insert, "local_insert", this->local_size());
+
+
+          size_t count = 0;
+          auto trans = [](Key const & x) {
             return ::std::make_pair(x, T(1));
-          });
-          it += step_size;
+          };
+        // ====== estimate is not great.
+//        // once received, transform and locally insert, in 2 parts.  first part takes 1M entry and insert to estimate
+//        // total size.
+//        BL_BENCH_START(insert);
+//        // set up
+//        size_t step_size = ::std::min(1000000UL, input.size());
+//        {
+//          auto local_start = ::bliss::iterator::make_transform_iterator(input.begin(), trans);
+//          auto local_end = ::bliss::iterator::make_transform_iterator(input.begin() + step_size, trans);
+//          // insert
+//          if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+//            count = this->Base::local_insert(local_start, local_end, pred);
+//          else
+//            count = this->Base::local_insert(local_start, local_end);
+//        }
+//        BL_BENCH_END(insert, "local_insert_estimate", this->local_size());
+//        size_t init_count = count;
+//
+//        // now resize the container.
+//        BL_BENCH_START(insert);
+//        size_t estimate = static_cast<size_t>(static_cast<float>(input.size()) * (static_cast<float>(count) / static_cast<float>(step_size)) );
+//        if (step_size < input.size()) {
+//          // estimate the number of final results, increase by 10%, use as size estimate.
+//          this->c.resize(estimate);
+//
+//          // then insert all the rest,
+//          auto local_start = ::bliss::iterator::make_transform_iterator(input.begin() + step_size, trans);
+//          auto local_end = ::bliss::iterator::make_transform_iterator(input.end(), trans);
+//          // insert
+//          if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+//            count += this->Base::local_insert(local_start, local_end, pred);
+//          else
+//            count += this->Base::local_insert(local_start, local_end);
+//
+//
+//        } // else we are done, or somehow the step_size is too large.
+//        BL_BENCH_END(insert, "local_insert", this->local_size());
+//
+//        std::cout << "rank " << this->comm.rank() << " step_size=" << step_size << " init count=" << init_count <<
+//            " input=" << input.size() << " estimate=" << estimate << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+
+          BL_BENCH_START(insert);
+          // preallocate.  easy way out - estimate to be 1/2 of input.  then at the end, resize if significantly less.
+          this->c.resize(input.size() / 2);
+
+          // then insert all the rest,
+          auto local_start = ::bliss::iterator::make_transform_iterator(input.begin(), trans);
+          auto local_end = ::bliss::iterator::make_transform_iterator(input.end(), trans);
+          // insert
           if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
-            count = this->Base::local_insert(temp.begin(), temp.end(), pred);
+            count += this->Base::local_insert(local_start, local_end, pred);
           else
-            count = this->Base::local_insert(temp.begin(), temp.end());
-        }
-        // remainder
-        ::std::transform(it, it + rem, temp.begin(), [](Key const & x) {
-          return ::std::make_pair(x, T(1));
-        });
-        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
-          count = this->Base::local_insert(temp.begin(), temp.begin() + rem, pred);
-        else
-          count = this->Base::local_insert(temp.begin(), temp.begin() + rem);
-        BL_BENCH_END(insert, "local_insert", this->local_size());
+            count += this->Base::local_insert(local_start, local_end);
+
+          std::cout << "rank " << this->comm.rank() <<
+            " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+
+          // resize further.
+          this->c.resize(0);
+
+          std::cout << "rank " << this->comm.rank() <<
+            " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+
+          BL_BENCH_END(insert, "local_insert", this->local_size());
+
 
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "count_densehash_map:insert_key", this->comm);

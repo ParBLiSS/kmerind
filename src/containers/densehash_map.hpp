@@ -634,6 +634,7 @@ protected:
     	insert(input.begin(), input.end());
     }
 
+    template <typename K = Key, typename = typename std::enable_if<!std::is_const<Key>::value> >
     std::pair<typename container_type::iterator, bool> insert(::std::pair<Key, T> const & x) {
       if (splitter(x.first)) {
         return lower_map.insert(x);
@@ -643,7 +644,7 @@ protected:
       }
     }
 
-    std::pair<typename container_type::iterator, bool> insert(value_type const & x) {
+    std::pair<typename container_type::iterator, bool> insert(::std::pair<const Key, T> const & x) {
       if (splitter(x.first)) {
         return lower_map.insert(x);
       }
@@ -901,7 +902,13 @@ protected:
     	}
     }
 
-
+    inline bool exists(Key const & key) const {
+      if (splitter(key)) {
+        return upper_map.find(key) != upper_map.end();
+      } else {
+        return upper_map.find(key) != upper_map.end();
+      }
+    }
 };
 
 
@@ -1082,11 +1089,12 @@ class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, fals
       insert(input.begin(), input.end());
     }
 
+    template <typename K = Key, typename = typename std::enable_if<!std::is_const<Key>::value> >
     std::pair<iterator, bool> insert(::std::pair<Key, T> const & x) {
       return map.insert(x);
     }
 
-    std::pair<iterator, bool> insert(value_type const & x) {
+    std::pair<iterator, bool> insert(::std::pair<const Key, T> const & x) {
       return map.insert(x);
     }
 
@@ -1202,6 +1210,10 @@ class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, fals
 
     const_iterator find(Key const &key) const {
     	return map.find(key);
+    }
+
+    inline bool exists(Key const & key) const {
+      return map.find(key) != map.end();
     }
 
 };
@@ -1947,7 +1959,13 @@ class densehash_multimap {
 
     }
 
-
+    inline bool exists(Key const & key) const {
+      if (splitter(key)) {
+        return upper_map.find(key) != upper_map.end();
+      } else {
+        return upper_map.find(key) != upper_map.end();
+      }
+    }
 
     ::std::pair<iterator, iterator> equal_range(Key const & key) {
       if (splitter(key)) {
@@ -2397,6 +2415,9 @@ class densehash_multimap<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator,
       }
     }
 
+    inline bool exists(Key const & key) const {
+      return map.find(key) != map.end();
+    }
 
 
     ::std::pair<iterator, iterator> equal_range(Key const & key) {
