@@ -35,6 +35,8 @@
 #include <memory>  // allocator
 #include <iostream>
 
+// TODO: http://stackoverflow.com/questions/6162201/c11-use-case-for-piecewise-construct-of-pair-and-tuple - use piecewise construct.
+
 #include "iterators/concatenating_iterator.hpp"
 
 #include "containers/fsc_container_utils.hpp"

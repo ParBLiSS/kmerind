@@ -1372,17 +1372,22 @@ namespace dsc  // distributed std container
 
           if (this->comm.size() > 1) {
 
-            BL_BENCH_START(count);
             // distribute (communication part)
             std::vector<size_t> recv_counts;
+
             if (remove_duplicate) {
+                BL_BENCH_START(count);
+
 				::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
 								typename Base::StoreTransformedFunc(),
 								typename Base::StoreTransformedEqual()).swap(recv_counts);
+				BL_BENCH_END(count, "dist_query", keys.size());
             } else {
+
+                BL_BENCH_START(count);
             	::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm).swap(recv_counts);
+    			BL_BENCH_END(count, "dist_query", keys.size());
             }
-            BL_BENCH_END(count, "dist_query", keys.size());
 
 
             // local count. memory utilization a potential problem.
@@ -1411,6 +1416,8 @@ namespace dsc  // distributed std container
             BL_BENCH_COLLECTIVE_START(count, "a2a2", this->comm);
             mxx::all2allv(results, recv_counts, this->comm).swap(results);
             BL_BENCH_END(count, "a2a2", results.size());
+
+
           } else {
 
             BL_BENCH_START(count);
@@ -1612,77 +1619,231 @@ namespace dsc  // distributed std container
 
 
 
-      /**
-       * @brief count elements with the specified keys in the distributed densehash_multimap.
-       * @details does not remove duplicate during the processing since that is slow.
-       * @note  depend on STABLE bucketing by mxx.
-       *
-       *
-       * @param first
-       * @param last
-       * @param return 0 if does not exist, 1 if does.  one to one to input.
-       */
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<unsigned char> exists(::std::vector<Key>& keys, bool sorted_input = false,
-                                                        Predicate const& pred = Predicate() ) const {
-          BL_BENCH_INIT(exists);
-          using result_type = std::vector<unsigned char>;
-          result_type results;
+//      /**
+//       * @brief count elements with the specified keys in the distributed densehash_multimap.
+//       * @details does not remove duplicate during the processing since that is slow.
+//       * @note  depend on STABLE bucketing by mxx.
+//       *        this version uses standard mxx distribute function, and returns unsigned char only.
+//       *
+//       * @param first
+//       * @param last
+//       * @param return 0 if does not exist, 1 if does.  one to one to input.
+//       */
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<unsigned char> exists(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                        Predicate const& pred = Predicate() ) const {
+//          BL_BENCH_INIT(exists);
+//          using result_type = std::vector<unsigned char>;
+//          result_type results;
+//
+//          // process even if local container is empty.
+//          if (::dsc::empty(keys, this->comm)) {
+//            BL_BENCH_REPORT_MPI_NAMED(exists, "base_densehash_map:exists", this->comm);
+//            return results;
+//          }
+//
+//          ::fsc::back_emplace_iterator<result_type > emplace_iter(results);
+//          BL_BENCH_START(exists);
+//          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+//          this->transform_input(keys);
+//          BL_BENCH_END(exists, "transform_intput", keys.size());
+//
+//
+//          std::vector<size_t> recv_counts;
+//          if (this->comm.size() > 1) {
+//
+//            BL_BENCH_START(exists);
+//            // distribute (communication part)
+//            ::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm).swap(recv_counts);
+//            BL_BENCH_END(exists, "dist_query", keys.size());
+//
+////            for (int p = 0; p < this->comm.size(); ++p) {
+////              std::cout << "rank " << this->comm.rank() << "->" << p << ":" << recv_counts[p] << std::endl;
+////            }
+//          }
+//
+//          // local count. memory utilization a potential problem.
+//          // do for each src proc one at a time.
+//          BL_BENCH_START(exists);
+//          results.reserve(keys.size() );                   // TODO:  should estimate coverage.
+//          BL_BENCH_END(exists, "reserve", results.capacity());
+//
+//          BL_BENCH_START(exists);
+//          for (auto it = keys.begin(); it != keys.end(); ++it) {
+//            if (::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+//              results.emplace_back(this->c.exists(*it) ? 1 : 0);
+//            else
+//              results.emplace_back((pred(*it) && this->c.exists(*it)) ? 1 : 0);
+//          }
+//          BL_BENCH_END(exists, "local_count", results.size());
+//
+//          if (this->comm.size() > 1) {
+//            // send back using the constructed recv count
+//            BL_BENCH_COLLECTIVE_START(exists, "a2a2", this->comm);
+//            mxx::all2allv(results, recv_counts, this->comm).swap(results);
+//            BL_BENCH_END(exists, "a2a2", results.size());
+//          }
+//
+//          BL_BENCH_REPORT_MPI_NAMED(exists, "base_densehash:exists", this->comm);
+//
+//          return results;
+//
+//      }
 
-          // process even if local container is empty.
-          if (::dsc::empty(keys, this->comm)) {
-            BL_BENCH_REPORT_MPI_NAMED(exists, "base_densehash_map:exists", this->comm);
-            return results;
-          }
+		/**
+		 * @brief count elements with the specified keys in the distributed densehash_multimap.
+		 * @details does not remove duplicate during the processing since that is slow.
+		 * @note  depend on STABLE bucketing by mxx.
+		 *
+		 * @param first
+		 * @param last
+		 * @param return 0 if does not exist, 1 if does.  one to one to input.
+		 */
+		template <class Predicate = ::bliss::filter::TruePredicate>
+		::std::vector<unsigned char >
+		exists(::std::vector<Key>& keys, bool sorted_input = false,
+				Predicate const& pred = Predicate() ) const {
+			BL_BENCH_INIT(exists);
+			using result_type = std::vector<unsigned char >;
+			result_type results;
 
-          ::fsc::back_emplace_iterator<result_type > emplace_iter(results);
-          BL_BENCH_START(exists);
-          // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-          this->transform_input(keys);
-          BL_BENCH_END(exists, "transform_intput", keys.size());
+			// process even if local container is empty.
+			if (::dsc::empty(keys, this->comm)) {
+			  BL_BENCH_REPORT_MPI_NAMED(exists, "base_densehash_map:exists", this->comm);
+			  return results;
+			}
 
+			::fsc::back_emplace_iterator<result_type > emplace_iter(results);
+			BL_BENCH_START(exists);
+			// even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
+			this->transform_input(keys);
+			BL_BENCH_END(exists, "transform_intput", keys.size());
 
-          std::vector<size_t> recv_counts;
-          if (this->comm.size() > 1) {
+//			std::vector<Key> keys2(keys);
+//			std::vector<Key> keys3(keys);
+//			std::vector<Key> keys4(keys);
+//
+//			std::cout << "rank " << this->comm.rank() << " keys2 size before " << keys2.size() << std::endl;
 
-            BL_BENCH_START(exists);
-            // distribute (communication part)
-            ::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm).swap(recv_counts);
-            BL_BENCH_END(exists, "dist_query", keys.size());
+			std::vector<size_t> permute_map;
+			std::vector<size_t> recv_counts;
+			std::vector<Key> bucketed;
 
-//            for (int p = 0; p < this->comm.size(); ++p) {
-//              std::cout << "rank " << this->comm.rank() << "->" << p << ":" << recv_counts[p] << std::endl;
-//            }
-          }
+			if (this->comm.size() > 1) {
 
-          // local count. memory utilization a potential problem.
-          // do for each src proc one at a time.
-          BL_BENCH_START(exists);
-          results.reserve(keys.size() );                   // TODO:  should estimate coverage.
-          BL_BENCH_END(exists, "reserve", results.capacity());
+				BL_BENCH_START(exists);
+				// get assignment to buckets (per element mapping)
+				std::tie(permute_map, recv_counts) =
+						::dsc::assign_to_buckets(keys, this->key_to_rank, this->comm.size());
+				BL_BENCH_END(exists, "assign bucket", keys.size());
 
-          BL_BENCH_START(exists);
-          for (auto it = keys.begin(); it != keys.end(); ++it) {
-            if (::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
-              results.emplace_back(this->c.exists(*it) ? 1 : 0);
-            else
-              results.emplace_back((pred(*it) && this->c.exists(*it)) ? 1 : 0);
-          }
-          BL_BENCH_END(exists, "local_count", results.size());
+				// next bucket
+				BL_BENCH_START(exists);
+				::dsc::permute(keys, permute_map).swap(bucketed);
+				BL_BENCH_END(exists, "bucket", bucketed.size());
 
-          if (this->comm.size() > 1) {
-            // send back using the constructed recv count
-            BL_BENCH_COLLECTIVE_START(exists, "a2a2", this->comm);
-            mxx::all2allv(results, recv_counts, this->comm).swap(results);
-            BL_BENCH_END(exists, "a2a2", results.size());
-          }
+//
+//				  BL_BENCH_START(exists);
+//				  mxx::bucketing(keys2, this->key_to_rank, this->comm.size());
+//				  BL_BENCH_END(exists, "mxx bucket", keys2.size());
+//				  //std::cout << "rank " << this->comm.rank() << " keys2 size after bucketing " << keys2.size() << std::endl;
+//
+//				  bool keys3_same = std::equal(keys2.begin(), keys2.end(), bucketed.begin());
+//				  keys3_same &= std::equal(bucketed.begin(), bucketed.end(), keys2.begin());
+//				  std::cout << "rank " << this->comm.rank() << " keys 3 same? " << (keys3_same ? "y" : "n") << std::endl;
+//
 
-          BL_BENCH_REPORT_MPI_NAMED(exists, "base_densehash:exists", this->comm);
+				// and distribute the data.
+				BL_BENCH_START(exists);
+				::dsc::distribute_bucketed(bucketed, recv_counts, this->comm).swap(bucketed);
+				BL_BENCH_END(exists, "distribute", bucketed.size());
 
-          return results;
+//				BL_BENCH_START(exists);
+//				  // distribute (communication part)
+//				  ::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm).swap(recv_counts);
+//				  BL_BENCH_END(exists, "dist_query", keys.size());
+//	  			  std::cout << "rank " << this->comm.rank() << " bucket size after dist " << bucketed.size() << std::endl;
+////
+////	            for (int p = 0; p < this->comm.size(); ++p) {
+////	              std::cout << "rank " << this->comm.rank() << "->" << p << ":" << recv_counts[p] << std::endl;
+////	            }
+////
+//			  BL_BENCH_START(exists);
+//			  dsc::bucketing(keys3, this->key_to_rank, this->comm.size());
+//			  BL_BENCH_END(exists, "dsc bucket", keys3.size());
+//			  BL_BENCH_START(exists);
+//			  dsc::bucketing_ordered_write(keys4, this->key_to_rank, this->comm.size());
+//			  BL_BENCH_END(exists, "dsc bucket_ordered_write", keys4.size());
+//
+//			  bool keys4_same = std::equal(keys2.begin(), keys2.end(), keys4.begin());
+//			  keys4_same &= std::equal(keys4.begin(), keys4.end(), keys2.begin());
+//
+//			  std::cout << "rank " << this->comm.rank() << " keys 3 same? " << (keys3_same ? "y" : "n") << std::endl;
+//			  std::cout << "rank " << this->comm.rank() << " keys 4 same? " << (keys4_same ? "y" : "n") << std::endl;
+			} else {
+				bucketed.insert(bucketed.end(), keys.begin(), keys.end());
+			}
 
-      }
+			// local count. memory utilization a potential problem.
+			// do for each src proc one at a time.
+			BL_BENCH_START(exists);
+			results.reserve(bucketed.size() );                   // TODO:  should estimate coverage.
+			BL_BENCH_END(exists, "reserve", results.capacity());
 
+			BL_BENCH_START(exists);
+			Key key;
+			for (auto it = bucketed.begin(); it != bucketed.end(); ++it) {
+				key = *it;
+			  if (::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+				results.emplace_back(this->c.exists(key) ? 1 : 0);
+			  else
+				results.emplace_back((pred(key) && this->c.exists(key)) ? 1 : 0);
+			}
+			BL_BENCH_END(exists, "local_count", results.size());
+
+			if (this->comm.size() > 1) {
+//				bool same = true;
+//				std::cout << "rank " << this->comm.rank() << " exists. results size=" << results.size() << " bucketed " << bucketed.size() << std::endl;
+//				for (size_t i = 0; i < results.size(); ++i) {
+//					same = (results[i].first == bucketed[i]);
+//					if (!same) {
+//						std::cout << "rank " << this->comm.rank() << " i " << i << " " << results[i].first << ", " << bucketed[i] << std::endl;
+//					}
+//				}
+
+				// send back using the constructed recv count
+			  BL_BENCH_START(exists);
+			  mxx::all2allv(results, recv_counts, this->comm).swap(results);
+			  BL_BENCH_END(exists, "a2a2", results.size());
+
+//				std::cout << "rank " << this->comm.rank() << " exists. results size=" << results.size() << " keys2 " << keys2.size() << std::endl;
+//				for (size_t i = 0; i < results.size(); ++i) {
+//					same = (results[i].first == keys2[i]);
+//					if (!same) {
+//						std::cout << "rank " << this->comm.rank() << " i " << i << " " << results[i].first << ", " << keys2[i] << std::endl;
+//					}
+//				}
+
+			  // the order should be same as the bucketed.  now unbucket.
+			  BL_BENCH_START(exists);
+			  ::dsc::unpermute(results, permute_map).swap(results);
+			  BL_BENCH_END(exists, "unbucket", results.size());
+			}
+
+//			bool same = true;
+//			std::cout << "rank " << this->comm.rank() << " exists. results size=" << results.size() << " keys " << keys.size() << std::endl;
+//			for (size_t i = 0; i < results.size(); ++i) {
+//				same = (results[i].first == keys[i]);
+//				if (!same) {
+//					std::cout << "rank " << this->comm.rank() << " i " << i << " " << results[i].first << ", " << keys[i] << std::endl;
+//				}
+//			}
+
+			BL_BENCH_REPORT_MPI_NAMED(exists, "base_densehash:exists", this->comm);
+
+			return results;
+
+		}
 
 
       /**
@@ -2052,13 +2213,33 @@ namespace dsc  // distributed std container
         BL_BENCH_END(update, "transform_intput", input.size());
 
         // communication part
+
         if (this->comm.size() > 1) {
-          BL_BENCH_START(update);
-          // get mapping to proc
-          // TODO: keep unique only may not be needed - comm speed may be faster than we can compute unique.
-          auto recv_counts(::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm));
-          BLISS_UNUSED(recv_counts);
-          BL_BENCH_END(update, "dist_data", input.size());
+//          BL_BENCH_START(update);
+//          // get mapping to proc
+//          // TODO: keep unique only may not be needed - comm speed may be faster than we can compute unique.
+//          auto recv_counts(::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm));
+//          BLISS_UNUSED(recv_counts);
+
+			std::vector<size_t> permute_map;
+			std::vector<size_t> recv_counts;
+
+			BL_BENCH_START(update);
+			// get assignment to buckets (per element mapping)
+			std::tie(permute_map, recv_counts) =
+					::dsc::assign_to_buckets(input, this->key_to_rank, this->comm.size());
+			BL_BENCH_END(update, "assign bucket", input.size());
+
+			// next bucket
+			BL_BENCH_START(update);
+			::dsc::permute(input, permute_map).swap(input);
+			BL_BENCH_END(update, "bucket", input.size());
+
+			// and distribute the data.
+			BL_BENCH_START(update);
+			::dsc::distribute_bucketed(input, recv_counts, this->comm).swap(input);
+			BL_BENCH_END(update, "distribute", input.size());
+
         }
 
 

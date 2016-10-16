@@ -1536,8 +1536,9 @@ namespace bliss
   template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE=WordType>
   std::ostream& operator<<(std::ostream& ost, const Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> & kmer)
   {
-    ost << "Kmer=" << kmer.toString() << " (ASCII: " << bliss::utils::KmerUtils::toASCIIString(kmer) << ")";
-  
+    //ost << "Kmer=" << kmer.toString() << " (ASCII: " << bliss::utils::KmerUtils::toASCIIString(kmer) << ")";
+	  ost << "Kmer=" << bliss::utils::KmerUtils::toASCIIString(kmer);
+
     return ost;
   }
   

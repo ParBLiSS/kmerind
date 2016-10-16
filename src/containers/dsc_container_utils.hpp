@@ -54,6 +54,241 @@ namespace dsc {
   // =============== convenience functions for distribution of vector via all to all and a rank mapping function
 	// TODO: make this cleaner...
 
+	/**
+	 * @brief   compute the element index mapping between input and bucketed output.
+	 *
+	 * this is an "deconstructed" version of mxx bucketing function
+	 *
+	 * It returns an array with the bucketed position of the input entries, i.e.
+	 *   output to input mapping
+	 * 		an array x, such that input[i] = output[x[i]]; and the mapping and input share the same coordinates.
+	 * 		then to reconstruct input, we can walk through the mapping and random access output array,
+	 * 		which should be faster as the writes are consecutive in cache while the reads are random.
+	 * 		also, this is more friendly with emplacing into a vector.
+	 * the mapping is useful to avoid recomputing key_func.
+	 *	 *
+	 * this is faster than mxx by about 2x (prob due to compiting key_func just once.), but uses another vector of size 8N.
+	 *
+	 * @tparam T            Input type
+	 * @tparam Func         Type of the key function.
+	 * @param input[in|out] Contains the values to be bucketed.
+	 *                      This vector is both input and output.
+	 * @param key_func      A function taking a type T and returning the bucket index
+	 *                      in the range [0, num_buckets).
+	 * @param num_buckets   The total number of buckets.
+	 *
+	 * @return              The number of elements in each bucket.
+	 *                      The size of this vector is `num_buckets`.
+	 *                      The source position for each entry in the bucketed input.
+	 *                      the size of this vector is size of input.
+	 */
+	template <typename T, typename Func>
+	std::pair<std::vector<size_t>, std::vector<size_t> >
+	assign_to_buckets(std::vector<T> const & input, Func const & key_func, size_t num_buckets) {
+	    if (num_buckets == 0)
+	    	return std::make_pair(std::vector<size_t>(), std::vector<size_t>());
+
+		// initialize number of elements per bucket
+	    std::vector<size_t> bucket_counts(num_buckets, 0);
+
+	    // if input is empty, simply return
+	    if (input.size() == 0)
+	        return std::make_pair(std::vector<size_t>(), bucket_counts);
+
+	    std::vector<size_t> i2o;
+	    i2o.reserve(input.size());
+
+	    // [1st pass]: compute bucket counts and input to bucket assignment.
+	    size_t p;
+	    for (auto it = input.begin(); it != input.end(); ++it) {
+	    	p = key_func(*it);
+
+	        assert((0 <= p) && ((size_t)p < num_buckets));
+
+	        i2o.emplace_back(p);
+	        ++bucket_counts[p];
+	    }
+
+	    // get offsets of where buckets start (= exclusive prefix sum)
+	    // iterator once.
+	    std::vector<std::size_t> offset(bucket_counts.size(), 0);
+	    for (size_t i = 1, j = 0; i < num_buckets; ++i, ++j) {
+	    	offset[i] = offset[j] + bucket_counts[j];
+	    }
+
+	    // [2nd pass]: saving elements into correct position, and save the final position.
+	    for (size_t i = 0; i < input.size(); ++i) {
+	    	i2o[i] = offset[i2o[i]]++; 	// output position from bucket id (i2o[i])
+	    }
+
+	    return std::make_pair(i2o, bucket_counts);
+	}
+
+//	/**
+//	 * @brief   bucketing of values into `num_buckets` buckets.  Customized from mxx version.
+//	 *
+//	 * This particular implementation uses an internal temporary buffer
+//	 * of the same size as the input. Thus requiring that amount of additional
+//	 * memory space. For a version that doesn't need O(n) additional memory,
+//	 * use the (somewhat slower) `bucketing_inplace()` function below.
+//	 *
+//	 * in addition, it returns an array with the bucketed position of the input entries, i.e.
+//	 *   output to input mapping
+//	 * 		an array x, such that input[i] = output[x[i]]; and the mapping and input share the same coordinates.
+//	 * 		then to reconstruct input, we can walk through the mapping and random access output array,
+//	 * 		which should be faster as the writes are consecutive in cache while the reads are random.
+//	 * 		also, this is more friendly with emplacing into a vector.
+//	 * the mapping is useful to avoid recomputing key_func.
+//	 *
+//	 * THIS VERSION ADDRESSES BELOW.  It's about 50% slower than the version above.
+//	 * the question is whether that'd be faster for bucketing as well.  we can keep an array of first entries
+//	 *      and a separate array of offsets (for input) from last bucket entry.  together with the bucket size,
+//	 *      can then be used to sequentially create output, with 1 random load for offsets, and 1 random load for input to read,
+//	 *      and 1 seq write per input entry.
+//	 *
+//	 *  this is about 50% faster than mxx, but uses 8N more memory, and the ordered write is not helping.
+//	 *
+//	 * @tparam T            Input type
+//	 * @tparam Func         Type of the key function.
+//	 * @param input[in|out] Contains the values to be bucketed.
+//	 *                      This vector is both input and output.
+//	 * @param key_func      A function taking a type T and returning the bucket index
+//	 *                      in the range [0, num_buckets).
+//	 * @param num_buckets   The total number of buckets.
+//	 *
+//	 * @return              The number of elements in each bucket.
+//	 *                      The size of this vector is `num_buckets`.
+//	 *                      The source position for each entry in the bucketed input.
+//	 *                      the size of this vector is size of input.
+//	 */
+//	template <typename T, typename Func>
+//	std::pair<std::vector<size_t>, std::vector<size_t> >
+//	bucketing_ordered_write(std::vector<T>& input, Func key_func, size_t num_buckets) {
+//	    if (num_buckets == 0)
+//	    	return std::make_pair(std::vector<size_t>(), std::vector<size_t>());
+//
+//		// initialize number of elements per bucket
+//	    std::vector<size_t> bucket_counts(num_buckets, 0);
+//
+//	    // if input is empty, simply return
+//	    if (input.size() == 0)
+//	        return std::make_pair(bucket_counts, std::vector<size_t>());
+//
+//	    std::vector<size_t> i2o;   // initially used as a linked list (offset to next entry in same bucket.
+//	    i2o.reserve(input.size());
+//
+//	    // [1st pass]: compute bucket counts, input to bucket assignments, and interleaved linked lists for each bucket.
+//	    size_t p;
+//	    std::vector<std::size_t> heads(bucket_counts.size(), 0);
+//	    std::vector<std::size_t> tails(bucket_counts.size(), 0);
+//	    size_t i = 0;
+//	    for (auto it = input.begin(); it != input.end(); ++it, ++i) {
+//	    	p = key_func(*it);   // bucket mapping
+//	        assert((0 <= p) && ((size_t)p < num_buckets));
+//
+//	        if (bucket_counts[p] == 0) { // first time for this bucket
+//	        	heads[p] = i;	// point to first input element for this bucket.
+//	        } else {
+//	        	i2o[tails[p]] = i;	// record in last bucket entry the next bucket entry's position.
+//	        						// since it's a prev position, traversal is generally moving forward.
+//	        }
+//        	tails[p] = i;
+//
+//        	++bucket_counts[p];
+//	    }
+//
+//
+//	    // [2nd pass]: iterate over buckets, populate output, and generate i2o list.
+//	    std::vector<T> tmp_result;
+//	    tmp_result.reserve(input.size());
+//	    size_t in_pos = 0, tmp;
+//	    size_t out_pos = 0;
+//	    for (size_t i = 0; i < num_buckets; ++i) {
+//
+//	    	if (bucket_counts[i] == 0) continue;  // skip empty buckets.
+//
+//	    	in_pos = heads[i];   // get the head of linked list.
+//
+//	    	// iterate over rest of bucket.
+//	    	for (size_t j = 0; j < bucket_counts[i]; ++j, ++out_pos) {
+//				tmp_result.emplace_back(input[in_pos]);
+//				tmp = i2o[in_pos];   // get the next position.
+//				i2o[in_pos] = out_pos;  // convert to from input poition linked list to input to output mapping.
+//				in_pos = tmp;
+//	    	}
+//
+//	    }
+//
+//	    // replacing input with tmp result buffer and return the number of elements
+//	    // in each bucket
+//	    input.swap(tmp_result);
+//	    return std::make_pair(bucket_counts, i2o);
+//	}
+
+
+	/**
+	 * @brief  given a bucketed array and the mapping from unbucketed to bucketed, undo the bucketing.
+	 * @details  note that output and i2o are traversed in order (write and read respectively),
+	 * 			 while input is randomly read.
+	 */
+	template <typename T>
+	std::vector<T> permute(std::vector<T> const & unbucketed, std::vector<size_t> const & i2o) {
+	    // if input is empty, simply return
+	    if ((unbucketed.size() == 0) || (i2o.size() == 0))
+	        return std::vector<T>();
+
+	    assert(unbucketed.size() == i2o.size());
+
+	    // saving elements into correct position
+	    std::vector<T> tmp_result(unbucketed.size());
+	    for (size_t i = 0; i < unbucketed.size(); ++i) {
+	        tmp_result[i2o[i]] = unbucketed[i];
+	    }
+
+	    return tmp_result;
+	}
+
+	/**
+	 * @brief  given a bucketed array and the mapping from unbucketed to bucketed, undo the bucketing.
+	 * @details  note that output and i2o are traversed in order (write and read respectively),
+	 * 			 while input is randomly read.
+	 */
+	template <typename T>
+	std::vector<T> unpermute(std::vector<T> const & bucketed, std::vector<size_t> const & i2o) {
+	    // if input is empty, simply return
+	    if ((bucketed.size() == 0) || (i2o.size() == 0))
+	        return std::vector<T>();
+
+	    assert(bucketed.size() == i2o.size());
+
+	    // saving elements into correct position
+	    std::vector<T> tmp_result;
+		tmp_result.reserve(bucketed.size());
+	    for (size_t i = 0; i < bucketed.size(); ++i) {
+	        tmp_result.emplace_back(bucketed[i2o[i]]);
+	    }
+
+	    return tmp_result;
+	}
+
+
+	  /**
+	   * @brief       distribute.  speed version.  no guarantee of output ordering, but actually is same.
+	   * @param[IN] vals    vals to distribute.  should already be bucketed.
+	   * @param[IN/OUT] send_counts    count of each target bucket of input, and each source bucket after call.
+	   *
+	   * @return distributed values.
+	   */
+	  template <typename V>
+	  ::std::vector<V> distribute_bucketed(::std::vector<V> const & vals,
+			  	  ::std::vector<size_t> & send_counts,
+	                                   mxx::comm const &_comm) {
+		  ::std::vector<size_t> temp(send_counts);
+		  mxx::all2all(send_counts, _comm).swap(send_counts);
+
+	      return mxx::all2allv(vals, temp, _comm);
+	  }
+
 
   /**
    * @brief       distribute.  speed version.  no guarantee of output ordering, but actually is same.
