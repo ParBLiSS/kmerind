@@ -166,7 +166,6 @@ namespace dsc  // distributed std container
           }
       } key_to_rank;
 
-
       /**
        * @brief count elements with the specified keys in the distributed sorted_multimap.
        * @note  input cannot have duplicate elements.
@@ -2099,13 +2098,36 @@ namespace dsc  // distributed std container
             //printf("rank %d local is empty\n", this->comm.rank());
             return results;
           }
-          results.reserve(this->c.size());
+          results.reserve(this->c.size() / 2);
           size_t processed = 0;
           size_t added = 0;          
           for (auto it = this->c.begin(); it != this->c.end(); ++it) {
             ++processed;
             if (pred(*it))  {
               results.emplace_back(*it);
+              ++added;
+            }
+          }
+//          printf("container size %ld, processed %ld, added %ld\n", this->c.size(), processed, added);
+
+          return results;
+      }
+
+      template <class Predicate = ::bliss::filter::TruePredicate>
+      ::std::vector< const_iterator > find_iterators(Predicate const& pred = Predicate()) const {
+          ::std::vector< const_iterator > results;
+
+          if (this->local_empty()) {
+            //printf("rank %d local is empty\n", this->comm.rank());
+            return results;
+          }
+          results.reserve(this->c.size() / 2);
+          size_t processed = 0;
+          size_t added = 0;
+          for (auto it = this->c.begin(); it != this->c.end(); ++it) {
+            ++processed;
+            if (pred(*it))  {
+              results.push_back(it);
               ++added;
             }
           }
@@ -2123,7 +2145,7 @@ namespace dsc  // distributed std container
             //printf("rank %d local is empty\n", this->comm.rank());
             return results;
           }
-          results.reserve(this->c.size());
+          results.reserve(this->c.size() / 2);
           size_t processed = 0;
           size_t added = 0;
           for (auto it = this->c.begin(); it != this->c.end(); ++it) {
@@ -2215,25 +2237,31 @@ namespace dsc  // distributed std container
         // communication part
 
         if (this->comm.size() > 1) {
-//          BL_BENCH_START(update);
+//          BL_BENCH_START(update);   slower...
 //          // get mapping to proc
-//          // TODO: keep unique only may not be needed - comm speed may be faster than we can compute unique.
-//          auto recv_counts(::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm));
-//          BLISS_UNUSED(recv_counts);
+//          // TODO: keep unique only is not needed - overhead is high.
+//          ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
+//          BL_BENCH_END(update, "distribute", input.size());
 
-			std::vector<size_t> permute_map;
+//			std::vector<size_t> permute_map;
 			std::vector<size_t> recv_counts;
 
 			BL_BENCH_START(update);
 			// get assignment to buckets (per element mapping)
-			std::tie(permute_map, recv_counts) =
-					::dsc::assign_to_buckets(input, this->key_to_rank, this->comm.size());
-			BL_BENCH_END(update, "assign bucket", input.size());
+			recv_counts	=
+					::dsc::assign_and_bucket(input, this->key_to_rank, this->comm.size());
+			BL_BENCH_END(update, "assign and bucket", input.size());
 
-			// next bucket
-			BL_BENCH_START(update);
-			::dsc::permute(input, permute_map).swap(input);
-			BL_BENCH_END(update, "bucket", input.size());
+//			BL_BENCH_START(update);
+//			// get assignment to buckets (per element mapping)
+//			std::tie(permute_map, recv_counts) =
+//				::dsc::assign_buckets(input, this->key_to_rank, this->comm.size());
+//			BL_BENCH_END(update, "assign bucket", input.size());
+//
+//			// next bucket
+//			BL_BENCH_START(update);
+//			::dsc::permute(input, permute_map).swap(input);
+//			BL_BENCH_END(update, "bucket", input.size());
 
 			// and distribute the data.
 			BL_BENCH_START(update);
@@ -2429,7 +2457,7 @@ namespace dsc  // distributed std container
           this->keys(keys);
 
           ::std::vector<::std::pair<Key, size_t> > count_results;
-          count_results.reserve(keys.size());
+          count_results.reserve(keys.size() / 2);
           ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
 
           // count now.
@@ -2447,6 +2475,7 @@ namespace dsc  // distributed std container
           return results;
       }
 
+
       template <class Transform = ::bliss::transform::identity<Key>, class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<typename ::bliss::functional::function_traits<Transform, ::std::pair<Key, T> >::return_type>
       find_transform(Predicate const& pred = Predicate(), Transform const & trans = Transform()) const {
@@ -2461,7 +2490,7 @@ namespace dsc  // distributed std container
               this->keys(keys);
 
               ::std::vector<::std::pair<Key, size_t> > count_results;
-              count_results.reserve(keys.size());
+              count_results.reserve(keys.size() / 2);
               ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
 
               // count now.

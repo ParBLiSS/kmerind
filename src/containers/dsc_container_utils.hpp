@@ -124,6 +124,181 @@ namespace dsc {
 	    return std::make_pair(i2o, bucket_counts);
 	}
 
+
+	/**
+	 * @brief   compute the element index mapping between input and bucketed output.
+	 *
+	 * this is an "deconstructed" version of mxx bucketing function
+	 *
+	 * It returns an array with the bucketed position of the input entries, i.e.
+	 *   output to input mapping
+	 * 		an array x, such that input[i] = output[x[i]]; and the mapping and input share the same coordinates.
+	 * 		then to reconstruct input, we can walk through the mapping and random access output array,
+	 * 		which should be faster as the writes are consecutive in cache while the reads are random.
+	 * 		also, this is more friendly with emplacing into a vector.
+	 * the mapping is useful to avoid recomputing key_func.
+	 *	 *
+	 * this is faster than mxx by about 2x (prob due to compiting key_func just once.), but uses another vector of size 8N.
+	 *
+	 * @tparam T            Input type
+	 * @tparam Func         Type of the key function.
+	 * @param input[in|out] Contains the values to be bucketed.
+	 *                      This vector is both input and output.
+	 * @param key_func      A function taking a type T and returning the bucket index
+	 *                      in the range [0, num_buckets).
+	 * @param num_buckets   The total number of buckets.
+	 *
+	 * @return              The number of elements in each bucket.
+	 *                      The size of this vector is `num_buckets`.
+	 *                      The source position for each entry in the bucketed input.
+	 *                      the size of this vector is size of input.
+	 */
+	template <typename T, typename Func>
+	std::vector<size_t>
+	assign_and_bucket(std::vector<T>& input, Func const & key_func, size_t num_buckets) {
+	    if (num_buckets == 0)
+	    	return std::vector<size_t>();
+
+		// initialize number of elements per bucket
+	    std::vector<size_t> bucket_counts(num_buckets, 0);
+
+	    // if input is empty, simply return
+	    if (input.size() == 0)
+	        return bucket_counts;
+
+	    if ((num_buckets >> 32) > 0) {  // more than 32 bit of buckets.
+			std::vector<size_t> i2o;
+			i2o.reserve(input.size());
+
+			// [1st pass]: compute bucket counts and input to bucket assignment.
+			size_t p;
+			for (auto it = input.begin(); it != input.end(); ++it) {
+				p = key_func(*it);
+
+				assert((0 <= p) && ((size_t)p < num_buckets));
+
+				i2o.emplace_back(p);
+				++bucket_counts[p];
+			}
+
+			// get offsets of where buckets start (= exclusive prefix sum)
+			// iterator once.
+			std::vector<std::size_t> offset(bucket_counts.size(), 0);
+			for (size_t i = 1, j = 0; i < num_buckets; ++i, ++j) {
+				offset[i] = offset[j] + bucket_counts[j];
+			}
+
+
+			// [2nd pass]: saving elements into correct position, and save the final position.
+		    std::vector<T> tmp_result(input.size());
+			for (size_t i = 0; i < input.size(); ++i) {
+					tmp_result[offset[i2o[i]]++] = input[i];
+			}
+
+			std::cout << "bucket64 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
+
+			input.swap(tmp_result);
+			return bucket_counts;
+	    } else if ((num_buckets >> 16) > 0) {
+			std::vector<uint32_t> i2o;
+			i2o.reserve(input.size());
+
+			// [1st pass]: compute bucket counts and input to bucket assignment.
+			uint32_t p;
+			for (auto it = input.begin(); it != input.end(); ++it) {
+				p = key_func(*it);
+
+				assert((0 <= p) && ((size_t)p < num_buckets));
+
+				i2o.emplace_back(p);
+				++bucket_counts[p];
+			}
+
+			// get offsets of where buckets start (= exclusive prefix sum)
+			// iterator once.
+			std::vector<std::size_t> offset(bucket_counts.size(), 0);
+			for (size_t i = 1, j = 0; i < num_buckets; ++i, ++j) {
+				offset[i] = offset[j] + bucket_counts[j];
+			}
+
+			// [2nd pass]: saving elements into correct position, and save the final position.
+		    std::vector<T> tmp_result(input.size());
+			for (size_t i = 0; i < input.size(); ++i) {
+		        tmp_result[offset[i2o[i]]++] = input[i];
+			}
+			std::cout << "bucket32 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
+			input.swap(tmp_result);
+
+			return bucket_counts;
+
+	    } else if ((num_buckets >> 8) > 0) {
+			std::vector<uint16_t> i2o;
+			i2o.reserve(input.size());
+
+			// [1st pass]: compute bucket counts and input to bucket assignment.
+			uint16_t p;
+			for (auto it = input.begin(); it != input.end(); ++it) {
+				p = key_func(*it);
+
+				assert((0 <= p) && ((size_t)p < num_buckets));
+
+				i2o.emplace_back(p);
+				++bucket_counts[p];
+			}
+
+			// get offsets of where buckets start (= exclusive prefix sum)
+			// iterator once.
+			std::vector<std::size_t> offset(bucket_counts.size(), 0);
+			for (size_t i = 1, j = 0; i < num_buckets; ++i, ++j) {
+				offset[i] = offset[j] + bucket_counts[j];
+			}
+
+			// [2nd pass]: saving elements into correct position, and save the final position.
+		    std::vector<T> tmp_result(input.size());
+			for (size_t i = 0; i < input.size(); ++i) {
+		        tmp_result[offset[i2o[i]]++] = input[i];
+			}
+			std::cout << "bucket16 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
+
+			input.swap(tmp_result);
+
+			return bucket_counts;
+
+	    } else {
+			std::vector<uint8_t> i2o;
+			i2o.reserve(input.size());
+
+			// [1st pass]: compute bucket counts and input to bucket assignment.
+			uint8_t p;
+			for (auto it = input.begin(); it != input.end(); ++it) {
+				p = key_func(*it);
+
+				assert((0 <= p) && ((size_t)p < num_buckets));
+
+				i2o.emplace_back(p);
+				++bucket_counts[p];
+			}
+
+			// get offsets of where buckets start (= exclusive prefix sum)
+			// iterator once.
+			std::vector<std::size_t> offset(bucket_counts.size(), 0);
+			for (size_t i = 1, j = 0; i < num_buckets; ++i, ++j) {
+				offset[i] = offset[j] + bucket_counts[j];
+			}
+
+			// [2nd pass]: saving elements into correct position, and save the final position.
+		    std::vector<T> tmp_result(input.size());
+			for (size_t i = 0; i < input.size(); ++i) {
+		        tmp_result[offset[i2o[i]]++] = input[i];
+			}
+			std::cout << "bucket8 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
+
+			input.swap(tmp_result);
+
+			return bucket_counts;
+	    }
+	}
+
 //	/**
 //	 * @brief   bucketing of values into `num_buckets` buckets.  Customized from mxx version.
 //	 *
