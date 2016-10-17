@@ -74,16 +74,16 @@ int main(int argc, char** argv) {
 
     BL_TIMER_INIT(test);
 
-    BL_TIMER_LOOP_START(test);
+    BL_TIMER_LOOP_START(test, 1);
     for (int i = 0; i < iters; ++i) {
-      BL_TIMER_LOOP_RESUME(test);
+      BL_TIMER_LOOP_RESUME(test, 1);
 
       dummy += 0.00001;
 
-      BL_TIMER_LOOP_PAUSE(test);
+      BL_TIMER_LOOP_PAUSE(test, 1);
     }
 
-    BL_TIMER_LOOP_END(test, "chrono in loop", iters);
+    BL_TIMER_LOOP_END(test, 1, "chrono in loop", iters);
     BL_TIMER_REPORT(test);
 
   } else {

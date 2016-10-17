@@ -32,6 +32,8 @@
 #include <chrono>   // clock
 //#include <cstdio>   // printf
 #include <vector>
+#include <unordered_map>
+
 #include <string>
 #include <algorithm>  // std::min
 #include <sstream>
@@ -48,25 +50,39 @@ class Timer {
     std::vector<double> counts;
     std::chrono::duration<double> time_span;
 
+    std::unordered_map<size_t, std::chrono::steady_clock::time_point> loop_t1;
+    std::unordered_map<size_t, std::chrono::duration<double> > loop_span;
+
   public:
     void reset() {
       names.clear();
       durations.clear();
       counts.clear();
+
+      loop_t1.clear();
+      loop_span.clear();
     }
 
 
 //=========== loop stuff.
-    void loop_start() { time_span = std::chrono::duration<double>::zero(); }
-    void loop_resume() { t1 = std::chrono::steady_clock::now(); }
-    void loop_pause() {
-    	t2 = std::chrono::steady_clock::now();
-    	time_span += (std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1));
+    void loop_start(size_t const & id) {
+      loop_span[id] = std::chrono::duration<double>::zero();
+      loop_t1[id] = std::chrono::steady_clock::now();
     }
-    void loop_end(::std::string const & name, double const & n_elem) {
+    void loop_resume(size_t const & id) {
+      loop_t1[id] = std::chrono::steady_clock::now();
+    }
+    void loop_pause(size_t const & id) {
+      std::chrono::steady_clock::time_point lt2 = std::chrono::steady_clock::now();
+    	loop_span[id] += (std::chrono::duration_cast<std::chrono::duration<double> >(lt2 - loop_t1[id]));
+    }
+    void loop_end(size_t const & id, ::std::string const & name, double const & n_elem) {
     	names.push_back(name);
-    	durations.push_back(time_span.count());
-		counts.push_back(n_elem);
+    	durations.push_back(loop_span[id].count());
+    	counts.push_back(n_elem);
+
+    	loop_span.erase(id);
+    	loop_t1.erase(id);
     }
 
 //============ timer start
@@ -369,10 +385,10 @@ class Timer {
 #define BL_TIMER_INIT(title)      Timer title##_timer;
 #define BL_TIMER_RESET(title)     do {  title##_timer.reset(); } while (0)
 
-#define BL_TIMER_LOOP_START(title)     do { title##_timer.loop_start(); } while (0)
-#define BL_TIMER_LOOP_RESUME(title)    do { title##_timer.loop_resume(); } while (0)
-#define BL_TIMER_LOOP_PAUSE(title)     do { title##_timer.loop_pause(); } while (0)
-#define BL_TIMER_LOOP_END(title, name, n_elem) do { title##_timer.loop_end(name, n_elem); } while (0)
+#define BL_TIMER_LOOP_START(title, id)     do { title##_timer.loop_start(id); } while (0)
+#define BL_TIMER_LOOP_RESUME(title, id)    do { title##_timer.loop_resume(id); } while (0)
+#define BL_TIMER_LOOP_PAUSE(title, id)     do { title##_timer.loop_pause(id); } while (0)
+#define BL_TIMER_LOOP_END(title, id, name, n_elem) do { title##_timer.loop_end(id, name, n_elem); } while (0)
 
 #define BL_TIMER_START(title)     do { title##_timer.start(); } while (0)
 #define BL_TIMER_END(title, name, n_elem) do { title##_timer.end(name, n_elem); } while (0)
@@ -394,10 +410,10 @@ class Timer {
 
 #define BL_TIMER_INIT(title)
 #define BL_TIMER_RESET(title)
-#define BL_TIMER_LOOP_START(title)
-#define BL_TIMER_LOOP_RESUME(title)
-#define BL_TIMER_LOOP_PAUSE(title)
-#define BL_TIMER_LOOP_END(title, name, n_elem)
+#define BL_TIMER_LOOP_START(title, id)
+#define BL_TIMER_LOOP_RESUME(title, id)
+#define BL_TIMER_LOOP_PAUSE(title, id)
+#define BL_TIMER_LOOP_END(title, id, name, n_elem)
 #define BL_TIMER_START(title)
 #define BL_TIMER_END(title, name, n_elem)
 #define BL_TIMER_COLLECTIVE_START(title, name, comm)
