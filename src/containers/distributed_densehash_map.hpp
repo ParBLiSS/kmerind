@@ -3021,7 +3021,7 @@ namespace dsc  // distributed std container
 //        ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
 
 
-        //========== LOWER MEM VERSION
+        //========== LOWER MEM VERSION - not transforming and then saving...
 
         // transform input first.
         BL_BENCH_START(insert);
@@ -3141,6 +3141,157 @@ namespace dsc  // distributed std container
           BL_BENCH_END(insert, "local_insert", this->local_size());
 
 
+
+        BL_BENCH_REPORT_MPI_NAMED(insert, "count_densehash_map:insert_key", this->comm);
+
+        return count;
+
+      }
+  };
+
+
+  template <typename COUNT>
+  struct sat_plus {
+      static_assert(!::std::is_signed<COUNT>::value &&
+                    ::std::is_integral<COUNT>::value, "only supports unsigned integer types for count");
+
+      inline COUNT operator()(COUNT const & a, COUNT const & b) {
+        COUNT c = a + b;
+        return (c < a) ? -1 : c;
+      }
+  };
+
+  /**
+   * @brief  distributed unordered counting map following std unordered map's interface, but performs saturation math.
+   * @details   This class is modeled after the std::densehash_map, but allows a binary reduction operator to be used during insertion.
+   *
+   *         the reduction operator is not assumed to be associative.  The operator is called with parameters existing element, then new element to insert.
+   *
+   *         it has as much of the same methods of std::densehash_map as possible.  however, all methods consider the fact
+   *         that the data are in distributed memory space, so to access the data, "communication" is needed.
+   *
+   *         Note that "communication" is a weak concept here meaning that we are accessing a different local container.
+   *         as such, communicator may be defined for MPI, UPC, OpenMP, etc.
+   *
+   *         This allows the possibility of using distributed unordered map as local storage for coarser grain distributed container.
+   *
+   *         Note that communicator requires a mapping strategy between a key and the target processor/thread/partition.  The mapping
+   *         may be done using a hash, similar to the local distributed unordered map, or it may be done via sorting/lookup or other mapping
+   *         mechanisms.  The choice may be constrained by the communication approach, e.g. global sorting  does not work well with
+   *         incremental async communication
+   *
+   * @tparam Key
+   * @tparam T
+   * @tparam Comm   default to mpi_collective_communicator       communicator for global communication. may hash or sort.
+   * @tparam KeyTransform   transform function for the key.  can supply identity.  requires a single template argument (Key).  useful for mapping kmolecule to kmer.
+   * @tparam Hash   hash function for local and distribution.  requires a template arugment (Key), and a bool (prefix, chooses the MSBs of hash instead of LSBs)
+   * @tparam Equal   default to ::std::equal_to<Key>   equal function for the local storage.
+   * @tparam Alloc  default to ::std::allocator< ::std::pair<const Key, T> >    allocator for local storage.
+   */
+  template<
+    typename Key, typename T,
+    template <typename> class MapParams,
+    typename SpecialKeys = ::fsc::sparsehash::special_keys<Key>,
+    class Alloc = ::std::allocator< ::std::pair<const Key, T> >
+  >
+  class saturating_counting_densehash_map :
+    public reduction_densehash_map<Key, T, MapParams, SpecialKeys, sat_plus<T>, Alloc> {
+      static_assert(!::std::is_signed<T>::value &&
+                    ::std::is_integral<T>::value, "only supports unsigned integer types for count");
+
+    protected:
+      using Base = reduction_densehash_map<Key, T, MapParams, SpecialKeys, sat_plus<T>, Alloc>;
+
+    public:
+      using local_container_type = typename Base::local_container_type;
+
+      // std::densehash_multimap public members.
+      using key_type              = typename local_container_type::key_type;
+      using mapped_type           = typename local_container_type::mapped_type;
+      using value_type            = typename local_container_type::value_type;
+      using hasher                = typename local_container_type::hasher;
+      using key_equal             = typename local_container_type::key_equal;
+      using allocator_type        = typename local_container_type::allocator_type;
+      using reference             = typename local_container_type::reference;
+      using const_reference       = typename local_container_type::const_reference;
+      using pointer               = typename local_container_type::pointer;
+      using const_pointer         = typename local_container_type::const_pointer;
+      using iterator              = typename local_container_type::iterator;
+      using const_iterator        = typename local_container_type::const_iterator;
+      using size_type             = typename local_container_type::size_type;
+      using difference_type       = typename local_container_type::difference_type;
+
+
+      saturating_counting_densehash_map(const mxx::comm& _comm) :
+	  	  Base(_comm) {}
+
+
+      virtual ~saturating_counting_densehash_map() {};
+
+      using Base::insert;
+      using Base::count;
+      using Base::find;
+      using Base::erase;
+      using Base::unique_size;
+      using Base::update;
+
+      /**
+       * @brief insert new elements in the distributed densehash_multimap.
+       * @param first
+       * @param last
+       */
+      template <typename Predicate = ::bliss::filter::TruePredicate>
+      size_t insert(std::vector< Key >& input, bool sorted_input = false, Predicate const &pred = Predicate()) {
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
+        BL_BENCH_INIT(insert);
+
+        if (::dsc::empty(input, this->comm)) {
+          BL_BENCH_REPORT_MPI_NAMED(insert, "count_densehash_map:insert", this->comm);
+          return 0;
+        }
+
+        sorted_input = false;
+
+        //========== LOWER MEM VERSION - not transforming and then distribute, nor distribute then save then insert
+        //       instead, distribute, then use transform iterator.
+
+        // transform input first.
+        BL_BENCH_START(insert);
+        this->transform_input(input);
+        BL_BENCH_END(insert, "transform_input", input.size());
+
+        // then send the raw k-mers.
+        // communication part
+        if (this->comm.size() > 1) {
+          BL_BENCH_START(insert);
+          // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
+          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
+          BLISS_UNUSED(recv_counts);
+          BL_BENCH_END(insert, "dist_data", input.size());
+        }
+
+          size_t count = 0;
+          auto trans = [](Key const & x) {
+            return ::std::make_pair(x, T(1));
+          };
+
+          BL_BENCH_START(insert);
+          // preallocate.  easy way out - estimate to be 1/2 of input.  then at the end, resize if significantly less.
+          this->c.resize(input.size() / 2);
+
+          // then insert all the rest,
+          auto local_start = ::bliss::iterator::make_transform_iterator(input.begin(), trans);
+          auto local_end = ::bliss::iterator::make_transform_iterator(input.end(), trans);
+          // insert
+          if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+            count += this->Base::local_insert(local_start, local_end, pred);
+          else
+            count += this->Base::local_insert(local_start, local_end);
+
+          // resize further.
+          this->c.resize(0);
+
+          BL_BENCH_END(insert, "local_insert", this->local_size());
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "count_densehash_map:insert_key", this->comm);
 
