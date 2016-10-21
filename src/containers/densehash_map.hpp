@@ -579,8 +579,8 @@ protected:
     }
 
     void resize(size_t const n) {
-      lower_map.resize(static_cast<float>(n) / 2.0 );
-      upper_map.resize(static_cast<float>(n) / 2.0 );
+      lower_map.resize( n/2 );
+      upper_map.resize((n+1)/2 );
     }
 
     /// rehash for new count number of BUCKETS.  iterators are invalidated.
@@ -966,6 +966,8 @@ class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, fals
     map.max_load_factor(0.7);
     map.min_load_factor(0.3);
 
+    std::cout << "max size: " << map.max_size() << std::endl;
+
 		};
 
     template<class InputIt>
@@ -1053,7 +1055,7 @@ class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, fals
     }
 
     void resize(size_t const n) {
-      map.resize(static_cast<float>(n));
+      map.resize(n);
     }
 
     /// rehash for new count number of BUCKETS.  iterators are invalidated.
@@ -1828,8 +1830,8 @@ class densehash_multimap {
 
     void resize(size_t const n) {
       // densehash map resize takes into account the max_load_factor.
-      lower_map.resize(static_cast<float>(n) / 2.0);
-      upper_map.resize(static_cast<float>(n) / 2.0);
+      lower_map.resize(n/2);
+      upper_map.resize((n+1) /2 );
     }
 
     void rehash(size_type count) {
@@ -2149,7 +2151,7 @@ class densehash_multimap<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator,
     }
 
     void resize(size_t const n) {
-      map.resize(static_cast<float>(n) );
+      map.resize(n );
     }
 
     void rehash(size_type count) {
