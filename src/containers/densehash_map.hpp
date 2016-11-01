@@ -966,7 +966,7 @@ class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, fals
     map.max_load_factor(0.7);
     map.min_load_factor(0.3);
 
-    std::cout << "max size: " << map.max_size() << std::endl;
+    //std::cout << "max size: " << map.max_size() << std::endl;
 
 		};
 
