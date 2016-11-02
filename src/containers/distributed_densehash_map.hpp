@@ -2200,12 +2200,12 @@ namespace dsc  // distributed std container
         else
           count = this->Base::local_insert(input);
 
-        std::cout << "rank " << this->comm.rank() <<
-          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+//        std::cout << "rank " << this->comm.rank() <<
+//          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
 
         this->c.resize(0);
-        std::cout << "rank " << this->comm.rank() <<
-          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+//        std::cout << "rank " << this->comm.rank() <<
+//          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
 
 
         BL_BENCH_END(insert, "insert", this->c.size());
@@ -2871,13 +2871,13 @@ namespace dsc  // distributed std container
         else
           count = this->local_insert(input.begin(), input.end());
 
-        std::cout << "rank " << this->comm.rank() <<
-          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+//        std::cout << "rank " << this->comm.rank() <<
+//          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
 
         this->c.resize(0);
 
-        std::cout << "rank " << this->comm.rank() <<
-          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+//        std::cout << "rank " << this->comm.rank() <<
+//          " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
 
         BL_BENCH_END(insert, "local_insert", this->local_size());
 
@@ -3129,14 +3129,14 @@ namespace dsc  // distributed std container
           else
             count += this->Base::local_insert(local_start, local_end);
 
-          std::cout << "rank " << this->comm.rank() <<
-            " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+//          std::cout << "rank " << this->comm.rank() <<
+//            " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
 
           // resize further.
           this->c.resize(0);
 
-          std::cout << "rank " << this->comm.rank() <<
-            " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+//          std::cout << "rank " << this->comm.rank() <<
+//            " input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
 
           BL_BENCH_END(insert, "local_insert", this->local_size());
 
@@ -3246,7 +3246,7 @@ namespace dsc  // distributed std container
         BL_BENCH_INIT(insert);
 
         if (::dsc::empty(input, this->comm)) {
-          BL_BENCH_REPORT_MPI_NAMED(insert, "count_densehash_map:insert", this->comm);
+          BL_BENCH_REPORT_MPI_NAMED(insert, "saturating_count_densehash_map:insert", this->comm);
           return 0;
         }
 
@@ -3293,7 +3293,7 @@ namespace dsc  // distributed std container
 
           BL_BENCH_END(insert, "local_insert", this->local_size());
 
-        BL_BENCH_REPORT_MPI_NAMED(insert, "count_densehash_map:insert_key", this->comm);
+        BL_BENCH_REPORT_MPI_NAMED(insert, "saturating_count_densehash_map:insert_key", this->comm);
 
         return count;
 

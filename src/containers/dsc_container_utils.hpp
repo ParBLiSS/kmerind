@@ -195,7 +195,7 @@ namespace dsc {
 					tmp_result[offset[i2o[i]]++] = input[i];
 			}
 
-			std::cout << "bucket64 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
+			//std::cout << "bucket64 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
 
 			input.swap(tmp_result);
 			return bucket_counts;
@@ -226,7 +226,7 @@ namespace dsc {
 			for (size_t i = 0; i < input.size(); ++i) {
 		        tmp_result[offset[i2o[i]]++] = input[i];
 			}
-			std::cout << "bucket32 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
+			//std::cout << "bucket32 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
 			input.swap(tmp_result);
 
 			return bucket_counts;
@@ -258,7 +258,7 @@ namespace dsc {
 			for (size_t i = 0; i < input.size(); ++i) {
 		        tmp_result[offset[i2o[i]]++] = input[i];
 			}
-			std::cout << "bucket16 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
+			//std::cout << "bucket16 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
 
 			input.swap(tmp_result);
 
@@ -291,7 +291,7 @@ namespace dsc {
 			for (size_t i = 0; i < input.size(); ++i) {
 		        tmp_result[offset[i2o[i]]++] = input[i];
 			}
-			std::cout << "bucket8 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
+			//std::cout << "bucket8 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
 
 			input.swap(tmp_result);
 

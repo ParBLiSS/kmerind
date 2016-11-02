@@ -221,7 +221,7 @@ namespace dsc
       size_t size() const {
         size_t s = this->local_size();
 
-        if (comm.rank() == 0) printf("rank %d map_base local_size in size() is %lu\n", comm.rank(), s);
+        //if (comm.rank() == 0) printf("rank %d map_base local_size in size() is %lu\n", comm.rank(), s);
 
         if (comm.size() == 1)
           return s;
