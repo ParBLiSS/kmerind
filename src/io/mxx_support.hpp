@@ -240,7 +240,8 @@ namespace mxx {
         return baseType::num_basic_elements();
       }
     };
-}
+}  // namespace mxx
+
 
 //std::ostream &operator<<(std::ostream &os, uint8_t const &t) {
 //  return os << static_cast<uint32_t>(t);
