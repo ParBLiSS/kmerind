@@ -273,7 +273,7 @@ if (BUILD_TEST_APPLICATIONS)
   add_executable(testKmerIndex-fasta BenchmarkKmerIndex.cpp)
   SET_TARGET_PROPERTIES(testKmerIndex-fasta
      PROPERTIES COMPILE_FLAGS 
-     "-DpPARSER=FASTA -DpDNA=5 -DpK=63 -DpKmerStore=CANONICAL -DpMAP=SORTED -DpINDEX=COUNT -DpCompare")
+     "-DpPARSER=FASTA -DpDNA=5 -DpK=21 -DpKmerStore=CANONICAL -DpMAP=SORTED -DpINDEX=COUNT -DpCompare")
   target_link_libraries(testKmerIndex-fasta
    ${EXTRA_LIBS})
 

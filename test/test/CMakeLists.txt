@@ -4,7 +4,7 @@ include("${PROJECT_SOURCE_DIR}/cmake/ExtraWarnings.cmake")
 
 
 
-if (BUILD_EXAMPLE_APPLICATIONS)
+if (BUILD_TEST_APPLICATIONS)
 
 #----------------
 # COMMENTED OUT because the template parameters are not yet updated.
@@ -25,5 +25,5 @@ target_link_libraries(test_de_bruijn_graph_construction ${EXTRA_LIBS})
 add_executable(test_get_file_size test_get_file_size.cpp)
 target_link_libraries(test_get_file_size ${EXTRA_LIBS})
 
-endif()
+endif(BUILD_TEST_APPLICATIONS)
 
