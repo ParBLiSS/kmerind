@@ -175,14 +175,23 @@ namespace bliss
 
 
         void operator+=(size_t dist) {
-          if (((id & 0xFFFF) + dist) > 0xFFFF) throw std::invalid_argument("ShortSequenceKmerId increment overflow.");
+          if (((id & 0xFFFF) + dist) > 0xFFFF) {
+            std::cerr << "ERROR overflow: id=" << get_id() << " lower 16=" << (id & 0xFFFF) << " add dist=" << dist << std::endl;
+            throw std::invalid_argument("ShortSequenceKmerId increment overflow.");
+          }
           id += dist;
         }
 
         void operator-=(size_t dist) {
-          if ((id & 0xFFFF) < dist)  throw std::invalid_argument("ShortSequenceKmerId decrement underflow.");
+          if ((id & 0xFFFF) < dist)  {
+            std::cerr << "ERROR underflow: id=" << get_id() << " lower 16=" << (id & 0xFFFF) << " subtract dist=" << dist << std::endl;
+
+            throw std::invalid_argument("ShortSequenceKmerId decrement underflow.");
+          }
           id -= dist;
         }
+
+
 
         std::ptrdiff_t operator-(ShortSequenceKmerId const & other) {
           return (id >= other.id) ? static_cast<std::ptrdiff_t>(id - other.id) :

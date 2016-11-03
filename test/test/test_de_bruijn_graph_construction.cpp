@@ -188,7 +188,10 @@ int main(int argc, char** argv) {
 
 
 
-	::std::cerr<<"Using DNA16 to present each edge" << ::std::endl;
+#ifdef USE_MPI
+	if (rank == 0)
+#endif
+	  ::std::cerr<<"Using DNA16 to present each edge" << ::std::endl;
 	testDeBruijnGraph< bliss::de_bruijn::de_bruijn_engine<CountNodeMapType>, bliss::io::FASTQParser >(comm, filename, ::std::string("ST, hash, dbg construction, count."));
 
 //
@@ -196,7 +199,10 @@ int main(int argc, char** argv) {
 //	testDeBruijnGraph< bliss::de_bruijn::de_bruijn_engine_ascii<CountNodeMapType>, bliss::io::FASTQParser >(comm, filename, ::std::string("ST, hash, dbg construction, count."));
 
 
-  ::std::cerr<<"Using DNA16 to represent each edge" << ::std::endl;
+#ifdef USE_MPI
+  if (rank == 0)
+#endif
+    ::std::cerr<<"Using DNA16 to represent each edge" << ::std::endl;
   testDeBruijnGraph< bliss::de_bruijn::de_bruijn_engine<ExistNodeMapType>,  bliss::io::FASTQParser >(comm, filename, ::std::string("ST, hash, dbg construction, existence."));
 
 //
