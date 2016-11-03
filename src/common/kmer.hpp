@@ -203,16 +203,11 @@ namespace bliss
      *                        sequence to be used for initializing the k-mer
      *                        data structure.
      */
-    template<typename InputIterator>
+    template<typename InputIterator, typename std::enable_if<std::is_same<
+              typename std::iterator_traits<InputIterator>::value_type,
+              WORD_TYPE>::value, int>::type = 1>
     explicit Kmer(InputIterator begin)
     {
-      // assert that the iterator's value type is the same as this k-mers base
-      // type
-      static_assert(std::is_same<
-          typename std::iterator_traits<InputIterator>::value_type,
-          WORD_TYPE>::value,
-          "Input iterator must have same value type as the Kmer storage");
-
       // copy all the data into this kmer
       WORD_TYPE* out = data;
       for (unsigned int i = 0; i < nWords; ++i)
@@ -224,6 +219,21 @@ namespace bliss
 
       // set unused bits to zero to make this a valid kmer
       do_sanitize();
+    }
+
+    template<typename T, unsigned int len>
+    explicit Kmer(T const (&input)[len])
+    {
+      static_assert(sizeof(T) * len >= nBytes, "ERROR not enough input for this k and alphabet");
+
+      // copy all the data into this kmer
+      constexpr unsigned int bytes = (nBytes <= (sizeof(T) * len)) ? nBytes : sizeof(T) * len;
+      memcpy(this->data, input, bytes);
+
+      //
+      constexpr unsigned int padding = nWords * sizeof(WORD_TYPE) - bytes;
+      memset(reinterpret_cast<unsigned char*>(this->data) + bytes, 0, padding);
+
     }
 
     explicit Kmer(std::string const & ascii)
@@ -1522,6 +1532,13 @@ namespace bliss
 
 
   };
+
+  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
+  constexpr unsigned int Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::nBits;
+  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
+  constexpr unsigned int Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::nBytes;
+  template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE>
+  constexpr unsigned int Kmer<KMER_SIZE, ALPHABET, WORD_TYPE>::nWords;
 
   /**
    * @brief print kmer to output stream
