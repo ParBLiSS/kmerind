@@ -110,9 +110,7 @@ namespace bliss
          * default move constructor
          * @param other  instance of SequenceIdIterator to move from
          */
-        SequenceIdIterator(SequenceIdIterator<SequenceIdType> && other) : stride(other.stride), val(std::move(other.val)) {
-          other.stride = 1;
-        };
+        SequenceIdIterator(SequenceIdIterator<SequenceIdType> && other) : stride(other.stride), val(std::move(other.val)) {};
 
         /**
          * default move assignment operator
@@ -120,7 +118,7 @@ namespace bliss
          * @return reference to self
          */
         SequenceIdIterator<SequenceIdType>& operator=(SequenceIdIterator<SequenceIdType> && other) {
-          stride = other.stride; other.stride = 1;
+          stride = other.stride;
           val = std::move(other.val);
           return *this;
         };
@@ -136,7 +134,6 @@ namespace bliss
          * @return  reference to incremented iterator
          */
         SequenceIdIterator<SequenceIdType>& operator++() {
-            //printf("INCREMENT id: pos %lu, id %lu, file %u\n", val.get_pos(), val.get_id(), val.get_file_id());
           val += stride;
           return *this;
         }
@@ -174,7 +171,7 @@ namespace bliss
          * @brief dereference function, *iter
          * @return  current value
          */
-        const SequenceIdType operator*() const {
+        SequenceIdType operator*() const {
           return val;
         }
 
