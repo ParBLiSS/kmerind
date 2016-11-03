@@ -52,16 +52,17 @@ namespace bliss
      * @tparam advance	  if more than 1 unzip iterators are attached to an iterator to extract different elements, only 1 should advance the
      * 						target iterator (since it is a reference).
      */
-    template<typename ZipIter, int select=0, bool advance=true>
-    class UnzipIterator :  public std::iterator<std::input_iterator_tag,
-                                              typename std::conditional<select==0,
-											  	  typename std::iterator_traits<ZipIter>::value_type::first_type,
-											  	  typename std::iterator_traits<ZipIter>::value_type::second_type >::type >
+    template<typename ZipIter, size_t select=0, bool advance=true>
+    class UnzipIterator :
+        public std::iterator<std::input_iterator_tag,
+                             typename std::tuple_element<select,
+                                                         typename std::iterator_traits<ZipIter>::value_type>::type>
     {
       protected:
         // reference to underlying ZipIterator.  This is key that enables lock-step increment of zip iterator components.
-        ZipIter& iter;
-
+        // explicitly using a shared ptr.
+        std::shared_ptr<ZipIter> iter;
+//        TODO:  above was a problem - if iter goes out of scope, this will die!!!
 
       public:
         /**
@@ -73,7 +74,7 @@ namespace bliss
         /**
          * @param _first      zip iterator reference.  note that we CANNOT make a copy nor move the input.
          */
-        explicit UnzipIterator(ZipIter& _iter) : iter(_iter) {};
+        explicit UnzipIterator(const std::shared_ptr<ZipIter> & _iter) : iter(_iter) {};
 
 
         /**
@@ -120,8 +121,8 @@ namespace bliss
          * @brief   pre-increment operator: ++iter.  increments underlying iterators
          * @return  reference to incremented iterator
          */
-        UnzipIterator<ZipIter, select, advance>& operator++() {
-        	if (advance) ++iter;   // only advance if specified to do so.
+        UnzipIterator& operator++() {
+        	if (advance) ++(*iter);   // only advance if specified to do so.
         	return *this;
         }
 
@@ -130,8 +131,8 @@ namespace bliss
          * @param   dummy for c++ to identify this as post increment.
          * @return  incremented copy of iterator
          */
-        UnzipIterator<ZipIter, select, advance> operator++(int) {
-          UnzipIterator<ZipIter, select, advance> out(*this);
+        UnzipIterator operator++(int) {
+          UnzipIterator out(*this);
           this->operator++();
           return out;
         }
@@ -141,8 +142,8 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if equal, false otherwise.
          */
-        bool operator==(const UnzipIterator<ZipIter, select, advance>& other) const {
-          return iter == other.iter;
+        bool operator==(const UnzipIterator& other) const {
+          return (*iter) == *(other.iter);
         }
 
         /**
@@ -150,7 +151,7 @@ namespace bliss
          * @param other   iterator to compare to.
          * @return  bool, true if not equal, false otherwise.
          */
-        bool operator!=(const UnzipIterator<ZipIter, select, advance>& other) const {
+        bool operator!=(const UnzipIterator& other) const {
           return !(this->operator==(other));
         }
 
@@ -158,13 +159,9 @@ namespace bliss
          * @brief dereference function, *iter.  this basically dereferences the zip iterator and chooses the component.
          * @return  current value
          */
-        template <int S = select, typename = typename std::enable_if<S == 0, void>::type>
-        typename std::iterator_traits<ZipIter>::value_type::first_type operator*() {
-        	return (*iter).first;
-        }
-        template <int S = select, typename = typename std::enable_if<S == 1, void>::type>
-        typename std::iterator_traits<ZipIter>::value_type::second_type operator*() {
-        	return (*iter).second;
+        typename std::tuple_element<select, typename std::iterator_traits<ZipIter>::value_type>::type
+        operator*() const {
+        	return ::std::get<select>(*(*iter));
         }
 
     };

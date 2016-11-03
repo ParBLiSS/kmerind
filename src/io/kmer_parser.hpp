@@ -394,18 +394,18 @@ public:
         		  bliss::common::ASCII2<Alphabet>()),
         		  true);
 
-          CharPosIter<SeqType> cp_begin(neol, pp_begin, pp_end);
+//          CharPosIter<SeqType> cp_begin(neol, pp_begin, pp_end);
 
-          return iterator_type<SeqType>(start, IdIter<SeqType>(cp_begin));
+          return iterator_type<SeqType>(start, IdIter<SeqType>(std::make_shared<CharPosIter<SeqType> >(neol, pp_begin, pp_end)) );
       // ==== extract new id and rezip iterators
       } else {
           KmerIter<SeqType> end(BaseCharIterator<SeqType>(
         		  CharIter<SeqType>(neol, seq_end),
         		  bliss::common::ASCII2<Alphabet>()),
         		  false);
-          CharPosIter<SeqType> cp_end(neol, pp_end);
+//          CharPosIter<SeqType> cp_end(neol, pp_end);
 
-          return iterator_type<SeqType>(end, IdIter<SeqType>(cp_end));
+          return iterator_type<SeqType>(end, IdIter<SeqType>(std::make_shared<CharPosIter<SeqType> >(neol, pp_end)) );
 
       }
 
@@ -444,10 +444,10 @@ public:
       PairedIter<SeqType> pp_end(seq_end, IdIterType(seq_end_id));
 
       // filter eol
-      CharPosIter<SeqType> cp_end(neol, pp_end);
+      //CharPosIter<SeqType> cp_end(neol, pp_end);
 
       // ==== extract new id and rezip iterators
-      return iterator_type<SeqType>(end, IdIter<SeqType>(cp_end));
+      return iterator_type<SeqType>(end, IdIter<SeqType>(std::make_shared<CharPosIter<SeqType> >(neol, pp_end)));
   }
 
 
@@ -687,17 +687,17 @@ public:
           KmerIter<SeqType> start(BaseCharIterator<SeqType>(
         		  CharIter<SeqType>(neol, seq_begin, seq_end),
     			  bliss::common::ASCII2<Alphabet>()), true);
-          CharPosIter<SeqType> cp_begin(neol, pp_begin, pp_end);
-          QualIterType<SeqType> qual_start(CharIter<SeqType>(neol, read.qual_begin, read.qual_end));
-          KmerInfoIterType<SeqType> info_start(IdIter<SeqType>(cp_begin), qual_start);
+          //CharPosIter<SeqType> cp_begin(neol, pp_begin, pp_end);
+          QualIterType<SeqType> qual_start(CharIter<SeqType>(neol, qual_begin, qual_end));
+          KmerInfoIterType<SeqType> info_start(IdIter<SeqType>(std::make_shared<CharPosIter<SeqType> >(neol, pp_begin, pp_end) ), qual_start);
     	  return iterator_type<SeqType>(start, info_start);
       } else {
           KmerIter<SeqType> end(BaseCharIterator<SeqType>(
         		  CharIter<SeqType>(neol, seq_end),
     			  bliss::common::ASCII2<Alphabet>()), false);
-          CharPosIter<SeqType> cp_end(neol, pp_end);
+//          CharPosIter<SeqType> cp_end(neol, pp_end);
           QualIterType<SeqType> qual_end_iter(CharIter<SeqType>(neol, qual_end));
-          KmerInfoIterType<SeqType> info_end(IdIter<SeqType>(cp_end), qual_end_iter);
+          KmerInfoIterType<SeqType> info_end(IdIter<SeqType>(std::make_shared<CharPosIter<SeqType> >(neol, pp_end)), qual_end_iter);
           return iterator_type<SeqType>(end, info_end);
       }
   }
@@ -745,13 +745,13 @@ public:
       PairedIter<SeqType> pp_end(seq_end, IdIterType(seq_end_id));
 
       // filter eol
-      CharPosIter<SeqType> cp_end(neol, pp_end);
+//      CharPosIter<SeqType> cp_end(neol, pp_end);
 
       // ==== quality scoring
       // filter eol and generate quality scores
       QualIterType<SeqType> qual_end_iter(CharIter<SeqType>(neol, qual_end));
 
-      KmerInfoIterType<SeqType> info_end(IdIter<SeqType>(cp_end), qual_end_iter);
+      KmerInfoIterType<SeqType> info_end(IdIter<SeqType>(std::make_shared<CharPosIter<SeqType> >(neol, pp_end)), qual_end_iter);
 
 
       // ==== set up the zip iterators

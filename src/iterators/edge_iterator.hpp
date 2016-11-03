@@ -157,7 +157,7 @@ namespace bliss
           }
 
           /// dereference operator. _curr is guaranteed to be valid
-          inline edge_type operator*()
+          inline edge_type operator*() const
           {
             /*using four bits to represent an edge*/
             if(_left != _data_end && _right != _data_end){
