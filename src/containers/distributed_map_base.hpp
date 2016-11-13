@@ -156,9 +156,12 @@ namespace dsc
 	  // primarily for use with distributed_map and sorted_map, where the TransformedFunction is
 	  // a comparator, but we need a hash function.
 	  template <typename K>
-	  using StoreFarmHash = ::bliss::kmer::hash::farm<K, false>;
+	  using StoreFarmHash = typename ::std::conditional<::bliss::common::is_kmer<K>::value,
+	      ::bliss::kmer::hash::farm<K, false>,
+	       ::std::hash<K> >::type;
 	  template <typename K>
 	  using StoreTransform = typename MapParams<Key>::template StorageTransform<K>;
+
 	  using StoreTransformedFarmHash = ::fsc::TransformedHash<Key, StoreFarmHash, StoreTransform>;
 
 	  // primarily for use for sorting by hashmaps.
@@ -272,6 +275,13 @@ namespace dsc
       template <typename V>
       void transform_input(std::vector<V> & input) const {
     	  std::transform(input.begin(), input.end(), input.begin(), InputTransform());
+      }
+
+      template <typename V>
+      void transform_input(std::vector<V> const & input, std::vector<V> & output) const {
+        output.resize(input.size());
+
+        std::transform(input.begin(), input.end(), output.begin(), InputTransform());
       }
 
   };

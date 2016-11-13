@@ -62,6 +62,8 @@ namespace bliss
   namespace common
   {
 
+
+
   /**
    * @brief   Implements a general templated k-mer class.
    *
@@ -1559,6 +1561,15 @@ namespace bliss
     return ost;
   }
   
+
+  template <typename T>
+  struct is_kmer : public std::false_type {};
+
+  template <unsigned int K, typename Alphabet, typename WT>
+  struct is_kmer<::bliss::common::Kmer<K, Alphabet, WT> > : public std::true_type {};
+
+
+
 
   } // namespace common
 } // namespace bliss
