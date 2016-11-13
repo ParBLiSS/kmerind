@@ -74,7 +74,9 @@ namespace bliss
         /**
          * @param _first      zip iterator reference.  note that we CANNOT make a copy nor move the input.
          */
-        explicit UnzipIterator(const std::shared_ptr<ZipIter> & _iter) : iter(_iter) {};
+        //explicit UnzipIterator(const std::shared_ptr<ZipIter> & _iter) : iter(_iter) {};
+
+        explicit UnzipIterator(std::shared_ptr<ZipIter> && _iter) : iter(std::move(_iter)) {};
 
 
         /**
@@ -97,7 +99,7 @@ namespace bliss
          * default move constructor
          * @param other  instance of UnzipIterator to move from
          */
-        UnzipIterator(UnzipIterator && other) : iter(other.iter) {};
+        UnzipIterator(UnzipIterator && other) : iter(std::move(other.iter)) {};
 
         /**
          * default move assignment operator.
@@ -105,7 +107,7 @@ namespace bliss
          * @return reference to self
          */
         UnzipIterator& operator=(UnzipIterator && other) {
-          iter = other.iter;
+          iter = std::move(other.iter);
           return *this;
         };
 

@@ -181,19 +181,20 @@ namespace bliss
          */
 
         inline T operator*() const {
-          val.first = *iter1;
-          val.second = *iter2;
-          return val;
+//          val.first = *iter1;
+//          val.second = *iter2;
+//          return val;
+          return ::std::make_pair(*iter1, *iter2);
         }
 
-        /**
-         * @brief dereference function, iter->
-         * @return  pointer to current value, so can access internal members
-         */
-        T* operator->() {
-          this->operator*();
-          return &val;
-        }
+//        /**
+//         * @brief dereference function, iter->
+//         * @return  pointer to current value, so can access internal members
+//         */
+//        T* operator->() {
+//          this->operator*();
+//          return &val;
+//        }
 
         /// readonly accessor for first iterator
         FirstIter const & get_first_iterator() const {
