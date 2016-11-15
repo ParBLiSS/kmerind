@@ -704,6 +704,59 @@ if (BL_BENCHMARK)
     add_test(NAME ${test_target_name} WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${test_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${test_target_name}.xml")
   endfunction(bliss_add_benchmark)
 
+
+  function(bliss_add_mpi_benchmark module_name module_link)
+      message(STATUS "adding gtest mpi benchmarks ${module_name} with files ${ARGN}") 
+
+    # set the name for the test target and executable
+    foreach(CPP_FILE ${ARGN})
+      # assume filename is of the format mpi_benchmark_NAME.cpp -> extract NAME as the name for the executable
+      get_filename_component(CPP_FILE_NAME ${CPP_FILE} NAME) 
+      string(REPLACE "mpi_benchmark_" "" CPP_FILE_SUFF ${CPP_FILE_NAME})
+      string(REPLACE ".cpp" "" MPI_TEST_NAME ${CPP_FILE_SUFF})
+      message(STATUS "MPI benchmark module found: ${MPI_TEST_NAME}")
+      set(benchmark_target_name benchmark-mpi-${module_name}-${MPI_TEST_NAME})
+      
+      
+      # add all give files
+      add_executable(${benchmark_target_name} ${CPP_FILE})
+
+      # add the googletest dependency
+      # commented out because there is no googletest dependency    add_dependencies(${benchmark_target_name} googletest)
+      # set binary output path for tests
+      set_target_properties(${benchmark_target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_BINARY_OUTPUT_DIR})
+
+	  set_target_properties(${benchmark_target_name} PROPERTIES COMPILE_FLAGS -DGTEST_HAS_PTHREAD=0)
+
+      # link benchmark with gtest (no main, since it provides it's own main function)
+      target_link_libraries(${benchmark_target_name} gtest)
+
+      # all the extra libs
+      target_link_libraries(${benchmark_target_name} ${EXTRA_LIBS})
+
+      # link to the benchmarked module (but only if that module produces a linkable
+      # library)
+      if (module_link)
+          target_link_libraries(${benchmark_target_name} ${module_name})
+      endif (module_link)
+
+      # generate google test XML results, to be parsed by Jenkins
+      # additionally to the CTest generated xml, the gtest xml is much more detailed (listing all single tests)
+      
+      set (mpi_params_1 -np 1 ${TEST_BINARY_OUTPUT_DIR}/${benchmark_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${benchmark_target_name}_1.xml)
+      set (mpi_params_2 -np 2 ${TEST_BINARY_OUTPUT_DIR}/${benchmark_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${benchmark_target_name}_2.xml)
+      set (mpi_params_3 -np 3 ${TEST_BINARY_OUTPUT_DIR}/${benchmark_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${benchmark_target_name}_3.xml)
+      set (mpi_params_4 -np 4 ${TEST_BINARY_OUTPUT_DIR}/${benchmark_target_name} --gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${benchmark_target_name}_4.xml)
+            
+      add_test(NAME ${benchmark_target_name}   WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND ${benchmark_target_name} ARGS "--gtest_output=xml:${TEST_XML_OUTPUT_DIR}/gtest/${benchmark_target_name}.xml")
+      add_test(NAME ${benchmark_target_name}_1 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_1}  )
+      add_test(NAME ${benchmark_target_name}_2 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_2}  )
+      add_test(NAME ${benchmark_target_name}_3 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_3}  )
+      add_test(NAME ${benchmark_target_name}_4 WORKING_DIRECTORY ${TEST_BINARY_OUTPUT_DIR} COMMAND mpirun ${mpi_params_4}  )
+    endforeach()
+  endfunction(bliss_add_mpi_benchmark)
+
+
 endif(BL_BENCHMARK)
 
 

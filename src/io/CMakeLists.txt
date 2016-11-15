@@ -12,6 +12,14 @@ if (IS_DIRECTORY ./test)
     # get all mpi test files from ./test
     FILE(GLOB MPI_TEST_FILES test/mpi_test_*.cpp)
     bliss_add_mpi_test(${TEST_NAME} FALSE ${MPI_TEST_FILES})
+if (BL_BENCHMARK)
+    FILE(GLOB BENCHMARK_FILES test/benchmark_*.cpp)
+    bliss_add_benchmark(${TEST_NAME} FALSE ${BENCHMARK_FILES})
+
+    FILE(GLOB MPI_BENCHMARK_FILES test/mpi_benchmark_*.cpp)
+    bliss_add_mpi_benchmark(${TEST_NAME} FALSE ${MPI_BENCHMARK_FILES})
+endif()
+    
 endif()
 
 # load the testing:
