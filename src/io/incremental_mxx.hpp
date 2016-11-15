@@ -564,36 +564,42 @@ namespace imxx
      * @return number of FULL blocks in the permutation.
      */
     template <typename SIZE = size_t>
-    size_t
-    bucket_to_block_permutation(SIZE const & block_bucket_size,
-    					  std::vector<SIZE> & bucket_sizes,
-                          std::vector<SIZE> & i2o,
-                          size_t first = 0,
-                          size_t last = std::numeric_limits<size_t>::max()) {
+    void
+    bucket_to_block_permutation(SIZE const & block_bucket_size, SIZE const & nblocks,
+                                std::vector<SIZE> & bucket_sizes,
+                                std::vector<SIZE> & i2o,
+                                size_t first = 0,
+                                size_t last = std::numeric_limits<size_t>::max()) {
 
-        // no bucket.
-        if ((bucket_sizes.size() == 0) || (block_bucket_size == 0))
-        	throw std::invalid_argument("block_bucket_size or bucket_sizes is 0");
-
-    	// if block_bucket_size is 0, use normal stuff
-    	if ( ((block_bucket_size * bucket_sizes.size()) > i2o.size()) ||
-    			(bucket_sizes.size() == 1))
-    	{
-    		bucket_to_permutation(bucket_sizes, i2o, first, last);
-    		if (bucket_sizes.size() == 1) std::fill(bucket_sizes.begin(), bucket_sizes.end(), 0);
-    		return 0;
-    	}
+      if (bucket_sizes.size() == 0)
+        throw std::invalid_argument("bucket_sizes is 0");
 
 
+      // if block_bucket_size is 0, use normal stuff
+      if ((block_bucket_size * nblocks * bucket_sizes.size()) > i2o.size()) {
+        throw std::invalid_argument("block is larger than total size");
+      }
 
-      SIZE min_bucket_size = *(std::min_element(bucket_sizes.begin(), bucket_sizes.end()));  // find the minimum
-      size_t nblocks = min_bucket_size / block_bucket_size;
-
-      if (nblocks == 0) {
+        // no block.  so do it without blocks
+      if ((block_bucket_size == 0) || (nblocks == 0)) {
         // no blocks. use standard permutation
         bucket_to_permutation(bucket_sizes, i2o, first, last);
 
-        return nblocks;
+        return;
+      }
+
+    	if (bucket_sizes.size() == 1)
+    	{
+    	  // all go into the block.  no left overs.
+    		bucket_to_permutation(bucket_sizes, i2o, first, last);
+    		bucket_sizes[0] = i2o.size() - block_bucket_size * nblocks;
+    		return;
+    	}
+
+      SIZE min_bucket_size = *(std::min_element(bucket_sizes.begin(), bucket_sizes.end()));  // find the minimum
+      if (nblocks > (min_bucket_size / block_bucket_size)) {
+        // no blocks. use standard permutation
+        throw std::invalid_argument("min bucket is smaller than the number of requested blocks. ");
       }
 
       // else we do blocked permutation
@@ -606,7 +612,7 @@ namespace imxx
       size_t l = std::min(last, i2o.size());
       assert((f <= l) && "first should not exceed last" );
 
-      if (f == l) return 0;  // no data in question.
+      if (f == l) return;  // no data in question.
 
 
       // initialize the offset, and reduce the bucket_sizes
@@ -654,7 +660,6 @@ namespace imxx
       }
       bucket_sizes.back() = l - bucket_sizes.back();
 
-      return nblocks;
     }
 
   } // local namespace
@@ -907,6 +912,40 @@ namespace imxx
 
   }
 
+  template <typename V, typename SIZE>
+  void undistribute(::std::vector<V>& input,
+                  ::std::vector<SIZE> & recv_counts,
+                  ::std::vector<SIZE> & i2o,
+                  ::std::vector<V>& output,
+                  ::mxx::comm const &_comm, bool const & preserve_input = true) {
+    BL_BENCH_INIT(undistribute);
+
+    BL_BENCH_START(undistribute);
+    std::vector<size_t> send_counts(recv_counts.size());
+    mxx::all2all(recv_counts.data(), 1, send_counts.data(), _comm);
+    size_t total = std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0));
+    BL_BENCH_END(undistribute, "recv_counts", input.size());
+
+    BL_BENCH_START(undistribute);
+    if (output.capacity() < total) output.clear();
+    output.resize(total);
+    BL_BENCH_END(undistribute, "realloc_out", output.size());
+
+    BL_BENCH_START(undistribute);
+    mxx::all2allv(input.data(), recv_counts, output.data(), send_counts, _comm);
+    BL_BENCH_END(undistribute, "a2av", input.size());
+
+    if (preserve_input) {
+      BL_BENCH_START(undistribute);
+      // distribute (communication part)
+      imxx::local::unpermute_inplace(output, i2o, 0, output.size());
+      BL_BENCH_END(undistribute, "unpermute_inplace", output.size());
+
+    }
+    BL_BENCH_REPORT_MPI_NAMED(undistribute, "map_base:undistribute", _comm);
+
+  }
+
   /**
    * @brief distribute function.  input is transformed, but remains the original input with original order.  buffer is used for output.
    *
@@ -936,12 +975,12 @@ namespace imxx
       BL_BENCH_START(distribute);
       SIZE min_bucket_size = *(::std::min_element(send_counts.begin(), send_counts.end()));
       min_bucket_size = ::mxx::allreduce(min_bucket_size, mxx::min<SIZE>(), _comm);
-      BL_BENCH_END(distribute, "min_bucket_size", send_counts.size());
+      BL_BENCH_END(distribute, "min_bucket_size", min_bucket_size);
 
       // compute the permutations from block size and processor mapping.  send_counts modified to the remainders.
       BL_BENCH_START(distribute);
-      SIZE nblocks = ::imxx::local::bucket_to_block_permutation(min_bucket_size, send_counts, i2o, 0, input.size());
-      SIZE first_part = nblocks * _comm.size() * min_bucket_size;
+      ::imxx::local::bucket_to_block_permutation(min_bucket_size, 1UL, send_counts, i2o, 0, input.size());
+      SIZE first_part = _comm.size() * min_bucket_size;
       BL_BENCH_END(distribute, "to_pos", input.size());
 
       // compute receive counts and total
@@ -963,18 +1002,14 @@ namespace imxx
       BL_BENCH_END(distribute, "alloc_out", output.size());
 
       BL_BENCH_START(distribute);
-      SIZE offset;
-      for (SIZE i = 0; i < nblocks; ++i) {
-        offset = i * _comm.size() * min_bucket_size;
-        block_all2all(input, min_bucket_size, output, offset, offset, _comm);
-      }
+      block_all2all(input, min_bucket_size, output, 0, 0, _comm);
       BL_BENCH_END(distribute, "a2a", first_part);
 
 
       BL_BENCH_START(distribute);
       mxx::all2allv(input.data() + first_part, send_counts,
                     output.data() + first_part, recv_counts, _comm);
-      BL_BENCH_END(distribute, "a2av", output.size());
+      BL_BENCH_END(distribute, "a2av", total - first_part);
 
       // permute
       if (preserve_input) {
@@ -1016,12 +1051,12 @@ namespace imxx
       BL_BENCH_START(distribute);
       SIZE min_bucket_size = *(::std::min_element(send_counts.begin(), send_counts.end()));
       min_bucket_size = ::mxx::allreduce(min_bucket_size, mxx::min<SIZE>(), _comm);
-      BL_BENCH_END(distribute, "min_bucket_size", send_counts.size());
+      BL_BENCH_END(distribute, "min_bucket_size", min_bucket_size);
 
       // compute the permutations from block size and processor mapping.  send_counts modified to the remainders.
       BL_BENCH_START(distribute);
-      SIZE nblocks = ::imxx::local::bucket_to_block_permutation(min_bucket_size, send_counts, i2o, 0, input.size());
-      SIZE first_part = nblocks * _comm.size() * min_bucket_size;
+      ::imxx::local::bucket_to_block_permutation(min_bucket_size, 1UL, send_counts, i2o, 0, input.size());
+      SIZE first_part = _comm.size() * min_bucket_size;
       BL_BENCH_END(distribute, "to_pos", input.size());
 
       // compute receive counts and total
@@ -1048,22 +1083,62 @@ namespace imxx
       BL_BENCH_END(distribute, "realloc_in", input.size());
 
       BL_BENCH_START(distribute);
-      SIZE offset;
-      for (SIZE i = 0; i < nblocks; ++i) {
-        offset = i * _comm.size() * min_bucket_size;
-        block_all2all(output, min_bucket_size, input, offset, offset, _comm);
-      }
+      block_all2all(output, min_bucket_size, input, 0, 0, _comm);
       BL_BENCH_END(distribute, "a2a", first_part);
 
 
       BL_BENCH_START(distribute);
       mxx::all2allv(output.data() + first_part, send_counts,
                     input.data() + first_part, recv_counts, _comm);
-      BL_BENCH_END(distribute, "a2av", input.size());
+      BL_BENCH_END(distribute, "a2av", total - first_part);
 
       BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
   }
 
+  /**
+   * @param recv_counts  counts for each bucket that is NOT PART OF FIRST BLOCK.
+   */
+  template <typename V, typename SIZE>
+  void undistribute_2part(::std::vector<V>& input,
+                  ::std::vector<SIZE> & recv_counts,
+                  ::std::vector<SIZE> & i2o,
+                  ::std::vector<V>& output,
+                  ::mxx::comm const &_comm, bool const & preserve_input = true) {
+    BL_BENCH_INIT(undistribute);
+
+    BL_BENCH_START(undistribute);
+    size_t second_part = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
+    size_t first_part = input.size() - second_part;
+    assert((first_part % _comm.size() == 0) && "the first block should be evenly distributed to buckets.");
+
+    std::vector<size_t> send_counts(recv_counts.size());
+    mxx::all2all(recv_counts.data(), 1, send_counts.data(), _comm);
+    second_part = std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0));
+    BL_BENCH_END(undistribute, "recv_counts", second_part);
+
+    BL_BENCH_START(undistribute);
+    if (output.capacity() < (first_part + second_part)) output.clear();
+    output.resize(first_part + second_part);
+    BL_BENCH_END(undistribute, "realloc_out", output.size());
+
+    BL_BENCH_START(undistribute);
+    mxx::all2all(input.data(), first_part / _comm.size(), output.data(), _comm);
+    BL_BENCH_END(undistribute, "a2av", first_part);
+
+    BL_BENCH_START(undistribute);
+    mxx::all2allv(input.data() + first_part, recv_counts, output.data() + first_part, send_counts, _comm);
+    BL_BENCH_END(undistribute, "a2av", second_part);
+
+    if (preserve_input) {
+      BL_BENCH_START(undistribute);
+      // distribute (communication part)
+      imxx::local::unpermute_inplace(output, i2o, 0, output.size());
+      BL_BENCH_END(undistribute, "unpermute_inplace", output.size());
+
+    }
+    BL_BENCH_REPORT_MPI_NAMED(undistribute, "map_base:undistribute", _comm);
+
+  }
 
   /**
    * @brief distribute, compute, send back.  one to one.  result matching input in order at then end.
@@ -1103,8 +1178,8 @@ namespace imxx
 
       // compute the permutations from block size and processor mapping.  send_counts modified to the remainders.
       BL_BENCH_START(distribute);
-      SIZE nblocks = ::imxx::local::bucket_to_block_permutation(min_bucket_size, send_counts, i2o, 0, input.size());
-      SIZE first_part = nblocks * _comm.size() * min_bucket_size;
+      ::imxx::local::bucket_to_block_permutation(min_bucket_size, 1UL, send_counts, i2o, 0, input.size());
+      SIZE first_part = _comm.size() * min_bucket_size;
       BL_BENCH_END(distribute, "to_pos", input.size());
 
       // compute receive counts and total
@@ -1127,11 +1202,7 @@ namespace imxx
 
       //== process first part.  communicate
       BL_BENCH_START(distribute);
-      SIZE offset;
-      for (SIZE i = 0; i < nblocks; ++i) {
-        offset = i * _comm.size() * min_bucket_size;
-        block_all2all_inplace(input, min_bucket_size, offset, offset, _comm);
-      }
+      block_all2all_inplace(input, min_bucket_size, 0, _comm);
       BL_BENCH_END(distribute, "a2a_inplace", first_part);
 
       // process
@@ -1142,11 +1213,8 @@ namespace imxx
       // send the results back.  and reverse the input
       // undo a2a, so that result data matches.
       BL_BENCH_START(distribute);
-      for (SIZE i = 0; i < nblocks; ++i) {
-        offset = i * _comm.size() * min_bucket_size;
-        block_all2all_inplace(input, min_bucket_size, offset, offset, _comm);
-        block_all2all_inplace(output, min_bucket_size, offset, offset, _comm);
-      }
+      block_all2all_inplace(input, min_bucket_size, 0, _comm);
+      block_all2all_inplace(output, min_bucket_size, 0, _comm);
       BL_BENCH_END(distribute, "inverse_a2a_inplace", first_part);
 
       //== process second part
@@ -1224,7 +1292,7 @@ namespace imxx
 //
 //      // compute the permutations from block size and processor mapping.  send_counts modified to the remainders.
 //      BL_BENCH_START(distribute);
-//      SIZE nblocks = ::imxx::local::bucket_to_block_permutation(min_block_size, send_counts, i2o, 0, input.size());
+//      ::imxx::local::bucket_to_block_permutation(min_block_size, 1, send_counts, i2o, 0, input.size());
 //      SIZE first_part = nblocks * min_block_size * _comm.size();
 //      BL_BENCH_END(distribute, "to_pos", i2o.size());
 //
@@ -1255,7 +1323,7 @@ namespace imxx
 //        offset = i * _comm.size() * min_block_size;
 //
 //        // communicate the request
-//        block_all2all_inplace(input, min_block_size, offset, offset, _comm);
+//        block_all2all_inplace(input, min_block_size, offset, _comm);
 //
 //        // reserve
 //        out_buffer.clear();
@@ -1290,7 +1358,7 @@ namespace imxx
 //      BL_BENCH_START(distribute);
 //      for (SIZE i = 0; i < nblocks; ++i) {
 //        offset = i * _comm.size() * min_bucket_size;
-//        block_all2all_inplace(input, min_bucket_size, offset, offset, _comm);
+//        block_all2all_inplace(input, min_bucket_size, offset,  _comm);
 //      }
 //      mxx::all2allv(output.data(), min_bucket_size, offset, offset, _comm);
 //      BL_BENCH_END(distribute, "inverse_a2a_inplace", first_part);

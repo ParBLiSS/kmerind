@@ -29,6 +29,7 @@
 
 #if defined(USE_MPI)
 #include "mxx/env.hpp"
+#include "mxx/algos.hpp"
 
 
 
@@ -47,6 +48,9 @@
 #include <cstdint>  // uint32_t
 #include <utility>  // pair
 #include <vector>
+
+
+//===============  BLOCK All2All tests
 
 struct A2ADistributeTestInfo {
     size_t input_size;
@@ -98,6 +102,7 @@ class A2ADistributeTest : public ::testing::TestWithParam<A2ADistributeTestInfo>
     }
 
     void init(mxx::comm const & comm) {
+
       // populate data with random numbers
       srand((comm.rank() + 1) * (comm.rank() + 1) - 1);
       size_t val;
@@ -112,9 +117,8 @@ class A2ADistributeTest : public ::testing::TestWithParam<A2ADistributeTestInfo>
       if ((p.input_size > 0) && (p.output_size > 0)) {
         ::mxx::datatype dt = ::mxx::get_datatype<T>();
         MPI_Alltoall(static_cast<T*>(&(data[p.input_offset])), p.block_size, dt.type(), static_cast<T*>(&(gold[p.output_offset])), p.block_size, dt.type(), comm);
-      }
+
       // check that the first nblocks all have same count in each bucket.
-      if (p.output_size > 0) {
         bool same = true;
         size_t offset = p.output_offset;
         for (int i = 0; i < comm.size(); ++i) {
@@ -122,7 +126,7 @@ class A2ADistributeTest : public ::testing::TestWithParam<A2ADistributeTestInfo>
             same &= gold[offset].second == i;
           }
         }
-        EXPECT_TRUE(same);
+        ASSERT_TRUE(same);
       }
     }
 
@@ -279,28 +283,604 @@ INSTANTIATE_TEST_CASE_P(Bliss, A2ADistributeTest, ::testing::Values(
     A2ADistributeTestInfo(1UL, 0UL,  0UL, 0UL, 0UL),   //  1, boundary case
     A2ADistributeTestInfo(0UL, 0UL,  1UL, 0UL, 0UL),   //  2, boundary case
 
-    A2ADistributeTestInfo((1UL <<  4), 0UL, (1UL <<  4), 0UL, (1UL << 1)),  // 3, full
+    A2ADistributeTestInfo((1UL << 16), 0UL,   (1UL <<  16), 0UL,   (1UL <<  8)),  // 3
+    A2ADistributeTestInfo((1UL << 16), 256UL, (1UL <<  16), 0UL,   (1UL <<  8)),  // 4
+    A2ADistributeTestInfo((1UL << 16), 0UL,   (1UL <<  16), 256UL, (1UL <<  8)),  // 5
+    A2ADistributeTestInfo((1UL << 16), 255UL, (1UL <<  16), 255UL, (1UL <<  8)),  // 6
 
-    A2ADistributeTestInfo((1UL <<  8), 0UL, (1UL <<  8), 0UL, (1UL << 2)),  // 4, full
-    A2ADistributeTestInfo((1UL <<  8), 16UL, (1UL <<  8), 0UL, (1UL << 2)),  // 5, full
-    A2ADistributeTestInfo((1UL <<  8), 0UL, (1UL <<  8), 16UL, (1UL << 2)),  // 6, full
-    A2ADistributeTestInfo((1UL <<  8), 15UL, (1UL <<  8), 15UL, (1UL << 2)),  // 7, full
-
-    A2ADistributeTestInfo((1UL << 16), 0UL, (1UL <<  16), 0UL, (1UL <<  8)),  // 8, full
-    A2ADistributeTestInfo((1UL << 16), 256UL, (1UL <<  16), 0UL, (1UL <<  8)),  // 9, full
-    A2ADistributeTestInfo((1UL << 16), 0UL, (1UL <<  16), 256UL, (1UL <<  8)),  // 10, full
-    A2ADistributeTestInfo((1UL << 16), 255UL, (1UL <<  16), 255UL, (1UL <<  8)),  // 11, full
+    A2ADistributeTestInfo((1UL << 15), 255UL, (1UL <<  16), 255UL, (1UL <<  8)),  // 7
+    A2ADistributeTestInfo((1UL << 16), 255UL, (1UL <<  15), 255UL, (1UL <<  8)),  // 8
 
 
-    A2ADistributeTestInfo((1UL << 15), 255UL, (1UL <<  16), 255UL, (1UL <<  8)),  // 12, full
-    A2ADistributeTestInfo((1UL << 16), 255UL, (1UL <<  15), 255UL, (1UL <<  8)),  // 13, full
-
-
-    A2ADistributeTestInfo(0UL, 0UL,  0UL, 0UL, 1UL)   // 14, boundary case
-//    A2ADistributeTestInfo(1UL, 0UL,  0UL, 0UL, 1UL),   // 15, boundary case.  assert will fail
-//    A2ADistributeTestInfo(0UL, 0UL,  1UL, 0UL, 1UL)   // 16, boundary case.  assert will fail
+    A2ADistributeTestInfo(0UL, 0UL,  0UL, 0UL, 1UL)     //  9, boundary case
+//    A2ADistributeTestInfo(1UL, 0UL,  0UL, 0UL, 1UL),  // 10, boundary case.  assert will fail
+//    A2ADistributeTestInfo(0UL, 0UL,  1UL, 0UL, 1UL)   // 11, boundary case.  assert will fail
 
 ));
+
+
+//=========================  DISTRIBUTE TESTS
+
+struct DistributeTestInfo {
+    size_t input_size;
+
+    DistributeTestInfo() = default;
+    DistributeTestInfo(size_t const & _input_size) :
+      input_size(_input_size) {};
+
+    DistributeTestInfo(DistributeTestInfo const & other) = default;
+    DistributeTestInfo& operator=(DistributeTestInfo const & other) = default;
+    DistributeTestInfo(DistributeTestInfo && other) = default;
+    DistributeTestInfo& operator=(DistributeTestInfo && other) = default;
+};
+
+
+/**
+ * @brief test fixture for file parsers, which segments file into sequences.
+ */
+class DistributeTest : public ::testing::TestWithParam<DistributeTestInfo>
+{
+  protected:
+    DistributeTest() {};
+    virtual ~DistributeTest() {};
+
+    using T = std::pair<size_t, int>;
+
+    virtual void SetUp()
+    {
+      p = GetParam();
+      //std::cout << "p " << p.input_size << "," << p.bucket_count << "," << p.block_size << std::endl;
+
+      distributed.clear();
+      distributed.reserve(p.input_size);
+      roundtripped.clear();
+      roundtripped.resize(p.input_size);
+
+      // allocate test data
+      data.clear();
+      data.reserve(p.input_size);
+
+      gold.clear();
+
+    }
+
+    void init(mxx::comm const & comm) {
+
+      // populate data with random numbers
+      srand((comm.rank() + 1) * (comm.rank() + 1) - 1);
+      size_t val;
+      for (size_t i = 0; i < p.input_size; ++i) {
+        val = rand();
+        val <<= 32;
+        val |= rand();
+        data.emplace_back(val, comm.rank());
+      }
+
+      // make a copy of data.
+      std::vector<T> temp(data.begin(), data.end());
+
+      // bucket it.
+      int p = comm.size();
+      std::vector<size_t> send_counts = ::mxx::bucketing(temp, [&p](T const & x ){ return x.first % p; }, p);
+
+      // mxx all2all
+      ::mxx::all2allv(temp, send_counts, comm).swap(gold);
+
+    }
+
+    virtual void TearDown() {
+
+      // check distributed same as gold
+      if (distributed.size() > 0) {
+        EXPECT_EQ(distributed.size(), gold.size());
+        bool same = true;
+        for (size_t i = 0; i < distributed.size(); ++i) {
+          same &= (distributed[i] == gold[i]);
+
+          if (distributed[i] != gold[i]) {
+            std::cout << " pos " << i << " distributed " << distributed[i].first << "," << distributed[i].second << "; gold " << gold[i].first << "," << gold[i].second << std::endl;
+            ASSERT_TRUE(false);
+          }
+
+        }
+        EXPECT_TRUE(same);
+      }
+
+      // check roundtripped same as data
+      if (roundtripped.size() > 0) {
+        EXPECT_EQ(roundtripped.size(), data.size());
+        bool same = true;
+        for (size_t i = 0; i < roundtripped.size(); ++i) {
+          same &= (roundtripped[i] == data[i]);
+          if (roundtripped[i] != data[i]) {
+            std::cout << " pos " << i << " roundtripped " << roundtripped[i].first << "," << roundtripped[i].second << "; data " << data[i].first << "," << data[i].second << std::endl;
+            ASSERT_TRUE(false);
+          }
+
+        }
+        EXPECT_TRUE(same);
+      }
+    }
+
+    DistributeTestInfo p;
+
+    // input data
+    std::vector<T> data;
+
+    // one of 2 possible outputs.
+    std::vector<T> distributed;
+    std::vector<T> roundtripped;
+
+    // gold standard results
+    std::vector<T> gold;
+};
+
+
+
+TEST_P(DistributeTest, distribute_preserve_input)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->roundtripped.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->distributed, comm, true);
+
+}
+
+TEST_P(DistributeTest, distribute)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->roundtripped.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->distributed, comm, false);
+
+  this->roundtripped.clear();
+}
+
+TEST_P(DistributeTest, destructive_distribute)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->distributed.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::destructive_distribute(this->distributed, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->roundtripped, comm);
+
+  this->roundtripped.clear();
+}
+
+
+TEST_P(DistributeTest, distribute_preserve_input_rt)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->roundtripped.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->distributed, comm, true);
+
+  imxx::undistribute(distributed, recv_counts, mapping, this->roundtripped, comm, true);
+
+}
+
+TEST_P(DistributeTest, distribute_rt)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->roundtripped.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->distributed, comm, false);
+
+  imxx::undistribute(distributed, recv_counts, mapping, this->roundtripped, comm, true);
+}
+
+TEST_P(DistributeTest, destructive_distribute_rt)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->distributed.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::destructive_distribute(this->distributed, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->roundtripped, comm);
+
+  imxx::undistribute(this->distributed, recv_counts, mapping, this->roundtripped, comm, true);
+}
+
+
+INSTANTIATE_TEST_CASE_P(Bliss, DistributeTest, ::testing::Values(
+    // base cases
+    DistributeTestInfo(0UL),   //  0, boundary case
+
+    DistributeTestInfo((1UL <<  8)),  // 1
+    DistributeTestInfo((1UL << 15)),  // 2
+    DistributeTestInfo((1UL << 16))   // 3
+
+));
+
+
+
+
+
+//=========================  2 Part DISTRIBUTE TESTS
+
+struct Distribute2PartTestInfo {
+    size_t input_size;
+
+    Distribute2PartTestInfo() = default;
+    Distribute2PartTestInfo(size_t const & _input_size) :
+      input_size(_input_size) {};
+
+    Distribute2PartTestInfo(Distribute2PartTestInfo const & other) = default;
+    Distribute2PartTestInfo& operator=(Distribute2PartTestInfo const & other) = default;
+    Distribute2PartTestInfo(Distribute2PartTestInfo && other) = default;
+    Distribute2PartTestInfo& operator=(Distribute2PartTestInfo && other) = default;
+};
+
+
+/**
+ * @brief test fixture for file parsers, which segments file into sequences.
+ */
+class Distribute2PartTest : public ::testing::TestWithParam<Distribute2PartTestInfo>
+{
+  protected:
+    Distribute2PartTest() {};
+    virtual ~Distribute2PartTest() {};
+
+    using T = std::pair<size_t, int>;
+
+    virtual void SetUp()
+    {
+      p = GetParam();
+      //std::cout << "p " << p.input_size << "," << p.bucket_count << "," << p.block_size << std::endl;
+
+      distributed.clear();
+      distributed.reserve(p.input_size);
+      roundtripped.clear();
+      roundtripped.resize(p.input_size);
+
+      // allocate test data
+      data.clear();
+      data.reserve(p.input_size);
+
+      gold.clear();
+
+    }
+
+    void init(mxx::comm const & comm) {
+
+      // populate data with random numbers
+      srand((comm.rank() + 1) * (comm.rank() + 1) - 1);
+      size_t val;
+      for (size_t i = 0; i < p.input_size; ++i) {
+        val = rand();
+        val <<= 32;
+        val |= rand();
+        data.emplace_back(val, comm.rank());
+      }
+
+      // make a copy of data.
+      std::vector<T> temp(data.begin(), data.end());
+
+      // bucket it.
+      int p = comm.size();
+      std::vector<size_t> send_counts = ::mxx::bucketing(temp, [&p](T const & x ){ return x.first % p; }, p);
+
+      // get the minimum
+      size_t min_bucket_size = *(std::min_element(send_counts.begin(), send_counts.end()));
+      min_bucket_size = ::mxx::allreduce(min_bucket_size, mxx::min<size_t>(), comm);
+      size_t first_part = min_bucket_size * comm.size();
+
+      std::vector<size_t> offsets(send_counts.size() + 1, 0);
+      for (size_t i = 1; i <= send_counts.size(); ++i) {
+        offsets[i] = offsets[i-1] + send_counts[i-1];
+        send_counts[i-1] -= min_bucket_size;
+      }
+      EXPECT_EQ(offsets.back(), temp.size());
+      size_t second_part = std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0));
+      EXPECT_EQ(second_part + first_part, temp.size());
+
+      std::vector<size_t> recv_counts(send_counts.size(), 0);
+      ::mxx::all2all(send_counts.data(), 1, recv_counts.data(), comm);
+      second_part = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
+
+      gold.resize(first_part + second_part);
+
+      // shuffle the buckets
+      size_t offset1 = 0;
+      size_t offset2 = 0;
+      std::vector<T> temp2(temp.size());
+      for (size_t i = 0; i < send_counts.size(); ++i) {
+        std::copy(temp.begin() + offsets[i], temp.begin() + offsets[i] + min_bucket_size, temp2.begin() + offset1);
+        offset1 += min_bucket_size;
+
+        std::copy(temp.begin() + offsets[i] + min_bucket_size, temp.begin() + offsets[i+1], temp2.begin() + first_part + offset2);
+        offset2 += send_counts[i];
+      }
+
+      // mxx all2all
+      ::mxx::all2all(temp2.data(), min_bucket_size, gold.data(), comm);
+      // mxx all2allv
+      ::mxx::all2allv(temp2.data() + first_part, send_counts, gold.data() + first_part, recv_counts, comm);
+
+    }
+
+    virtual void TearDown() {
+
+      // check distributed same as gold
+      if (distributed.size() > 0) {
+        EXPECT_EQ(distributed.size(), gold.size());
+        bool same = true;
+        for (size_t i = 0; i < distributed.size(); ++i) {
+          same &= (distributed[i] == gold[i]);
+
+          if (distributed[i] != gold[i]) {
+            std::cout << " pos " << i << " distributed " << distributed[i].first << "," << distributed[i].second << "; gold " << gold[i].first << "," << gold[i].second << std::endl;
+//            ASSERT_TRUE(false);
+          }
+
+        }
+        EXPECT_TRUE(same);
+      }
+
+      // check roundtripped same as data
+      if (roundtripped.size() > 0) {
+        EXPECT_EQ(roundtripped.size(), data.size());
+        bool same = true;
+        for (size_t i = 0; i < roundtripped.size(); ++i) {
+          same &= (roundtripped[i] == data[i]);
+          if (roundtripped[i] != data[i]) {
+            std::cout << " pos " << i << " roundtripped " << roundtripped[i].first << "," << roundtripped[i].second << "; data " << data[i].first << "," << data[i].second << std::endl;
+            ASSERT_TRUE(false);
+          }
+
+        }
+        EXPECT_TRUE(same);
+      }
+    }
+
+    Distribute2PartTestInfo p;
+
+    // input data
+    std::vector<T> data;
+
+    // one of 2 possible outputs.
+    std::vector<T> distributed;
+    std::vector<T> roundtripped;
+
+    // gold standard results
+    std::vector<T> gold;
+};
+
+
+
+TEST_P(Distribute2PartTest, distribute_preserve_input_2part)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->roundtripped.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->distributed, comm, true);
+
+}
+
+TEST_P(Distribute2PartTest, distribute_2part)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->roundtripped.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->distributed, comm, false);
+
+  this->roundtripped.clear();
+}
+
+TEST_P(Distribute2PartTest, destructive_distribute_2part)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->distributed.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::destructive_distribute_2part(this->distributed, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->roundtripped, comm);
+
+  this->roundtripped.clear();
+}
+
+
+TEST_P(Distribute2PartTest, distribute_preserve_input_2part_rt)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->roundtripped.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->distributed, comm, true);
+
+  imxx::undistribute_2part(this->distributed, recv_counts, mapping, this->roundtripped, comm, true);
+
+}
+
+TEST_P(Distribute2PartTest, distribute_2part_rt)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->roundtripped.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->distributed, comm, false);
+
+  imxx::undistribute_2part(this->distributed, recv_counts, mapping, this->roundtripped, comm, true);
+}
+
+TEST_P(Distribute2PartTest, destructive_distribute_2part_rt)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->distributed.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  imxx::destructive_distribute_2part(this->distributed, [&p](T const & x ){ return x.first % p; },
+                   recv_counts, mapping, this->roundtripped, comm);
+
+
+  imxx::undistribute_2part(this->distributed, recv_counts, mapping, this->roundtripped, comm, true);
+}
+
+
+
+INSTANTIATE_TEST_CASE_P(Bliss, Distribute2PartTest, ::testing::Values(
+    // base cases
+    Distribute2PartTestInfo(0UL),   //  0, boundary case
+    Distribute2PartTestInfo((1UL <<  2)),  // 1
+
+    Distribute2PartTestInfo((1UL <<  8)),  // 1
+    Distribute2PartTestInfo((1UL << 15)),  // 2
+    Distribute2PartTestInfo((1UL << 16))   // 3
+
+));
+
+
+
+
+
+
 
 #endif
 

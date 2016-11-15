@@ -247,7 +247,9 @@ TEST_P(BlockBucketTest, assign)
 		  	  	  	  	  	  	  this->p.bucket_count,
                                  this->bcounts, this->mapping);
 
-  imxx::local::bucket_to_block_permutation(this->p.block_size, this->bcounts, this->mapping);
+  size_t min_bucket = *(std::min_element(this->bcounts.begin(), this->bcounts.end()));
+  size_t nblocks = p.block_size > 0 ? (min_bucket / p.block_size) : 0;
+  imxx::local::bucket_to_block_permutation(this->p.block_size, nblocks, this->bcounts, this->mapping);
 
 }
 
@@ -268,7 +270,9 @@ TEST_P(BlockBucketTest, permute)
 		  	  	  	  	  	  	  this->p.bucket_count,
                                  this->bcounts, this->mapping);
 
-  imxx::local::bucket_to_block_permutation(this->p.block_size, this->bcounts, this->mapping);
+  size_t min_bucket = *(std::min_element(this->bcounts.begin(), this->bcounts.end()));
+  size_t nblocks = p.block_size > 0 ? (min_bucket / p.block_size) : 0;
+  imxx::local::bucket_to_block_permutation(this->p.block_size, nblocks, this->bcounts, this->mapping);
 
 
   if (pp.bucket_count > 0) {
@@ -297,7 +301,9 @@ TEST_P(BlockBucketTest, inplace_permute)
 			  this->p.bucket_count,
 	                                 this->bcounts, this->mapping);
 
-	  imxx::local::bucket_to_block_permutation(this->p.block_size, this->bcounts, this->mapping);
+    size_t min_bucket = *(std::min_element(this->bcounts.begin(), this->bcounts.end()));
+    size_t nblocks = p.block_size > 0 ? (min_bucket / p.block_size) : 0;
+    imxx::local::bucket_to_block_permutation(this->p.block_size, nblocks, this->bcounts, this->mapping);
 
 	  if (pp.bucket_count > 0) {
 
@@ -329,7 +335,9 @@ TEST_P(BlockBucketTest, unpermute)
 			  this->p.bucket_count,
 	                                 this->bcounts, this->mapping);
 
-	  imxx::local::bucket_to_block_permutation(this->p.block_size, this->bcounts, this->mapping);
+    size_t min_bucket = *(std::min_element(this->bcounts.begin(), this->bcounts.end()));
+    size_t nblocks = p.block_size > 0 ? (min_bucket / p.block_size) : 0;
+    imxx::local::bucket_to_block_permutation(this->p.block_size, nblocks, this->bcounts, this->mapping);
 
 	  if (pp.bucket_count > 0) {
 
@@ -364,10 +372,13 @@ TEST_P(BlockBucketTest, inplace_unpermute)
 	  BlockBucketTestInfo pp = this->p;
 
 	  imxx::local::assign_to_buckets(this->data, [&pp](std::pair<size_t, size_t> const & x){ return x.first % pp.bucket_count; },
-			  this->p.bucket_count,
+	                                 this->p.bucket_count,
 	                                 this->bcounts, this->mapping);
 
-	  imxx::local::bucket_to_block_permutation(this->p.block_size, this->bcounts, this->mapping);
+
+	  size_t min_bucket = *(std::min_element(this->bcounts.begin(), this->bcounts.end()));
+	  size_t nblocks = p.block_size > 0 ? (min_bucket / p.block_size) : 0;
+	  imxx::local::bucket_to_block_permutation(this->p.block_size, nblocks, this->bcounts, this->mapping);
 
 	  if (pp.bucket_count > 0) {
 
