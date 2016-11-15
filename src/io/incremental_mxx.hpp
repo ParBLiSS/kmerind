@@ -740,11 +740,13 @@ namespace imxx
   void block_all2all(std::vector<T> const & input, size_t send_count, std::vector<T> & output,
                      size_t send_offset = 0, size_t recv_offset = 0, mxx::comm const & comm = mxx::comm()) {
 
+    if ((input.size() == 0) || (send_count == 0)) return;
+
     // ensure enough space
     assert((input.size() >= (send_offset + send_count * comm.size())) && "input for block_all2all not big enough");
     assert((output.size() >= (recv_offset + send_count * comm.size())) && "output for block_all2all not big enough");
 
-    // send via mxx all2all
+    // send via mxx all2all - leverage any large message support from mxx.  (which uses datatype.contiguous() to increase element size and reduce element count to 1)
     ::mxx::all2all(&(input[send_offset]), send_count, &(output[recv_offset]), comm);
   }
 
@@ -762,13 +764,25 @@ namespace imxx
   void block_all2all_inplace(std::vector<T> & input, size_t send_count,
                      size_t offset = 0, mxx::comm const & comm = mxx::comm()) {
 
+    if ((input.size() == 0) || (send_count == 0)) return;
+
     // ensure enough space
     assert((input.size() >= (offset + send_count * comm.size())) && "input for block_all2all not big enough");
-    assert((send_count * comm.size() < mxx::max_int) && "send count too large for mpi ");
+    assert((send_count < mxx::max_int) && "send count too large for mpi ");
+//    assert((send_count * comm.size() < mxx::max_int) && "send count too large for mpi ");
+
+    // get datatype based on size.
+    mxx::datatype dt;
+    if ((send_count * comm.size()) < mxx::max_int) {
+      dt = mxx::get_datatype<T>();
+    } else {
+      // create a contiguous data type to support large messages (send_count * comm.size() > mxx::max_int).
+      dt = mxx::get_datatype<T>().contiguous(send_count);
+      send_count = 1;
+    }
 
     // send using special mpi keyword MPI_IN_PLACE. should work for MPI_Alltoall.
-    mxx::datatype dt = mxx::get_datatype<T>();
-    MPI_Alltoall(const_cast<T*>(&(input[offset])), send_count, dt.type(), MPI_IN_PLACE, send_count, dt.type(), comm);
+    MPI_Alltoall(MPI_IN_PLACE, send_count, dt.type(), const_cast<T*>(&(input[offset])), send_count, dt.type(), comm);
   }
 
 
