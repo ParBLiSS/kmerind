@@ -19,6 +19,8 @@
 #include <gtest/gtest.h>
 #include "io/incremental_mxx.hpp"
 
+#include "mxx/algos.hpp"
+
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -168,6 +170,42 @@ TEST_P(BucketBenchmark, bucket)
 		  this->p.bucket_count, this->bcounts,   this->bucketed,
                                    this->p.first, this->p.last);
 }
+
+TEST_P(BucketBenchmark, mxx_inplace_bucket)
+{
+  this->unbucketed.clear();
+  this->mapping.clear();
+
+  // allocate.
+  this->bucketed.resize(this->p.input_size);
+
+  // copy
+  std::copy(this->data.begin(), this->data.end(), this->bucketed.begin());
+
+  BucketBenchmarkInfo pp = this->p;
+
+  ::mxx::bucketing_inplace(this->bucketed, [&pp](std::pair<size_t, size_t> const & x){ return x.first % pp.bucket_count; },
+		  this->p.bucket_count).swap(this->bcounts);
+
+}
+
+TEST_P(BucketBenchmark, mxx_bucket)
+{
+	this->bcounts.clear();
+	this->unbucketed.clear();
+  this->mapping.clear();
+
+  // allocate.
+  this->bucketed.resize(this->p.input_size);
+  // copy
+  std::copy(this->data.begin(), this->data.end(), this->bucketed.begin());
+
+  BucketBenchmarkInfo pp = this->p;
+
+  ::mxx::bucketing(this->bucketed, [&pp](std::pair<size_t, size_t> const & x){ return x.first % pp.bucket_count; },
+		  this->p.bucket_count).swap(this->bcounts);
+}
+
 
 TEST_P(BucketBenchmark, permute)
 {

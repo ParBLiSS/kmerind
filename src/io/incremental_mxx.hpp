@@ -416,6 +416,16 @@ namespace imxx
      * @details	also need i2o to be a signed integer, so we can use the sign bit to check
      * 			that an entry has been visited.
      *
+     * 			profiling:  heaptrack shows that there are unlikely unnecessary allocation
+     * 						cachegrind and gprof show that bulk of time is in inplace_permute, and there are no further details
+     * 						perf stats show that cache miss rate is about the same for permute as is for inplace permute
+     * 						perf record shows that the majority of the cost is in swap (or in the case of inplace_unpermute, in copy assignment)
+     * 						checking counter shows that the array is visited approximately 2x. reducing this is unlikely to improve performance
+     * 							due to move/copy cost.
+     * 						move/copy cost is associated with std::pair.
+     *				loop unrolling did not help much.
+     *				issue is random read and write, probably.  perf profiling identifies the problem as such.
+     *
      */
     template <typename T>
     void permute_inplace(std::vector<T> & unbucketed, std::vector<size_t> & i2o,
@@ -442,27 +452,33 @@ namespace imxx
         // and https://blog.merovius.de/2014/08/12/applying-permutation-in-constant.html
         size_t j, k;
         T v;
-        constexpr size_t mask = ~(0UL) << 31;
+        constexpr size_t mask = ~(0UL) << (sizeof(size_t) * 8 - 1);
+//        size_t counter = 0;
         for (size_t i = f; i < l; ++i) {
-        	if ((i2o[i] & mask) > 0) {
+        	k = i2o[i];
+//        	++counter;
+
+        	if (k >= mask) {
         		// previously visited.  unmark and move on.
-        		i2o[i] = ~i2o[i];  // negate
+        		i2o[i] = ~k;  // negate
         		continue;
         	}
 
         	// get the current position and value
-        	v = unbucketed[i];
-        	k = i2o[i];
+        	j = i;
+        	v = unbucketed[j];
         	while (k != i) {  // stop when cycle completes (return to original position)
-        		std::swap(unbucketed[k], v);  // swap the curr and next values
+        		std::swap(unbucketed[k], v);
         		j = k;
-        		k = i2o[j];  				  // get the next position
+        		k = i2o[j];
+//        		++counter;
 
-        		i2o[j] = ~i2o[j];  			  // mark the last position as visited.
+        		i2o[j] = ~k;  			  // mark the last position as visited.
         	}
         	unbucketed[i] = v;				  // cycle complete, swap back the current value (from some other location)
         }
 
+//        std::cout << "i2o read " << counter << " times.  size= " << i2o.size() << std::endl;
 
     }
 
@@ -499,6 +515,16 @@ namespace imxx
         }
     }
 
+    /**
+     *
+    * 			profiling:  heaptrack shows that there are unlikely unnecessary allocation
+    * 						cachegrind and gprof show that bulk of time is in inplace_permute, and there are no further details
+    * 						perf stats show that cache miss rate is about the same for permute as is for inplace permute
+    * 						perf record shows that the majority of the cost is in swap (or in the case of inplace_unpermute, in copy assignment)
+    * 						checking counter shows that the array is visited approximately 2x. reducing this is unlikely to improve performance
+    * 							due to move/copy cost.
+    * 						move/copy cost is associated with std::pair.
+     */
     template <typename T>
     void unpermute_inplace(std::vector<T> & bucketed, std::vector<size_t> & i2o,
     		size_t first = 0,
@@ -524,32 +550,38 @@ namespace imxx
         // and https://blog.merovius.de/2014/08/12/applying-permutation-in-constant.html
         size_t j, k;
         T v;
-        constexpr size_t mask = ~(0UL) << 31;
+//        size_t counter = 0;
+        constexpr size_t mask = ~(0UL) << (sizeof(size_t) * 8 - 1);
         for (size_t i = f; i < l; ++i) {
-        	if ((i2o[i] & mask) > 0) {
+        	k = i2o[i];				// position that the unbucketed was moved to in the bucketed list; source data
+//        	++counter;
+
+        	if (k >= mask) {
         		// previously visited.  unmark and move on.
-        		i2o[i] = ~i2o[i];  // negate
+        		i2o[i] = ~k;  // negate
         		continue;
         	}
 
         	// get the current position and value
         	v = bucketed[i];		// curr value - to be moved forward until its correct position is found
         	j = i;  				// curr position in bucketed list == , where the value is to be replaced.
-        	k = i2o[j];				// position that the unbucketed was moved to in the bucketed list; source data
         	while (k != i) {  // stop when cycle completes (return to original position)
 //        	while ((k & mask) == 0) {  // avoid previously visited, including i.  each entry visited just once.  THIS DOES NOT WORK - k may not be set to negative yet.
+        		// copy assign operator of the data type.  could be costly.
         		bucketed[j] = bucketed[k];   // move value back from the bucketed list to the unbucketed.
-        		i2o[j] = ~i2o[j];  			  // mark the curr position as visited.
+        		i2o[j] = ~k;  			  // mark the curr position as visited.
 
         		j = k;  				  // advance the curr position
         		k = i2o[j];				  // get the next position
-
+//        		++counter;
         	}
         	bucketed[j] = v;		// cycle complete, swap back the current value (from some other location)
-        	i2o[j] = ~i2o[j];		// cycle complete
+        	i2o[j] = ~k;		// cycle complete
 
         	i2o[i] = ~i2o[i];   // unmark the i2o map entry- never visiting prev i again.
         }
+
+//        std::cout << "i2o read " << counter << " times.  size= " << i2o.size() << std::endl;
     }
 
 
