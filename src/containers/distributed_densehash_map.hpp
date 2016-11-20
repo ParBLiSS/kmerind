@@ -71,6 +71,9 @@
 
 #include "containers/dsc_container_utils.hpp"
 
+#include "io/incremental_mxx.hpp"
+
+
 namespace dsc  // distributed std container
 {
 	// =================
@@ -1869,8 +1872,14 @@ namespace dsc  // distributed std container
           if (this->comm.size() > 1) {
 
             BL_BENCH_START(erase);
-            auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
-            BLISS_UNUSED(recv_counts);
+//            auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
+//            BLISS_UNUSED(recv_counts);
+            std::vector<size_t> recv_counts;
+            std::vector<size_t> i2o;
+            std::vector<Key > buffer;
+            ::imxx::distribute_2part(keys, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+            //::imxx::destructive_distribute(input, this->key_to_rank, recv_counts, buffer, this->comm);
+            keys.swap(buffer);
             BL_BENCH_END(erase, "dist_query", keys.size());
 
             // don't try to run unique further - have to use a set so might as well just have erase_element handle it.
@@ -2184,8 +2193,14 @@ namespace dsc  // distributed std container
           BL_BENCH_START(insert);
           // get mapping to proc
           // TODO: keep unique only may not be needed - comm speed may be faster than we can compute unique.
-          auto recv_counts(::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm));
-          BLISS_UNUSED(recv_counts);
+//          auto recv_counts(::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm));
+//          BLISS_UNUSED(recv_counts);
+          std::vector<size_t> recv_counts;
+          std::vector<size_t> i2o;
+          std::vector<::std::pair<Key, T> > buffer;
+          ::imxx::distribute_2part(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+          input.swap(buffer);
+
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
@@ -2250,26 +2265,31 @@ namespace dsc  // distributed std container
 //			std::vector<size_t> permute_map;
 			std::vector<size_t> recv_counts;
 
-			BL_BENCH_START(update);
-			// get assignment to buckets (per element mapping)
-			recv_counts	=
-					::dsc::assign_and_bucket(input, this->key_to_rank, this->comm.size());
-			BL_BENCH_END(update, "assign and bucket", input.size());
-
 //			BL_BENCH_START(update);
 //			// get assignment to buckets (per element mapping)
-//			std::tie(permute_map, recv_counts) =
-//				::dsc::assign_buckets(input, this->key_to_rank, this->comm.size());
-//			BL_BENCH_END(update, "assign bucket", input.size());
+//			recv_counts	=
+//					::dsc::assign_and_bucket(input, this->key_to_rank, this->comm.size());
+//			BL_BENCH_END(update, "assign and bucket", input.size());
 //
-//			// next bucket
-//			BL_BENCH_START(update);
-//			::dsc::permute(input, permute_map).swap(input);
-//			BL_BENCH_END(update, "bucket", input.size());
+////			BL_BENCH_START(update);
+////			// get assignment to buckets (per element mapping)
+////			std::tie(permute_map, recv_counts) =
+////				::dsc::assign_buckets(input, this->key_to_rank, this->comm.size());
+////			BL_BENCH_END(update, "assign bucket", input.size());
+////
+////			// next bucket
+////			BL_BENCH_START(update);
+////			::dsc::permute(input, permute_map).swap(input);
+////			BL_BENCH_END(update, "bucket", input.size());
 
 			// and distribute the data.
 			BL_BENCH_START(update);
-			::dsc::distribute_bucketed(input, recv_counts, this->comm).swap(input);
+//			::dsc::distribute_bucketed(input, recv_counts, this->comm).swap(input);
+      std::vector<size_t> i2o;
+      std::vector<::std::pair<Key, T> > buffer;
+      ::imxx::distribute_2part(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+      input.swap(buffer);
+
 			BL_BENCH_END(update, "distribute", input.size());
 
         }
@@ -2631,8 +2651,15 @@ namespace dsc  // distributed std container
         if (this->comm.size() > 1) {
           BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
-          BLISS_UNUSED(recv_counts);
+
+          std::vector<size_t> recv_counts;
+          std::vector<size_t> i2o;
+          std::vector<::std::pair<Key, T> > buffer;
+          ::imxx::distribute_2part(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+          input.swap(buffer);
+
+          //auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
+          //BLISS_UNUSED(recv_counts);
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
@@ -2856,8 +2883,14 @@ namespace dsc  // distributed std container
         if (this->comm.size() > 1) {
           BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
-          BLISS_UNUSED(recv_counts);
+          std::vector<size_t> recv_counts;
+          std::vector<size_t> i2o;
+          std::vector<::std::pair<Key, T> > buffer;
+          ::imxx::distribute_2part(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+          input.swap(buffer);
+
+//          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
+//          BLISS_UNUSED(recv_counts);
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
@@ -3041,8 +3074,14 @@ namespace dsc  // distributed std container
         if (this->comm.size() > 1) {
           BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
-          BLISS_UNUSED(recv_counts);
+          std::vector<size_t> recv_counts;
+          std::vector<size_t> i2o;
+          std::vector<::std::pair<Key, T> > buffer;
+          ::imxx::distribute_2part(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+          input.swap(buffer);
+
+//          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
+//          BLISS_UNUSED(recv_counts);
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
@@ -3277,8 +3316,16 @@ namespace dsc  // distributed std container
         if (this->comm.size() > 1) {
           BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
-          BLISS_UNUSED(recv_counts);
+          std::vector<size_t> recv_counts;
+          std::vector<size_t> i2o;
+
+          std::vector<::std::pair<Key, T> > buffer;
+          //::imxx::destructive_distribute(input, this->key_to_rank, recv_counts, buffer, this->comm);
+          ::imxx::distribute_2part(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+          input.swap(buffer);
+
+//          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
+//          BLISS_UNUSED(recv_counts);
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
