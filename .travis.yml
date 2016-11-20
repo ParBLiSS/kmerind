@@ -174,7 +174,7 @@ before_script:
 
 script:
     # run tests.
-    - make test 
+    - ctest -E benchmark 
     - ./bin/testFASTA_load
     - mpiexec -np 4 ./bin/testFASTA_load
     - ./bin/testFASTQ_load
