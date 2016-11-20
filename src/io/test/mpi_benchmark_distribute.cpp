@@ -239,6 +239,17 @@ INSTANTIATE_TEST_CASE_P(Bliss, A2ADistributeBenchmark, ::testing::Values(
 
 //=========================  DISTRIBUTE TESTS
 
+
+template <typename IIT, typename OIT>
+struct copy {
+    void operator()(IIT begin, IIT end, OIT out) const {
+      for (; begin != end; ++begin, ++out) {
+        *out = *begin;
+      }
+    }
+};
+
+
 struct DistributeBenchmarkInfo {
     size_t input_size;
 
@@ -356,29 +367,6 @@ TEST_P(DistributeBenchmark, distribute)
   this->roundtripped.clear();
 }
 
-TEST_P(DistributeBenchmark, destructive_distribute)
-{
-
-  ::mxx::comm comm;
-
-  this->init(comm);
-
-
-  // copy data into roundtripped.
-  this->distributed.resize(this->data.size());
-  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
-
-  // distribute
-  int p = comm.size();
-  std::vector<size_t> recv_counts;
-  std::vector<size_t> mapping;
-
-  imxx::destructive_distribute(this->distributed, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->roundtripped, comm);
-
-  this->roundtripped.clear();
-}
-
 
 TEST_P(DistributeBenchmark, distribute_preserve_input_rt)
 {
@@ -427,7 +415,7 @@ TEST_P(DistributeBenchmark, distribute_rt)
   imxx::undistribute(distributed, recv_counts, mapping, this->roundtripped, comm, true);
 }
 
-TEST_P(DistributeBenchmark, destructive_distribute_rt)
+TEST_P(DistributeBenchmark, scatter_compute_gather)
 {
 
   ::mxx::comm comm;
@@ -436,20 +424,25 @@ TEST_P(DistributeBenchmark, destructive_distribute_rt)
 
 
   // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+
   this->distributed.resize(this->data.size());
   std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
 
+
   // distribute
   int p = comm.size();
-  std::vector<size_t> recv_counts;
   std::vector<size_t> mapping;
 
-  imxx::destructive_distribute(this->distributed, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->roundtripped, comm);
+  std::vector<T> inbuf;
+  std::vector<T> outbuf;
 
-  imxx::undistribute(this->distributed, recv_counts, mapping, this->roundtripped, comm, true);
+  imxx::scatter_compute_gather(this->distributed, [&p](T const & x ){ return x.first % p; },
+                                     copy<typename std::vector<T>::const_iterator,
+                                          typename std::vector<T>::iterator>(),
+                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+
 }
-
 
 INSTANTIATE_TEST_CASE_P(Bliss, DistributeBenchmark, ::testing::Values(
 
@@ -581,29 +574,6 @@ TEST_P(Distribute2PartBenchmark, distribute_2part)
   this->roundtripped.clear();
 }
 
-TEST_P(Distribute2PartBenchmark, destructive_distribute_2part)
-{
-
-  ::mxx::comm comm;
-
-  this->init(comm);
-
-
-  // copy data into roundtripped.
-  this->distributed.resize(this->data.size());
-  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
-
-  // distribute
-  int p = comm.size();
-  std::vector<size_t> recv_counts;
-  std::vector<size_t> mapping;
-
-  imxx::destructive_distribute_2part(this->distributed, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->roundtripped, comm);
-
-  this->roundtripped.clear();
-}
-
 
 TEST_P(Distribute2PartBenchmark, distribute_preserve_input_2part_rt)
 {
@@ -652,7 +622,8 @@ TEST_P(Distribute2PartBenchmark, distribute_2part_rt)
   imxx::undistribute_2part(this->distributed, recv_counts, mapping, this->roundtripped, comm, true);
 }
 
-TEST_P(Distribute2PartBenchmark, destructive_distribute_2part_rt)
+
+TEST_P(Distribute2PartBenchmark, scatter_compute_gather_2part)
 {
 
   ::mxx::comm comm;
@@ -661,21 +632,55 @@ TEST_P(Distribute2PartBenchmark, destructive_distribute_2part_rt)
 
 
   // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+
   this->distributed.resize(this->data.size());
   std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
 
+
   // distribute
   int p = comm.size();
-  std::vector<size_t> recv_counts;
   std::vector<size_t> mapping;
 
-  imxx::destructive_distribute_2part(this->distributed, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->roundtripped, comm);
+  std::vector<T> inbuf;
+  std::vector<T> outbuf;
 
+  imxx::scatter_compute_gather_2part(this->distributed, [&p](T const & x ){ return x.first % p; },
+                                     copy<typename std::vector<T>::const_iterator,
+                                          typename std::vector<T>::iterator>(),
+                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
 
-  imxx::undistribute_2part(this->distributed, recv_counts, mapping, this->roundtripped, comm, true);
 }
 
+
+TEST_P(Distribute2PartBenchmark, scatter_compute_gather_lowmem)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->roundtripped.resize(this->data.size());
+
+  this->distributed.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
+
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> mapping;
+
+  std::vector<T> inbuf;
+  std::vector<T> outbuf;
+
+  imxx::scatter_compute_gather_lowmem(this->distributed, [&p](T const & x ){ return x.first % p; },
+                                     copy<typename std::vector<T>::const_iterator,
+                                          typename std::vector<T>::iterator>(),
+                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+
+}
 
 
 INSTANTIATE_TEST_CASE_P(Bliss, Distribute2PartBenchmark, ::testing::Values(

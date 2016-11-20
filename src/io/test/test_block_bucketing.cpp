@@ -280,9 +280,9 @@ TEST_P(BlockBucketTest, permute)
 	  // allocate.
 	  this->bucketed.resize(this->p.input_size);
 
-	  imxx::local::permute(this->data,
-						   this->mapping,
-							  this->bucketed);
+	  imxx::local::permute(this->data.cbegin(), this->data.cend(),
+						   this->mapping.begin(),
+						   this->bucketed.begin(), 0);
 
   }
 }
@@ -345,8 +345,9 @@ TEST_P(BlockBucketTest, unpermute)
 		  // allocate.
 		  this->bucketed.resize(this->p.input_size);
 
-		  imxx::local::permute(this->data,
-							   this->mapping, this->bucketed);
+		  imxx::local::permute(this->data.cbegin(), this->data.cend(),
+							   this->mapping.begin(),
+							   this->bucketed.begin(), 0);
 
 
 
@@ -355,8 +356,11 @@ TEST_P(BlockBucketTest, unpermute)
 
 		  // copy
 
-		  imxx::local::unpermute(this->bucketed,
-							   this->mapping, this->unbucketed);
+		  imxx::local::unpermute(this->bucketed.begin(), this->bucketed.end(),
+							   this->mapping.begin(),
+							   this->unbucketed.begin(),
+							   0);
+
 	  }
 }
 
@@ -385,8 +389,9 @@ TEST_P(BlockBucketTest, inplace_unpermute)
 		  // allocate.
 		  this->bucketed.resize(this->p.input_size);
 
-		  imxx::local::permute(this->data,
-							   this->mapping, this->bucketed);
+		  imxx::local::permute(this->data.cbegin(), this->data.cend(),
+							   this->mapping.begin(),
+							   this->bucketed.begin(), 0);
 
 		  // allocate.
 		  this->unbucketed.resize(this->p.input_size);

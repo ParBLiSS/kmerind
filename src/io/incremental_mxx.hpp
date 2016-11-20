@@ -28,8 +28,10 @@
 #include <mxx/comm.hpp>
 #include <mxx/collective.hpp>
 
-#include <utils/benchmark_utils.hpp>
-#include <utils/function_traits.hpp>
+#include "utils/benchmark_utils.hpp"
+#include "utils/function_traits.hpp"
+
+#include "containers/fsc_container_utils.hpp"
 
 namespace imxx
 {
@@ -136,7 +138,7 @@ namespace imxx
           tmp_result[bucket_sizes[i2o[i-f]]++] = input[i];
       }
       //std::cout << "bucket64 SIZES i2o " << sizeof(i2o) << " tmp results " << sizeof(tmp_result) << std::endl;
-      if ((l == input.size()) && (f == 0)) input.swap(tmp_result);   // if can swap, swap
+      if (len == input.size()) input.swap(tmp_result);   // if can swap, swap
       else memcpy(input.data() + f, tmp_result.data(), len * sizeof(T));   // else memcpy.
 
       // this process should have turned bucket_sizes to an inclusive prefix sum
@@ -248,7 +250,9 @@ namespace imxx
      *    also, this is more friendly with emplacing into a vector.
      *    the mapping is useful to avoid recomputing key_func.
      *
-     * this is faster than mxx by about 2x (due to computing key_func just once.), but uses another vector of size 8N.
+     * this is faster than mxx by about 2x (for hashing k-mers 1x.), but uses another vector of size 8N.
+     *
+     *    ** operate only within the input range [first, last), and assign to same output range.
      *
      * @tparam T            Input type
      * @tparam Func         Type of the key function.
@@ -311,7 +315,7 @@ namespace imxx
 
     }
 
-
+    // operate only within the input range [first, last), and assign to same output range.
     template <typename SIZE = size_t>
     void
     bucket_to_permutation(std::vector<SIZE> & bucket_sizes,
@@ -373,48 +377,141 @@ namespace imxx
      * @brief  given a bucketed array and the mapping from unbucketed to bucketed, undo the bucketing.
      * @details  note that output and i2o are traversed in order (write and read respectively),
      *       while input is randomly read.
+     *
+     *       permute a range in input.  (entire output range may be affected.)
+     *
+     *		 if OT is not random access iterator, this will be very slow.
+     *
      * @param unbucketed	input to be bucketed.  only processed between first and last.
      * @param i2o			mapping.  only the part between first and last is used.  values should be between first and last.
      * @param results		bucketed output, only processed between first and last.
      */
-    template <typename T>
-    void permute(std::vector<T> const & unbucketed, std::vector<size_t> const & i2o, std::vector<T> & results,
-    		size_t first = 0,
-			size_t last = std::numeric_limits<size_t>::max()) {
+    template <typename IT, typename OT, typename MT>
+    void permute_for_input_range(IT unbucketed, IT unbucketed_end,
+    		MT i2o, OT bucketed, OT bucketed_end,
+    		size_t const & bucketed_pos_offset) {
 
-    	assert(((unbucketed.size() == 0) || (unbucketed.data() != results.data())) &&
-    			"input and output should not be the same.");
+    	static_assert(std::is_same<typename std::iterator_traits<IT>::value_type,
+    			typename std::iterator_traits<OT>::value_type>::value,
+				"ERROR: IT and OT should be iterators with same value types");
+    	static_assert(std::is_integral<typename std::iterator_traits<MT>::value_type>::value,
+				"ERROR: MT should be an iterator of integral type value");
 
-        // ensure valid range
-        size_t f = std::min(first, unbucketed.size());
-        size_t l = std::min(last, unbucketed.size());
-        assert((f <= l) && "first should not exceed last" );
-        size_t len = l-f;
+    	size_t in_len = std::distance(unbucketed, unbucketed_end);  // input range.
+    	size_t out_len = std::distance(bucketed, bucketed_end);   // number of output to look for.
 
         // if input is empty, simply return
-        if ((len == 0) || (unbucketed.size() == 0) || (i2o.size() == 0)) return;
+        if ((in_len == 0) || (out_len == 0)) return;
 
-        assert(unbucketed.size() == i2o.size());
+        assert((out_len >= in_len) && "input range is larger than output range");
 
-        results.resize(unbucketed.size());
+        size_t bucketed_max = bucketed_pos_offset + out_len - 1;
+        assert((*(std::min_element(i2o, i2o + in_len)) >= bucketed_pos_offset) &&
+        		(*(std::max_element(i2o, i2o + in_len)) <= bucketed_max) &&
+				"ERROR, i2o [0, len) does not map to itself");
 
         // saving elements into correct position
-        for (size_t i = f; i < l; ++i) {
-//        	std::cout << "copy from " << i << " to " << i2o[i] << std::endl;
-            results[i2o[i]] = unbucketed[i];
-//        	std::cout << "copied " << unbucketed[i].first << " to " << results[i2o[i]].first << std::endl;
+        for (; unbucketed != unbucketed_end; ++i2o, ++unbucketed) {
+            *(bucketed + (*i2o - bucketed_pos_offset)) = *unbucketed;
+        }
+    }
+
+
+    /**
+     * @brief  given a bucketed array and the mapping from unbucketed to bucketed, undo the bucketing.
+     * @details  note that output and i2o are traversed in order (write and read respectively),
+     *       while input is randomly read.
+     *
+     *       permute a range in output.  (entire input range may be read..)
+     *
+     * @param unbucketed	input to be bucketed.  only processed between first and last.
+     * @param i2o			mapping.  only the part between first and last is used.  values should be between first and last.
+     * @param results		bucketed output, only processed between first and last.
+     */
+    template <typename IT, typename OT, typename MT>
+    void permute_for_output_range(IT unbucketed, IT unbucketed_end,
+    		MT i2o, OT bucketed, OT bucketed_end,
+    		size_t const & bucketed_pos_offset) {
+
+    	static_assert(std::is_same<typename std::iterator_traits<IT>::value_type,
+    			typename std::iterator_traits<OT>::value_type>::value,
+				"ERROR: IT and OT should be iterators with same value types");
+    	static_assert(std::is_integral<typename std::iterator_traits<MT>::value_type>::value,
+				"ERROR: MT should be an iterator of integral type value");
+
+    	size_t in_len = std::distance(unbucketed, unbucketed_end);  // input range.
+    	size_t out_len = std::distance(bucketed, bucketed_end);   // number of output to look for.
+
+        // if input is empty, simply return
+        if ((in_len == 0) || (out_len == 0)) return;
+
+        assert((in_len >= out_len) && "output range is larger than input range");
+
+        size_t bucketed_max = bucketed_pos_offset + out_len - 1;
+        assert((*(std::min_element(i2o, i2o + in_len)) <= bucketed_pos_offset) &&
+        		(*(std::max_element(i2o, i2o + in_len)) >= bucketed_max) &&
+				"ERROR, i2o [0, len) does not map to itself");
+
+        // saving elements into correct position
+        size_t pos = 0;
+        size_t count = 0;
+        for (; unbucketed != unbucketed_end; ++i2o, ++unbucketed) {
+        	pos = *i2o;
+        	if ((pos < bucketed_pos_offset) || (pos > bucketed_max)) continue;
+
+			*(bucketed + (pos - bucketed_pos_offset)) = *unbucketed;
+			++count;
+
+        	if (count == out_len) break;  // filled.  done.
+        }
+    }
+
+    /**
+     * @brief  given a bucketed array and the mapping from unbucketed to bucketed, undo the bucketing.
+     * @details  note that output and i2o are traversed in order (write and read respectively),
+     *       while input is randomly read.
+     *
+     *       permute a range in input.  (the range maps to itself.)
+     *
+     * @param unbucketed	input to be bucketed.  only processed between first and last.
+     * @param i2o			mapping.  only the part between first and last is used.  values should be between first and last.
+     * @param results		bucketed output, only processed between first and last.
+     */
+    template <typename IT, typename OT, typename MT>
+    void permute(IT unbucketed, IT unbucketed_end,
+    		MT i2o, OT bucketed,
+    		size_t const & bucketed_pos_offset) {
+
+    	static_assert(std::is_same<typename std::iterator_traits<IT>::value_type,
+    			typename std::iterator_traits<OT>::value_type>::value,
+				"ERROR: IT and OT should be iterators with same value types");
+    	static_assert(std::is_integral<typename std::iterator_traits<MT>::value_type>::value,
+				"ERROR: MT should be an iterator of integral type value");
+
+    	size_t len = std::distance(unbucketed, unbucketed_end);
+        // if input is empty, simply return
+        if (len == 0) return;
+
+        assert((*(std::min_element(i2o, i2o + len)) == bucketed_pos_offset) &&
+        		(*(std::max_element(i2o, i2o + len)) == ( bucketed_pos_offset + len - 1)) &&
+				"ERROR, i2o [first, last) does not map to itself");
+
+        // saving elements into correct position
+        for (; unbucketed != unbucketed_end; ++unbucketed, ++i2o) {
+            *(bucketed + (*i2o - bucketed_pos_offset)) = *unbucketed;
         }
 
-//        for (size_t i = 0; i < results.size(); ++i) {
-//        	std::cout << "copy from " << i << " to " << i2o[i] <<
-//        			"; copied " << unbucketed[i].first << " to " << results[i2o[i]].first << std::endl;
-//        }
     }
+
+
 
     /**
      * @brief inplace permute.  at most 2n steps, as we need to check each entry for completion.
      * @details	also need i2o to be a signed integer, so we can use the sign bit to check
      * 			that an entry has been visited.
+     *
+     *      permute_inplace uses cycle following, so entire range is affected, unless it is known a priori
+     *      that [first, last) maps to itself.
      *
      * 			profiling:  heaptrack shows that there are unlikely unnecessary allocation
      * 						cachegrind and gprof show that bulk of time is in inplace_permute, and there are no further details
@@ -444,6 +541,10 @@ namespace imxx
 
         // if input is empty, simply return
         if ((len == 0) || (unbucketed.size() == 0) || (i2o.size() == 0)) return;
+
+        assert((*(std::min_element(i2o.begin() + f, i2o.begin() + l)) == f) &&
+        		(*(std::max_element(i2o.begin() + f, i2o.begin() + l)) == (l - 1)) &&
+				"ERROR, i2o [first, last) does not map to itself");
 
         assert(unbucketed.size() == i2o.size());
 
@@ -487,33 +588,121 @@ namespace imxx
      * @brief  given a bucketed array and the mapping from unbucketed to bucketed, undo the bucketing.
      * @details  note that output and i2o are traversed in order (write and read respectively),
      *       while input is randomly read.
+     *
+     *       unpermute input range (entire output range is involved, last - first entries are written.)
+     *       i2o and unbucketed should be same size.
      */
-    template <typename T>
-    void unpermute(std::vector<T> const & bucketed, std::vector<size_t> const & i2o, std::vector<T> & results,
-    		size_t first = 0,
-    					size_t last = std::numeric_limits<size_t>::max()) {
+    template <typename IT, typename OT, typename MT>
+    void unpermute_by_input_range(IT bucketed, IT bucketed_end,
+    		MT i2o, OT unbucketed, OT unbucketed_end,
+    		size_t const & bucketed_pos_offset) {
 
-    	assert(((bucketed.size() == 0) || (bucketed.data() != results.data())) &&
-    			"input and output should not be the same.");
+    	static_assert(std::is_same<typename std::iterator_traits<IT>::value_type,
+    			typename std::iterator_traits<OT>::value_type>::value,
+				"ERROR: IT and OT should be iterators with same value types");
+    	static_assert(std::is_integral<typename std::iterator_traits<MT>::value_type>::value,
+				"ERROR: MT should be an iterator of integral type value");
 
-    	// ensure valid range
-        size_t f = std::min(first, bucketed.size());
-        size_t l = std::min(last, bucketed.size());
-        assert((f <= l) && "first should not exceed last" );
-        size_t len = l-f;
+    	size_t in_len = std::distance(bucketed, bucketed_end);   // number of output to look for.
+    	size_t out_len = std::distance(unbucketed, unbucketed_end);  // input range.
 
         // if input is empty, simply return
-        if ((len == 0) || (bucketed.size() == 0) || (i2o.size() == 0)) return;
+        if ((in_len == 0) || (out_len == 0)) return;
 
-        assert(bucketed.size() == i2o.size());
+        assert((out_len >= in_len) && "input range is larger than output range");
 
-        results.resize(bucketed.size());
+        size_t bucketed_max = bucketed_pos_offset + in_len - 1;
+        assert((*(std::min_element(i2o, i2o + out_len)) <= bucketed_pos_offset) &&
+        		(*(std::max_element(i2o, i2o + out_len)) >= bucketed_max) &&
+				"ERROR, i2o [0, len) does not map to itself");
+
+        MT i2o_end = i2o + out_len;
+
+        size_t pos = 0;
+        size_t count = 0;
+        for (; i2o != i2o_end; ++i2o, ++unbucketed) {
+        	pos = *i2o;
+        	if ((pos < bucketed_pos_offset) || (pos > bucketed_max)) continue;
+
+        	*unbucketed = *(bucketed + (pos - bucketed_pos_offset));
+			++count;
+
+        	if (count == in_len) break;  // filled.  done.
+        }
+
+    }
+
+
+    /**
+     * @brief  given a bucketed array and the mapping from unbucketed to bucketed, undo the bucketing.
+     * @details  note that output and i2o are traversed in order (write and read respectively),
+     *       while input is randomly read.
+     *
+     *       unpermute output range (entire input range is involved, last - first entries are read.)
+     */
+    template <typename IT, typename OT, typename MT>
+    void unpermute_by_output_range(IT bucketed, IT bucketed_end,
+    		MT i2o, OT unbucketed, OT unbucketed_end,
+    		size_t const & bucketed_pos_offset) {
+
+    	static_assert(std::is_same<typename std::iterator_traits<IT>::value_type,
+    			typename std::iterator_traits<OT>::value_type>::value,
+				"ERROR: IT and OT should be iterators with same value types");
+    	static_assert(std::is_integral<typename std::iterator_traits<MT>::value_type>::value,
+				"ERROR: MT should be an iterator of integral type value");
+
+    	size_t out_len = std::distance(unbucketed, unbucketed_end);  // input range.
+    	size_t in_len = std::distance(bucketed, bucketed_end);   // number of output to look for.
+
+        // if input is empty, simply return
+        if ((in_len == 0) || (out_len == 0)) return;
+
+        assert((out_len <= in_len) && "input range is larger than output range");
+
+        size_t bucketed_max = bucketed_pos_offset + in_len - 1;
+        assert((*(std::min_element(i2o, i2o + out_len)) >= bucketed_pos_offset) &&
+        		(*(std::max_element(i2o, i2o + out_len)) <= bucketed_max) &&
+				"ERROR, i2o [0, len) does not map to itself");
 
         // saving elements into correct position
-        for (size_t i = f; i < l; ++i) {
-            results[i] = bucketed[i2o[i]];
+        for (; unbucketed < unbucketed_end; ++i2o, ++unbucketed) {
+            *unbucketed = *(bucketed + (*i2o - bucketed_pos_offset));
         }
     }
+
+    /**
+     * @brief  given a bucketed array and the mapping from unbucketed to bucketed, undo the bucketing.
+     * @details  note that output and i2o are traversed in order (write and read respectively),
+     *       while input is randomly read.
+     *
+     *       unpermute output range (requires [first, last) map to itself.)
+     */
+    template <typename IT, typename OT, typename MT>
+    void unpermute(IT bucketed, IT bucketed_end,
+    		MT i2o, OT unbucketed,
+    		size_t const & bucketed_pos_offset) {
+
+    	static_assert(std::is_same<typename std::iterator_traits<IT>::value_type,
+    			typename std::iterator_traits<OT>::value_type>::value,
+				"ERROR: IT and OT should be iterators with same value types");
+    	static_assert(std::is_integral<typename std::iterator_traits<MT>::value_type>::value,
+				"ERROR: MT should be an iterator of integral type value");
+
+    	size_t len = std::distance(bucketed, bucketed_end);
+        // if input is empty, simply return
+        if (len == 0) return;
+
+        assert((*(std::min_element(i2o, i2o + len)) == bucketed_pos_offset) &&
+        		(*(std::max_element(i2o, i2o + len)) == ( bucketed_pos_offset + len - 1)) &&
+				"ERROR, i2o [first, last) does not map to itself");
+
+        // saving elements into correct position
+        OT unbucketed_end = unbucketed + len;
+        for (; unbucketed != unbucketed_end; ++unbucketed, ++i2o) {
+            *unbucketed = *(bucketed + (*i2o - bucketed_pos_offset));
+        }
+    }
+
 
     /**
      *
@@ -524,6 +713,9 @@ namespace imxx
     * 						checking counter shows that the array is visited approximately 2x. reducing this is unlikely to improve performance
     * 							due to move/copy cost.
     * 						move/copy cost is associated with std::pair.
+    *
+    * 						unpermute input range (entire bucketed range is used.)
+    *
      */
     template <typename T>
     void unpermute_inplace(std::vector<T> & bucketed, std::vector<size_t> & i2o,
@@ -589,6 +781,8 @@ namespace imxx
      * @brief perform permutation on i2o to produce x number of blocks, each with p number of buckets with specified per-bucket size s.  remainder are placed at end
      *        and output bucket sizes are the remainders for each bucket.
      * @details  kind of a division on the buckets.
+     *
+     *        operates within range [first, last) only.
      *
      * @param in_block_bucket_size   size of a bucket inside a block - all buckets are same size.
      * @param bucket_sizes[in/out]   entire size of local buckets.
@@ -777,7 +971,11 @@ namespace imxx
   void block_all2all(std::vector<T> const & input, size_t send_count, std::vector<T> & output,
                      size_t send_offset = 0, size_t recv_offset = 0, mxx::comm const & comm = mxx::comm()) {
 
-    if ((input.size() == 0) || (send_count == 0)) return;
+	    bool empty = ((input.size() == 0) || (send_count == 0));
+	    empty = mxx::all_of(empty);
+	    if (empty) {
+	      return;
+	    }
 
     // ensure enough space
     assert((input.size() >= (send_offset + send_count * comm.size())) && "input for block_all2all not big enough");
@@ -801,7 +999,12 @@ namespace imxx
   void block_all2all_inplace(std::vector<T> & input, size_t send_count,
                      size_t offset = 0, mxx::comm const & comm = mxx::comm()) {
 
-    if ((input.size() == 0) || (send_count == 0)) return;
+	    bool empty = ((input.size() == 0) || (send_count == 0));
+	    empty = mxx::all_of(empty);
+	    if (empty) {
+	      return;
+	    }
+
 
     // ensure enough space
     assert((input.size() >= (offset + send_count * comm.size())) && "input for block_all2all not big enough");
@@ -824,66 +1027,6 @@ namespace imxx
 
 
   /**
-   * @brief distribute function.  input is replaced with a2a output. uses a temporary buffer.
-   *  TO BE DEPRECATED
-   */
-  template <typename V, typename ToRank, typename SIZE>
-  void destructive_distribute(::std::vector<V>& input, ToRank const & to_rank,
-                              ::std::vector<SIZE> & recv_counts,
-                              ::std::vector<SIZE> & i2o,
-                              ::std::vector<V>& output,
-                              ::mxx::comm const &_comm) {
-    BL_BENCH_INIT(distribute);
-
-    // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
-
-    BL_BENCH_START(distribute);
-    std::vector<SIZE> send_counts(_comm.size(), 0);
-    i2o.resize(input.size());
-    BL_BENCH_END(distribute, "alloc_map", input.size());
-
-    // bucketing
-    BL_BENCH_START(distribute);
-    imxx::local::assign_to_buckets(input, to_rank, _comm.size(), send_counts, i2o, 0, input.size());
-    BL_BENCH_END(distribute, "bucket", input.size());
-
-    BL_BENCH_START(distribute);
-    // distribute (communication part)
-    imxx::local::bucket_to_permutation(send_counts, i2o, 0, input.size());
-    BL_BENCH_END(distribute, "to_pos", input.size());
-
-    BL_BENCH_START(distribute);
-    // distribute (communication part)
-    if (output.capacity() < input.size()) output.clear();
-    output.resize(input.size());
-    BL_BENCH_END(distribute, "alloc_out", output.size());
-
-    BL_BENCH_START(distribute);
-    imxx::local::permute(input, i2o, output, 0, input.size());
-    BL_BENCH_END(distribute, "permute", output.size());
-
-    // distribute (communication part)
-    BL_BENCH_START(distribute);
-    recv_counts.resize(_comm.size());
-    mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
-    size_t total = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
-    BL_BENCH_END(distribute, "a2a_count", recv_counts.size());
-
-    BL_BENCH_START(distribute);
-    if (input.capacity() < total) input.clear();
-    input.resize(total);
-    BL_BENCH_END(distribute, "realloc_in", input.size());
-
-    BL_BENCH_START(distribute);
-    mxx::all2allv(output.data(), send_counts, input.data(), recv_counts, _comm);
-    BL_BENCH_END(distribute, "a2a", input.size());
-
-    BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:destructive_distribute", _comm);
-
-
-  }
-
-  /**
    * @brief distribute function.  input is transformed, but remains the original input with original order.  buffer is used for output.
    * @details
    * @tparam SIZE     type for the i2o mapping and recv counts.  should be large enough to represent max of input.size() and output.size()
@@ -896,6 +1039,12 @@ namespace imxx
                   ::mxx::comm const &_comm, bool const & preserve_input = true) {
     BL_BENCH_INIT(distribute);
 
+    bool empty = input.size() == 0;
+    empty = mxx::all_of(empty);
+    if (empty) {
+      BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+      return;
+    }
     // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
 
     BL_BENCH_START(distribute);
@@ -921,11 +1070,11 @@ namespace imxx
 
     BL_BENCH_START(distribute);
     // distribute (communication part)
-    imxx::local::permute(output, i2o, input, 0, input.size());  // input now holds permuted entries.
+    imxx::local::permute(output.begin(), output.end(), i2o.begin(), input.begin(), 0);  // input now holds permuted entries.
     BL_BENCH_END(distribute, "permute", input.size());
 
     // distribute (communication part)
-    BL_BENCH_START(distribute);
+    BL_BENCH_COLLECTIVE_START(distribute, "a2a_count", _comm);
     recv_counts.resize(_comm.size());
     mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
     size_t total = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
@@ -937,7 +1086,7 @@ namespace imxx
     output.resize(total);
     BL_BENCH_END(distribute, "realloc_out", output.size());
 
-    BL_BENCH_START(distribute);
+    BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
     mxx::all2allv(input.data(), send_counts, output.data(), recv_counts, _comm);
     BL_BENCH_END(distribute, "a2a", output.size());
 
@@ -952,12 +1101,20 @@ namespace imxx
   }
 
   template <typename V, typename SIZE>
-  void undistribute(::std::vector<V>& input,
-                  ::std::vector<SIZE> & recv_counts,
+  void undistribute(::std::vector<V> const & input,
+                  ::std::vector<SIZE> const & recv_counts,
                   ::std::vector<SIZE> & i2o,
                   ::std::vector<V>& output,
-                  ::mxx::comm const &_comm, bool const & preserve_input = true) {
+                  ::mxx::comm const &_comm, bool const & restore_order = true) {
     BL_BENCH_INIT(undistribute);
+
+    bool empty = input.size() == 0;
+    empty = mxx::all_of(empty);
+    if (empty) {
+      BL_BENCH_REPORT_MPI_NAMED(undistribute, "map_base:undistribute", _comm);
+      return;
+    }
+
 
     BL_BENCH_START(undistribute);
     std::vector<size_t> send_counts(recv_counts.size());
@@ -970,11 +1127,11 @@ namespace imxx
     output.resize(total);
     BL_BENCH_END(undistribute, "realloc_out", output.size());
 
-    BL_BENCH_START(undistribute);
+    BL_BENCH_COLLECTIVE_START(undistribute, "a2av", _comm);
     mxx::all2allv(input.data(), recv_counts, output.data(), send_counts, _comm);
     BL_BENCH_END(undistribute, "a2av", input.size());
 
-    if (preserve_input) {
+    if (restore_order) {
       BL_BENCH_START(undistribute);
       // distribute (communication part)
       imxx::local::unpermute_inplace(output, i2o, 0, output.size());
@@ -998,6 +1155,12 @@ namespace imxx
     BL_BENCH_INIT(distribute);
 
       // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
+    bool empty = input.size() == 0;
+    empty = mxx::all_of(empty);
+    if (empty) {
+      BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+      return;
+    }
 
       // do assignment.
       BL_BENCH_START(distribute);
@@ -1023,7 +1186,7 @@ namespace imxx
       BL_BENCH_END(distribute, "to_pos", input.size());
 
       // compute receive counts and total
-      BL_BENCH_START(distribute);
+      BL_BENCH_COLLECTIVE_START(distribute, "a2av_count", _comm);
       recv_counts.resize(_comm.size());
       mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
       SIZE total = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
@@ -1036,10 +1199,9 @@ namespace imxx
       output.swap(input);
       BL_BENCH_END(distribute, "alloc_out", output.size());
 
-
       // permute
       BL_BENCH_START(distribute);
-      ::imxx::local::permute(output, i2o, input, 0, input.size());
+      imxx::local::permute(output.begin(), output.end(), i2o.begin(), input.begin(), 0);
       BL_BENCH_END(distribute, "permute", input.size());
 
       BL_BENCH_START(distribute);
@@ -1047,7 +1209,7 @@ namespace imxx
       output.resize(total);
       BL_BENCH_END(distribute, "alloc_out", output.size());
 
-      BL_BENCH_START(distribute);
+      BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
       block_all2all(input, min_bucket_size, output, 0, 0, _comm);
       BL_BENCH_END(distribute, "a2a", first_part);
 
@@ -1069,88 +1231,23 @@ namespace imxx
 
 
   /**
-   * @brief distribute function.  input is replaced by the communication output.  out is used temporarily only
-   * TO BE DEPRECATED
-   */
-  template <typename V, typename ToRank, typename SIZE>
-  void destructive_distribute_2part(::std::vector<V>& input, ToRank const & to_rank,
-                                    ::std::vector<SIZE> & recv_counts,
-                                    ::std::vector<SIZE> & i2o,
-                                    ::std::vector<V>& output,
-                                    ::mxx::comm const &_comm) {
-    BL_BENCH_INIT(distribute);
-
-      // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
-
-      // do assignment.
-      BL_BENCH_START(distribute);
-      std::vector<size_t> send_counts(_comm.size(), 0);
-      i2o.resize(input.size());
-      BL_BENCH_END(distribute, "alloc_map", input.size());
-
-      // bucketing
-      BL_BENCH_START(distribute);
-      imxx::local::assign_to_buckets(input, to_rank, _comm.size(), send_counts, i2o, 0, input.size());
-      BL_BENCH_END(distribute, "bucket", input.size());
-
-      // compute minimum block size.
-      BL_BENCH_START(distribute);
-      SIZE min_bucket_size = *(::std::min_element(send_counts.begin(), send_counts.end()));
-      min_bucket_size = ::mxx::allreduce(min_bucket_size, mxx::min<SIZE>(), _comm);
-      BL_BENCH_END(distribute, "min_bucket_size", min_bucket_size);
-
-      // compute the permutations from block size and processor mapping.  send_counts modified to the remainders.
-      BL_BENCH_START(distribute);
-      ::imxx::local::bucket_to_block_permutation(min_bucket_size, 1UL, send_counts, i2o, 0, input.size());
-      SIZE first_part = _comm.size() * min_bucket_size;
-      BL_BENCH_END(distribute, "to_pos", input.size());
-
-      // compute receive counts and total
-      BL_BENCH_START(distribute);
-      recv_counts.resize(_comm.size());
-      mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
-      SIZE total = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
-      total += first_part;
-      BL_BENCH_END(distribute, "a2av_count", total);
-
-      // permute
-      BL_BENCH_START(distribute);
-      if (output.capacity() < input.size()) output.clear();
-      output.resize(input.size());
-      BL_BENCH_END(distribute, "alloc_output", output.size());
-
-      BL_BENCH_START(distribute);
-      ::imxx::local::permute(input, i2o, output, 0, input.size());
-      BL_BENCH_END(distribute, "permute", output.size());
-
-      BL_BENCH_START(distribute);
-      if (input.capacity() < total) input.clear();  // resize would involve a realloc here, so clear it first.
-      input.resize(total);
-      BL_BENCH_END(distribute, "realloc_in", input.size());
-
-      BL_BENCH_START(distribute);
-      block_all2all(output, min_bucket_size, input, 0, 0, _comm);
-      BL_BENCH_END(distribute, "a2a", first_part);
-
-
-      BL_BENCH_START(distribute);
-      mxx::all2allv(output.data() + first_part, send_counts,
-                    input.data() + first_part, recv_counts, _comm);
-      BL_BENCH_END(distribute, "a2av", total - first_part);
-
-      BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
-  }
-
-  /**
    * @param recv_counts  counts for each bucket that is NOT PART OF FIRST BLOCK.
    */
   template <typename V, typename SIZE>
-  void undistribute_2part(::std::vector<V>& input,
-                  ::std::vector<SIZE> & recv_counts,
+  void undistribute_2part(::std::vector<V> const & input,
+                  ::std::vector<SIZE> const & recv_counts,
                   ::std::vector<SIZE> & i2o,
                   ::std::vector<V>& output,
-                  ::mxx::comm const &_comm, bool const & preserve_input = true) {
+                  ::mxx::comm const &_comm, bool const & restore_order = true) {
     BL_BENCH_INIT(undistribute);
+
+    bool empty = input.size() == 0;
+    empty = mxx::all_of(empty);
+    if (empty) {
+      BL_BENCH_REPORT_MPI_NAMED(undistribute, "map_base:undistribute", _comm);
+      return;
+    }
+
 
     BL_BENCH_START(undistribute);
     size_t second_part = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
@@ -1167,15 +1264,15 @@ namespace imxx
     output.resize(first_part + second_part);
     BL_BENCH_END(undistribute, "realloc_out", output.size());
 
-    BL_BENCH_START(undistribute);
+    BL_BENCH_COLLECTIVE_START(undistribute, "a2a", _comm);
     mxx::all2all(input.data(), first_part / _comm.size(), output.data(), _comm);
-    BL_BENCH_END(undistribute, "a2av", first_part);
+    BL_BENCH_END(undistribute, "a2a", first_part);
 
     BL_BENCH_START(undistribute);
     mxx::all2allv(input.data() + first_part, recv_counts, output.data() + first_part, send_counts, _comm);
     BL_BENCH_END(undistribute, "a2av", second_part);
 
-    if (preserve_input) {
+    if (restore_order) {
       BL_BENCH_START(undistribute);
       // distribute (communication part)
       imxx::local::unpermute_inplace(output, i2o, 0, output.size());
@@ -1186,8 +1283,11 @@ namespace imxx
 
   }
 
+
   /**
    * @brief distribute, compute, send back.  one to one.  result matching input in order at then end.
+   * @detail   this is the memory inefficient version
+   *
    *
    */
   template <typename V, typename ToRank, typename Operation, typename SIZE = size_t,
@@ -1198,266 +1298,720 @@ namespace imxx
                               ::std::vector<T>& output,
                               ::std::vector<V>& in_buffer, std::vector<T>& out_buffer,
                               ::mxx::comm const &_comm,
-                              SIZE const & block_size = std::numeric_limits<SIZE>::max(),
                               bool const & preserve_input = true) {
-      BL_BENCH_INIT(distribute);
+      BL_BENCH_INIT(scat_comp_gath);
 
       // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
+      bool empty = input.size() == 0;
+      empty = mxx::all_of(empty);
+      if (empty) {
+        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath, "map_base:scat_comp_gath", _comm);
+        return;
+      }
 
       // do assignment.
-      BL_BENCH_START(distribute);
-      std::vector<SIZE> send_counts(_comm.size(), 0);
+      BL_BENCH_START(scat_comp_gath);
       std::vector<SIZE> recv_counts(_comm.size(), 0);
       i2o.resize(input.size());
-      BL_BENCH_END(distribute, "alloc_map", input.size());
+      BL_BENCH_END(scat_comp_gath, "alloc_map", input.size());
 
-      // bucketing
-      BL_BENCH_START(distribute);
-      imxx::local::assign_to_buckets(input, to_rank, _comm.size(), send_counts, i2o, 0, input.size());
-      BL_BENCH_END(distribute, "bucket", input.size());
+      // distribute
+      BL_BENCH_START(scat_comp_gath);
+      distribute(input, to_rank, recv_counts, i2o, in_buffer, _comm, false);
+      BL_BENCH_END(scat_comp_gath, "distribute", in_buffer.size());
 
-      // compute minimum block size.
-      BL_BENCH_START(distribute);
-      SIZE min_bucket_size = *(::std::min_element(send_counts.begin(), send_counts.end()));
-      min_bucket_size = ::mxx::allreduce(min_bucket_size, mxx::min<SIZE>(), _comm);
-      BL_BENCH_END(distribute, "min_bucket_size", send_counts.size());
-
-      // compute the permutations from block size and processor mapping.  send_counts modified to the remainders.
-      BL_BENCH_START(distribute);
-      ::imxx::local::bucket_to_block_permutation(min_bucket_size, 1UL, send_counts, i2o, 0, input.size());
-      SIZE first_part = _comm.size() * min_bucket_size;
-      BL_BENCH_END(distribute, "to_pos", input.size());
-
-      // compute receive counts and total
-      BL_BENCH_START(distribute);
-      recv_counts.resize(_comm.size());
-      mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
-      SIZE second_part = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
-      BL_BENCH_END(distribute, "a2av_count", second_part);
-
-      // permute
-      BL_BENCH_START(distribute);
-      ::imxx::local::permute_inplace(input, i2o, 0, input.size());
-      BL_BENCH_END(distribute, "permute_inplace", input.size());
-
-      // allocate output - output is same size as input
-      BL_BENCH_START(distribute);
-      if (output.capacity() < (input.size())) output.clear();
-      output.resize(input.size());
-      BL_BENCH_END(distribute, "alloc_out", output.size());
-
-      //== process first part.  communicate
-      BL_BENCH_START(distribute);
-      block_all2all_inplace(input, min_bucket_size, 0, _comm);
-      BL_BENCH_END(distribute, "a2a_inplace", first_part);
+      // allocate out_buffer - output is same size as input
+      BL_BENCH_START(scat_comp_gath);
+      if (out_buffer.capacity() < (in_buffer.size())) out_buffer.clear();
+      out_buffer.resize(in_buffer.size());
+      BL_BENCH_END(scat_comp_gath, "alloc_outbuf", out_buffer.size());
 
       // process
-      BL_BENCH_START(distribute);
-      op(input.begin(), input.begin() + first_part, output.begin());
-      BL_BENCH_END(distribute, "compute1", first_part);
-
-      // send the results back.  and reverse the input
-      // undo a2a, so that result data matches.
-      BL_BENCH_START(distribute);
-      block_all2all_inplace(input, min_bucket_size, 0, _comm);
-      block_all2all_inplace(output, min_bucket_size, 0, _comm);
-      BL_BENCH_END(distribute, "inverse_a2a_inplace", first_part);
-
-      //== process second part
-      // alloc
-      BL_BENCH_START(distribute);
-      if (in_buffer.capacity() < second_part) in_buffer.clear();
-      in_buffer.resize(second_part);
-      if (out_buffer.capacity() < second_part) out_buffer.clear();
-      out_buffer.resize(second_part);
-      BL_BENCH_END(distribute, "alloc_buffers", out_buffer.size());
-
-      // send second part
-      BL_BENCH_START(distribute);
-      mxx::all2allv(input.data() + first_part, send_counts,
-                    in_buffer.data(), recv_counts, _comm);
-      BL_BENCH_END(distribute, "a2av", in_buffer.size());
-
-      // process the second part.
-      BL_BENCH_START(distribute);
+      BL_BENCH_START(scat_comp_gath);
       op(in_buffer.begin(), in_buffer.end(), out_buffer.begin());
-      BL_BENCH_END(distribute, "compute2", out_buffer.size());
+      BL_BENCH_END(scat_comp_gath, "compute", out_buffer.size());
 
-      // send the results back
-      BL_BENCH_START(distribute);
-      mxx::all2allv(out_buffer.data(), recv_counts,
-                    output.data() + first_part, send_counts, _comm);
-      BL_BENCH_END(distribute, "a2av", output.size());
+      // allocate output - output is same size as input
+      BL_BENCH_START(scat_comp_gath);
+      if (output.capacity() < (input.size())) output.clear();
+      output.resize(input.size());
+      BL_BENCH_END(scat_comp_gath, "alloc_out", output.size());
+
+      // distribute data back to source
+      BL_BENCH_START(scat_comp_gath);
+      undistribute(out_buffer, recv_counts, i2o, output, _comm, false);
+      BL_BENCH_END(scat_comp_gath, "undistribute", output.size());
+
 
       // permute
       if (preserve_input) {
-        BL_BENCH_START(distribute);
-        ::imxx::local::unpermute_inplace(input, i2o, 0, input.size());
-        ::imxx::local::unpermute_inplace(output, i2o, 0, output.size());
-        BL_BENCH_END(distribute, "unpermute_inplace", output.size());
+        BL_BENCH_START(scat_comp_gath);
+        ::imxx::local::unpermute(input.begin(), input.end(), i2o.begin(), in_buffer.begin(), 0);
+        in_buffer.swap(input);
+        ::imxx::local::unpermute(output.begin(), output.end(), i2o.begin(), out_buffer.begin(), 0);
+        out_buffer.swap(output);
+        BL_BENCH_END(scat_comp_gath, "unpermute_inplace", output.size());
       }
 
-      BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath, "map_base:scat_comp_gath", _comm);
   }
 
 
+  /**
+   * @brief distribute, compute, send back.  one to one.  result matching input in order at then end.
+   * @details  this is the memory efficient version.  this has to be incremental.
+   *            this version uses a permute buffer. (in_buffer)
+   */
+  template <typename V, typename ToRank, typename Operation, typename SIZE = size_t,
+      typename T = typename bliss::functional::function_traits<Operation, V>::return_type>
+  void scatter_compute_gather_2part(::std::vector<V>& input, ToRank const & to_rank,
+                              Operation const & op,
+                              ::std::vector<SIZE> & i2o,
+                              ::std::vector<T>& output,
+                              ::std::vector<V>& in_buffer, std::vector<T>& out_buffer,
+                              ::mxx::comm const &_comm,
+                              bool const & preserve_input = true) {
+      BL_BENCH_INIT(scat_comp_gath_2);
+
+      // speed over mem use.  mxx all2allv already has to double memory usage. same as stable scat_comp_gath_2.
+      bool empty = input.size() == 0;
+      empty = mxx::all_of(empty);
+      if (empty) {
+        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_2, "map_base:scat_comp_gath_2", _comm);
+        return;
+      }
+
+      // do assignment.
+      BL_BENCH_START(scat_comp_gath_2);
+      std::vector<SIZE> send_counts(_comm.size(), 0);
+      std::vector<SIZE> recv_counts(_comm.size(), 0);
+      i2o.resize(input.size());
+      BL_BENCH_END(scat_comp_gath_2, "alloc_map", input.size());
+
+      // first bucketing
+      BL_BENCH_START(scat_comp_gath_2);
+      imxx::local::assign_to_buckets(input, to_rank, _comm.size(), send_counts, i2o, 0, input.size());
+      BL_BENCH_END(scat_comp_gath_2, "bucket", input.size());
+
+      // then compute minimum block size.
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "min_bucket_size", _comm);
+      SIZE min_bucket_size = *(::std::min_element(send_counts.begin(), send_counts.end()));
+      min_bucket_size = ::mxx::allreduce(min_bucket_size, mxx::min<SIZE>(), _comm);
+      SIZE first_part = _comm.size() * min_bucket_size;
+      BL_BENCH_END(scat_comp_gath_2, "min_bucket_size", first_part);
+
+      // compute the permutations from block size and processor mapping.  send_counts modified to the remainders.
+      BL_BENCH_START(scat_comp_gath_2);
+      ::imxx::local::bucket_to_block_permutation(min_bucket_size, 1UL, send_counts, i2o, 0, input.size());
+      BL_BENCH_END(scat_comp_gath_2, "to_pos", input.size());
+
+      // compute receive counts and total
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "a2av_count", _comm);
+      recv_counts.resize(_comm.size());
+      mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
+      SIZE second_part = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
+      BL_BENCH_END(scat_comp_gath_2, "a2av_count", second_part);
+
+      // allocate input buffer (for permuted data.)
+      BL_BENCH_START(scat_comp_gath_2);
+      if (in_buffer.capacity() < input.size()) in_buffer.clear();
+      in_buffer.resize(input.size());
+      BL_BENCH_END(scat_comp_gath_2, "alloc_inbuf", in_buffer.size());
+
+      // permute
+      BL_BENCH_START(scat_comp_gath_2);
+      imxx::local::permute(input.begin(), input.end(), i2o.begin(), in_buffer.begin(), 0);
+      in_buffer.swap(input);       // input is now permuted.
+//      in_buffer.resize(second_part);
+      BL_BENCH_END(scat_comp_gath_2, "permute", input.size());
+
+
+      // allocate output - output is same size as input
+      BL_BENCH_START(scat_comp_gath_2);
+      if (output.capacity() < (input.size())) output.clear();
+      output.resize(input.size());
+      BL_BENCH_END(scat_comp_gath_2, "alloc_out", output.size());
+
+      //== process first part.  communicate in place
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "a2a_inplace", _comm);
+      block_all2all(input, min_bucket_size, in_buffer, 0, 0, _comm);
+      BL_BENCH_END(scat_comp_gath_2, "a2a_inplace", first_part);
+
+      // process
+      BL_BENCH_START(scat_comp_gath_2);
+      op(in_buffer.begin(), in_buffer.begin() + first_part, output.begin());
+      BL_BENCH_END(scat_comp_gath_2, "compute1", first_part);
+
+      // send the results back.  and reverse the input
+      // undo a2a, so that result data matches.
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "inverse_a2a_inplace", _comm);
+      block_all2all_inplace(output, min_bucket_size, 0, _comm);
+      BL_BENCH_END(scat_comp_gath_2, "inverse_a2a_inplace", first_part);
+
+      //======= process the second part
+      // allocate output - output is same size as input
+      BL_BENCH_START(scat_comp_gath_2);
+      if (out_buffer.capacity() < second_part) out_buffer.clear();
+      out_buffer.resize(second_part);
+      in_buffer.resize(second_part);
+      BL_BENCH_END(scat_comp_gath_2, "alloc_outbuf", out_buffer.size());
+
+      // send second part.  reuse entire in_buffer
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "a2av", _comm);
+	  mxx::all2allv(input.data() + first_part, send_counts,
+                    in_buffer.data(), recv_counts, _comm);
+      BL_BENCH_END(scat_comp_gath_2, "a2av", in_buffer.size());
+
+      // process the second part.
+      BL_BENCH_START(scat_comp_gath_2);
+      op(in_buffer.begin(), in_buffer.begin() + second_part, out_buffer.begin());
+      BL_BENCH_END(scat_comp_gath_2, "compute2", out_buffer.size());
+
+      // send the results back
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "inverse_a2av", _comm);
+	  mxx::all2allv(out_buffer.data(), recv_counts,
+                    output.data() + first_part, send_counts, _comm);
+      BL_BENCH_END(scat_comp_gath_2, "inverse_a2av", output.size());
+
+
+      // permute
+      if (preserve_input) {
+        BL_BENCH_START(scat_comp_gath_2);
+        // in_buffer was already allocated to be same size as input.
+        ::imxx::local::unpermute(input.begin(), input.end(), i2o.begin(), in_buffer.begin(), 0);
+        in_buffer.swap(input);
+        // out_buffer is small, so should do this inplace.
+        ::imxx::local::unpermute_inplace(output, i2o, 0, output.size());
+        BL_BENCH_END(scat_comp_gath_2, "unpermute_inplace", output.size());
+      }
+
+      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_2, "map_base:scat_comp_gath_2", _comm);
+  }
+
+  /**
+   * @brief distribute, compute, send back.  one to one.  result matching input in order at then end.
+   * @details  this is the memory efficient version.  this has to be incremental.
+   *            this version uses a permute buffer. (in_buffer)
+   *
+   *            low mem version.
+   *
+   *            the second half (a2av) require the space it requires.  for in_buffer and out_buffer.
+   *            the first half can be reduced in space usage by incrementally populate the in_buffer,
+   *            	compute the output, then populate the output.  then 1 all2all inplace for the output
+   *            	at the requester, then unpermute somehow.
+   *
+      // compute the size of the buffers to use.  set a maximum limit.
+       * let the final block_bucket_size be bbs. then the first_part x = bbs * blocks * p., p = comm_size.
+       * let the sum of UNEVEN parts in orig input be y1, and after a2av be y2.  the minimum space needed here is y1+y2 for the a2av part.
+       *   the uneven part is defined by the difference between a bucket and the global min bucket.
+       *
+       * APPROACH:  use either y1+y2 or 1/2 min_bucket, whichever is larger, as buffer
+       * 	if y1+y2 > 1/2 (input + y2), use traditional
+       * 	else
+       * 		use larger of y1+y2, and 1/2 min bucket.
+       *
+       *
+       * however, bbs may not perfectly divide the min_bucket..  let the remainder be r.  0 <= r < bbs
+       * the UNEVEN part then needs to be appended with r in each bucket.  Y1 = y1 + r * p, and Y2 = y2 + r * p.  post communication, the remainder size remains same.
+       * minimum space needed is revised to Y1 + Y2 = y1 + y2 + 2 rp.
+       *
+       * if y1 + y2 > input_size, then we should just the normal scatter_compute_gather, or the 2 part version, since buffer requirement is high.
+       *
+       * case 1
+       * bbs * p > Y1 + Y2.  each block still needs to got through a2a, so makes no sense to have more than 1 blocks in the buffer and we should reduce the number of iterations
+       * to have some form of savings, we should use bbs * p < input.  then input > Y2 + Y2.  if this does not hold, then use full memory version.
+       *
+       * for all processors, the following must hold to have buffer savings.
+       * y1 + rp + bbs * blocks * p > bbs * p > y1 + y2 + 2rp.   r + bbs * blocks = min_bucket_size.
+       * 	p * min_bucket_size > y2 + 2rp,  so r < min_bucket_size - y2 / 2p,
+       * 	mod(min_bucket_size, bbs) = r < bbs.
+       * so let bbs = min_bucket_size - y2 / 2p.  (bbs can be at most this quantity, else r may exceed bound)
+       * 	now this can be pretty big, or really small.
+       *
+       * what is the lower bound of bbs?
+       *
+       *
+       *
+       *
+       *
+       * for there to be space savings, y1+y2 is the minimum buffer size and the maximum buffer size should not exceed 1/2 of input
+       * buffer size should be std::max(y1+y2, comm_size * block_bucket_size)   1 block...
+       * where block_bucket_size = std::min(min_bucket_size, 1/2 max_bucket_size)    // at most min_bucket_size, at least 1/2 max_bucket_size
+       * this will affect y1 and y2, of course.
+       * 	y1 has size input % (comm_size * block_bucket_size), with max value of (comm_size * block_bucket_size - 1)
+       * 	y2 has max comm_size * (comm_size  * block_bucket_size - 1 ) - 1
+       *
+       * note at the end, we'd still need to permute either the input or the output to make them consistent with each other.
+      // max of "second_part" is the minimum required space for the a2av portion.  let this be y.
+      //    reducing this requires O(p) type communication rather than O(log(p))
+      // to effect some space savings, we should use max(1/2 input_size, y).
+      //	we can reduce the 1/2 input size, at the expense of more iterations, each requiring a complete scan of input during permuting.
+      //	if y > 1/2 input, then on one processor the min bucket is less than 1/2 input,  we'd be using this min bucket anyways.
+      //	if y < 1/2 input, then we can potentially do more in a2a phase, but that would use more mem.
+      // so configure the buffer size to be max(1/2 input_size, y) = Y.
+      //    for bucket size, this means min(min_bucket, (Y + comm_size - 1) / comm_size))
+      // a simpler way to look at bucket size is to do min(max_bucket/2, min_bucket), and the buffer size is max(1/2 input_size, y)
+       *
+       * the buffer is set to largest of first part, local second part, remote second part.
+       *
+       * break up the input into smaller chunks imply iterative process.  each iteration requires full input scan.  if we do logarithmic number of iterations, we can't scale very large.
+       * instead we break up into 2 pieces only, (or maybe break it up to 3 or 4), a low number, and accept the overhead incurred.
+   */
+  template <typename V, typename ToRank, typename Operation, typename SIZE = size_t,
+      typename T = typename bliss::functional::function_traits<Operation, V>::return_type>
+  void scatter_compute_gather_lowmem(::std::vector<V>& input, ToRank const & to_rank,
+                              Operation const & op,
+                              ::std::vector<SIZE> & i2o,
+                              ::std::vector<T>& output,
+                              ::std::vector<V>& in_buffer, std::vector<T>& out_buffer,
+                              ::mxx::comm const &_comm,
+                              bool const & preserve_input = true) {
+      BL_BENCH_INIT(scat_comp_gath_lm);
+
+      bool empty = input.size() == 0;
+      empty = mxx::all_of(empty);
+      if (empty) {
+        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_lm, "map_base:scat_comp_gath_lm", _comm);
+        return;
+      }
+
+
+
+      // do assignment.
+      BL_BENCH_START(scat_comp_gath_lm);
+      std::vector<SIZE> send_counts(_comm.size(), 0);
+      std::vector<SIZE> recv_counts(_comm.size(), 0);
+      i2o.resize(input.size());
+      BL_BENCH_END(scat_comp_gath_lm, "alloc_map", input.size());
+
+      // first bucketing
+      BL_BENCH_START(scat_comp_gath_lm);
+      imxx::local::assign_to_buckets(input, to_rank, _comm.size(), send_counts, i2o, 0, input.size());
+      BL_BENCH_END(scat_comp_gath_lm, "bucket", input.size());
+
+      // then compute minimum block size.
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "a2av_count", _comm);
+      SIZE min_bucket_size = *(::std::min_element(send_counts.begin(), send_counts.end()));
+      min_bucket_size = ::mxx::allreduce(min_bucket_size, mxx::min<SIZE>(), _comm);
+      SIZE block_bucket_size = min_bucket_size / 2;  // block_bucket_size is at least 1/2 as large as the largest bucket.
+      SIZE block_size = _comm.size() * block_bucket_size;
+      SIZE first_part = 2 * block_size;   // this is at least 1/2 of the largest input.
+      SIZE second_part_local = input.size() - first_part;
+      recv_counts.resize(_comm.size());
+      ::mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
+      SIZE second_part_remote = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0)) - first_part;   // second part size.
+
+      SIZE second = second_part_local + second_part_remote;
+      SIZE input_plus = input.size() + second_part_remote;
+      bool traditional = (second > (input_plus / 2));
+      traditional = mxx::any_of(traditional, _comm);
+      BL_BENCH_END(scat_comp_gath_lm, "a2av_count", first_part);
+
+      if (traditional) {
+    	  BL_BENCH_START(scat_comp_gath_lm);
+
+    	  scatter_compute_gather_2part(input, to_rank, op, i2o, output, in_buffer, out_buffer, _comm, preserve_input);
+          BL_BENCH_END(scat_comp_gath_lm, "switch_to_trad", output.size());
+
+
+        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_lm, "map_base:scat_comp_gath_lm", _comm);
+        return;
+      }
+
+      // compute the permutations from block size and processor mapping.  send_counts modified to the remainders.
+      BL_BENCH_START(scat_comp_gath_lm);
+      ::imxx::local::bucket_to_block_permutation(block_bucket_size, 2UL, send_counts, i2o, 0, input.size());
+      BL_BENCH_END(scat_comp_gath_lm, "to_pos", input.size());
+
+      // allocate input buffer (for permuted data.)
+      BL_BENCH_START(scat_comp_gath_lm);
+      SIZE buffer_size = std::max(block_size, second_part_local + second_part_remote);
+      if (in_buffer.capacity() < buffer_size) in_buffer.clear();
+      in_buffer.resize(buffer_size);
+      BL_BENCH_END(scat_comp_gath_lm, "alloc_inbuf", in_buffer.size());
+
+      // allocate output - output is same size as input
+      BL_BENCH_START(scat_comp_gath_lm);
+      if (output.capacity() < (input.size())) output.clear();
+      output.resize(input.size());
+      BL_BENCH_END(scat_comp_gath_lm, "alloc_out", output.size());
+
+      //== process first part - 2 iterations..  communicate in place
+      for (size_t i = 0; i < 2; ++i) {
+		  // permute
+		  BL_BENCH_START(scat_comp_gath_lm);
+		  ::imxx::local::permute_for_output_range(input.begin(), input.end(), i2o.begin(), in_buffer.begin(), in_buffer.begin() + block_size, i * block_size);
+		  BL_BENCH_END(scat_comp_gath_lm, "permute_block", block_size);
+
+		  BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "a2a_inplace", _comm);
+		  block_all2all_inplace(in_buffer, block_bucket_size, 0, _comm);
+		  BL_BENCH_END(scat_comp_gath_lm, "a2a_inplace", block_size);
+
+		  // process
+		  BL_BENCH_START(scat_comp_gath_lm);
+		  op(in_buffer.begin(), in_buffer.begin() + block_size, output.begin() + i * block_size);
+		  BL_BENCH_END(scat_comp_gath_lm, "compute1", block_size);
+
+		  // send the results back.  and reverse the input
+		  // undo a2a, so that result data matches.
+		  BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "inverse_a2a_inplace", _comm);
+		  block_all2all_inplace(output, block_bucket_size, i * block_size, _comm);
+		  BL_BENCH_END(scat_comp_gath_lm, "inverse_a2a_inplace", block_size);
+
+      }
+
+      //======= process the second part
+      // allocate output - output is same size as input
+      BL_BENCH_START(scat_comp_gath_lm);
+      if (out_buffer.capacity() < second_part_remote) out_buffer.clear();
+      out_buffer.resize(second_part_remote);
+      BL_BENCH_END(scat_comp_gath_lm, "alloc_outbuf", out_buffer.size());
+
+	  // permute
+	  BL_BENCH_START(scat_comp_gath_lm);
+	  ::imxx::local::permute_for_output_range(input.begin(), input.end(), i2o.begin(),
+			  in_buffer.begin(), in_buffer.begin() + second_part_local, first_part);
+	  BL_BENCH_END(scat_comp_gath_lm, "permute_block", second_part_local);
+
+      // send second part.  reuse entire in_buffer
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "a2av", _comm);
+      ::mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
+	  mxx::all2allv(in_buffer.data(), send_counts,
+                    in_buffer.data() + second_part_local, recv_counts, _comm);
+      BL_BENCH_END(scat_comp_gath_lm, "a2av", second_part_local);
+
+      // process the second part.
+      BL_BENCH_START(scat_comp_gath_lm);
+      op(in_buffer.begin() + second_part_local, in_buffer.begin() + second_part_local + second_part_remote, out_buffer.begin());
+      BL_BENCH_END(scat_comp_gath_lm, "compute2", second_part_remote);
+
+      // send the results back
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "inverse_a2av", _comm);
+	  mxx::all2allv(out_buffer.data(), recv_counts,
+                    output.data() + first_part, send_counts, _comm);
+      BL_BENCH_END(scat_comp_gath_lm, "inverse_a2av", second_part_remote);
+
+      // permute
+      if (preserve_input) {
+        // in_buffer was already allocated to be same size as input.
+        ::imxx::local::unpermute_inplace(input, i2o, 0, input.size());
+        // out_buffer is small, so should do this inplace.
+        ::imxx::local::unpermute_inplace(output, i2o, 0, output.size());
+        BL_BENCH_END(scat_comp_gath_lm, "unpermute_inplace", output.size());
+      }
+
+      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_lm, "map_base:scat_comp_gath_lm", _comm);
+  }
+
+  // TODO: non-one-to-one version.
+
+  /**
+   * @brief distribute, compute, send back.  one to one.  result matching input in order at then end.
+   * @detail   this is the memory inefficient version
+   *
+   *
+   */
+  template <typename V, typename ToRank, typename Operation, typename SIZE = size_t,
+      typename T = typename bliss::functional::function_traits<Operation, V>::return_type>
+  void scatter_compute_gather_v(::std::vector<V>& input, ToRank const & to_rank,
+                              Operation const & op,
+                              ::std::vector<SIZE> & i2o,
+                              ::std::vector<T>& output,
+                              ::std::vector<V>& in_buffer, std::vector<T>& out_buffer,
+                              ::mxx::comm const &_comm,
+                              bool const & preserve_input = true) {
+      BL_BENCH_INIT(scat_comp_gath_v);
+
+      // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
+      bool empty = input.size() == 0;
+      empty = mxx::all_of(empty);
+      if (empty) {
+        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_v, "map_base:scat_comp_gath_v", _comm);
+        return;
+      }
+
+      // do assignment.
+      BL_BENCH_START(scat_comp_gath_v);
+      std::vector<SIZE> recv_counts(_comm.size(), 0);
+      i2o.resize(input.size());
+      BL_BENCH_END(scat_comp_gath_v, "alloc_map", input.size());
+
+      // distribute
+      BL_BENCH_START(scat_comp_gath_v);
+      distribute(input, to_rank, recv_counts, i2o, in_buffer, _comm, false);
+      BL_BENCH_END(scat_comp_gath_v, "distribute", in_buffer.size());
+
+      // allocate out_buffer - output is same size as input
+      BL_BENCH_START(scat_comp_gath_v);
+      if (out_buffer.capacity() < (in_buffer.size())) out_buffer.clear();
+      out_buffer.reserve(in_buffer.size());
+      ::fsc::back_emplace_iterator<std::vector<T> > emplacer(out_buffer);
+      BL_BENCH_END(scat_comp_gath_v, "alloc_outbuf", out_buffer.size());
+
+      // process
+      BL_BENCH_START(scat_comp_gath_v);
+      size_t s;
+      auto it = in_buffer.begin();
+      for (size_t i = 0; i < _comm.size(); ++i) {
+    	  s = recv_counts[i];
+
+          recv_counts[i] = op(it, it + s, emplacer);
+          std::advance(it, s);
+      }
+      BL_BENCH_END(scat_comp_gath_v, "compute", out_buffer.size());
+
+      // allocate output - output is same size as input
+      BL_BENCH_START(scat_comp_gath_v);
+      std::vector<SIZE> send_counts(_comm.size(), 0);
+      ::mxx::all2all(recv_counts.data(), 1, send_counts.data(), _comm);
+      size_t total = ::std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0));
+      if (output.capacity() < total) output.clear();
+      output.resize(total);
+      BL_BENCH_END(scat_comp_gath_v, "alloc_out", output.size());
+
+      // distribute data back to source
+      BL_BENCH_START(scat_comp_gath_v);
+      undistribute(out_buffer, recv_counts, i2o, output, _comm, false);
+      BL_BENCH_END(scat_comp_gath_v, "undistribute", output.size());
+
+      // permute
+      if (preserve_input) {
+        BL_BENCH_START(scat_comp_gath_v);
+        ::imxx::local::unpermute(input.begin(), input.end(), i2o.begin(), in_buffer.begin(), 0);
+        in_buffer.swap(input);
+        ::imxx::local::unpermute(output.begin(), output.end(), i2o.begin(), out_buffer.begin(), 0);
+        out_buffer.swap(output);
+        BL_BENCH_END(scat_comp_gath_v, "unpermute_inplace", output.size());
+      }
+
+      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_v, "map_base:scat_comp_gath_v", _comm);
+  }
+
+  //TODO:
+//
 //  /**
 //   * @brief distribute, compute, send back.  one to one.  result matching input in order at then end.
+//   * @details  this is the memory efficient version.  this has to be incremental.
+//   *            this version uses a permute buffer. (in_buffer)
 //   *
+//   *            low mem version.
+//   *
+//   *            the second half (a2av) require the space it requires.  for in_buffer and out_buffer.
+//   *            the first half can be reduced in space usage by incrementally populate the in_buffer,
+//   *            	compute the output, then populate the output.  then 1 all2all inplace for the output
+//   *            	at the requester, then unpermute somehow.
+//   *
+//      // compute the size of the buffers to use.  set a maximum limit.
+//       * let the final block_bucket_size be bbs. then the first_part x = bbs * blocks * p., p = comm_size.
+//       * let the sum of UNEVEN parts in orig input be y1, and after a2av be y2.  the minimum space needed here is y1+y2 for the a2av part.
+//       *   the uneven part is defined by the difference between a bucket and the global min bucket.
+//       *
+//       * APPROACH:  use either y1+y2 or 1/2 min_bucket, whichever is larger, as buffer
+//       * 	if y1+y2 > 1/2 (input + y2), use traditional
+//       * 	else
+//       * 		use larger of y1+y2, and 1/2 min bucket.
+//       *
+//       *
+//       * however, bbs may not perfectly divide the min_bucket..  let the remainder be r.  0 <= r < bbs
+//       * the UNEVEN part then needs to be appended with r in each bucket.  Y1 = y1 + r * p, and Y2 = y2 + r * p.  post communication, the remainder size remains same.
+//       * minimum space needed is revised to Y1 + Y2 = y1 + y2 + 2 rp.
+//       *
+//       * if y1 + y2 > input_size, then we should just the normal scatter_compute_gather, or the 2 part version, since buffer requirement is high.
+//       *
+//       * case 1
+//       * bbs * p > Y1 + Y2.  each block still needs to got through a2a, so makes no sense to have more than 1 blocks in the buffer and we should reduce the number of iterations
+//       * to have some form of savings, we should use bbs * p < input.  then input > Y2 + Y2.  if this does not hold, then use full memory version.
+//       *
+//       * for all processors, the following must hold to have buffer savings.
+//       * y1 + rp + bbs * blocks * p > bbs * p > y1 + y2 + 2rp.   r + bbs * blocks = min_bucket_size.
+//       * 	p * min_bucket_size > y2 + 2rp,  so r < min_bucket_size - y2 / 2p,
+//       * 	mod(min_bucket_size, bbs) = r < bbs.
+//       * so let bbs = min_bucket_size - y2 / 2p.  (bbs can be at most this quantity, else r may exceed bound)
+//       * 	now this can be pretty big, or really small.
+//       *
+//       * what is the lower bound of bbs?
+//       *
+//       *
+//       *
+//       *
+//       *
+//       * for there to be space savings, y1+y2 is the minimum buffer size and the maximum buffer size should not exceed 1/2 of input
+//       * buffer size should be std::max(y1+y2, comm_size * block_bucket_size)   1 block...
+//       * where block_bucket_size = std::min(min_bucket_size, 1/2 max_bucket_size)    // at most min_bucket_size, at least 1/2 max_bucket_size
+//       * this will affect y1 and y2, of course.
+//       * 	y1 has size input % (comm_size * block_bucket_size), with max value of (comm_size * block_bucket_size - 1)
+//       * 	y2 has max comm_size * (comm_size  * block_bucket_size - 1 ) - 1
+//       *
+//       * note at the end, we'd still need to permute either the input or the output to make them consistent with each other.
+//      // max of "second_part" is the minimum required space for the a2av portion.  let this be y.
+//      //    reducing this requires O(p) type communication rather than O(log(p))
+//      // to effect some space savings, we should use max(1/2 input_size, y).
+//      //	we can reduce the 1/2 input size, at the expense of more iterations, each requiring a complete scan of input during permuting.
+//      //	if y > 1/2 input, then on one processor the min bucket is less than 1/2 input,  we'd be using this min bucket anyways.
+//      //	if y < 1/2 input, then we can potentially do more in a2a phase, but that would use more mem.
+//      // so configure the buffer size to be max(1/2 input_size, y) = Y.
+//      //    for bucket size, this means min(min_bucket, (Y + comm_size - 1) / comm_size))
+//      // a simpler way to look at bucket size is to do min(max_bucket/2, min_bucket), and the buffer size is max(1/2 input_size, y)
+//       *
+//       * the buffer is set to largest of first part, local second part, remote second part.
+//       *
+//       * break up the input into smaller chunks imply iterative process.  each iteration requires full input scan.  if we do logarithmic number of iterations, we can't scale very large.
+//       * instead we break up into 2 pieces only, (or maybe break it up to 3 or 4), a low number, and accept the overhead incurred.
 //   */
 //  template <typename V, typename ToRank, typename Operation, typename SIZE = size_t,
 //      typename T = typename bliss::functional::function_traits<Operation, V>::return_type>
-//  void scatter_compute_gather_variable_returns(::std::vector<V>& input, ToRank const & to_rank,
+//  void scatter_compute_gather_v_lowmem(::std::vector<V>& input, ToRank const & to_rank,
 //                              Operation const & op,
 //                              ::std::vector<SIZE> & i2o,
 //                              ::std::vector<T>& output,
 //                              ::std::vector<V>& in_buffer, std::vector<T>& out_buffer,
 //                              ::mxx::comm const &_comm,
-//                              SIZE const & block_size = std::numeric_limits<SIZE>::max()) {
-//      BL_BENCH_INIT(distribute);
+//                              bool const & preserve_input = true) {
+//      BL_BENCH_INIT(scat_comp_gath_v_lm);
 //
-//      // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
+//      bool empty = input.size() == 0;
+//      empty = mxx::all_of(empty);
+//      if (empty) {
+//        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_v_lm, "map_base:scat_comp_gath_v_lm", _comm);
+//        return;
+//      }
+//
+//
 //
 //      // do assignment.
-//      BL_BENCH_START(distribute);
+//      BL_BENCH_START(scat_comp_gath_v_lm);
 //      std::vector<SIZE> send_counts(_comm.size(), 0);
+//      std::vector<SIZE> recv_counts(_comm.size(), 0);
 //      i2o.resize(input.size());
-//      BL_BENCH_END(distribute, "alloc_map", input.size());
+//      BL_BENCH_END(scat_comp_gath_v_lm, "alloc_map", input.size());
 //
-//      // bucketing
-//      BL_BENCH_START(distribute);
+//      // first bucketing
+//      BL_BENCH_START(scat_comp_gath_v_lm);
 //      imxx::local::assign_to_buckets(input, to_rank, _comm.size(), send_counts, i2o, 0, input.size());
-//      BL_BENCH_END(distribute, "bucket", input.size());
+//      BL_BENCH_END(scat_comp_gath_v_lm, "bucket", input.size());
 //
-//      // compute minimum block size.
-//      BL_BENCH_START(distribute);
+//      // then compute minimum block size.
+//      BL_BENCH_COLLECTIVE_START(scat_comp_gath_v_lm, "a2av_count", _comm);
 //      SIZE min_bucket_size = *(::std::min_element(send_counts.begin(), send_counts.end()));
 //      min_bucket_size = ::mxx::allreduce(min_bucket_size, mxx::min<SIZE>(), _comm);
-//      min_block_size = std::min(block_size, min_bucket_size);
-//      BL_BENCH_END(distribute, "min_bucket_size", send_counts.size());
+//      SIZE block_bucket_size = min_bucket_size / 2;  // block_bucket_size is at least 1/2 as large as the largest bucket.
+//      SIZE block_size = _comm.size() * block_bucket_size;
+//      SIZE first_part = 2 * block_size;   // this is at least 1/2 of the largest input.
+//      SIZE second_part_local = input.size() - first_part;
+//      recv_counts.resize(_comm.size());
+//      ::mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
+//      SIZE second_part_remote = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0)) - first_part;   // second part size.
+//
+//      SIZE second = second_part_local + second_part_remote;
+//      SIZE input_plus = input.size() + second_part_remote;
+//      bool traditional = (second > (input_plus / 2));
+//      traditional = mxx::any_of(traditional, _comm);
+//      BL_BENCH_END(scat_comp_gath_v_lm, "a2av_count", first_part);
+//
+//      if (traditional) {
+//    	  BL_BENCH_START(scat_comp_gath_v_lm);
+//
+//    	  scatter_compute_gather_2part(input, to_rank, op, i2o, output, in_buffer, out_buffer, _comm, preserve_input);
+//          BL_BENCH_END(scat_comp_gath_v_lm, "switch_to_trad", output.size());
+//
+//
+//        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_v_lm, "map_base:scat_comp_gath_v_lm", _comm);
+//        return;
+//      }
 //
 //      // compute the permutations from block size and processor mapping.  send_counts modified to the remainders.
-//      BL_BENCH_START(distribute);
-//      ::imxx::local::bucket_to_block_permutation(min_block_size, 1, send_counts, i2o, 0, input.size());
-//      SIZE first_part = nblocks * min_block_size * _comm.size();
-//      BL_BENCH_END(distribute, "to_pos", i2o.size());
+//      BL_BENCH_START(scat_comp_gath_v_lm);
+//      ::imxx::local::bucket_to_block_permutation(block_bucket_size, 2UL, send_counts, i2o, 0, input.size());
+//      BL_BENCH_END(scat_comp_gath_v_lm, "to_pos", input.size());
 //
-//      // compute receive counts and total
-//      BL_BENCH_START(distribute);
-//      recv_counts.resize(_comm.size());
-//      mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
-//      SIZE second_part = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
-//      BL_BENCH_END(distribute, "a2av_count", total);
-//
-//      // permute
-//      BL_BENCH_START(distribute);
-//      ::imxx::local::permute_inplace(input, i2o, 0, input.size());
-//      BL_BENCH_END(distribute, "permute_inplace", input.size());
+//      // allocate input buffer (for permuted data.)
+//      BL_BENCH_START(scat_comp_gath_v_lm);
+//      SIZE buffer_size = std::max(block_size, second_part_local + second_part_remote);
+//      if (in_buffer.capacity() < buffer_size) in_buffer.clear();
+//      in_buffer.resize(buffer_size);
+//      BL_BENCH_END(scat_comp_gath_v_lm, "alloc_inbuf", in_buffer.size());
 //
 //      // allocate output - output is same size as input
-//      BL_BENCH_START(distribute);
-//      output.clear();
-//      output.reserve(input.size() / 2);
-//      fsc::back_emplace_iterator<std::vector<T> > emplacer(output);
-//      BL_BENCH_END(distribute, "alloc_out", output.size());
+//      BL_BENCH_START(scat_comp_gath_v_lm);
+//      if (output.capacity() < (input.size())) output.clear();
+//      output.resize(input.size());
+//      BL_BENCH_END(scat_comp_gath_v_lm, "alloc_out", output.size());
 //
-//      //== process first part.  communicate
-//      BL_BENCH_START(distribute);
-//      SIZE offset;
-//      std::vector<SIZE> result_send_counts;
-//      for (SIZE i = 0; i < nblocks; ++i) {
-//        offset = i * _comm.size() * min_block_size;
+//      //== process first part - 2 iterations..  communicate in place
+//      for (size_t i = 0; i < 2; ++i) {
+//		  // permute
+//		  BL_BENCH_START(scat_comp_gath_v_lm);
+//		  ::imxx::local::permute_for_output_range(input.begin(), input.end(), i2o.begin(), in_buffer.begin(), in_buffer.begin() + block_size, i * block_size);
+//		  BL_BENCH_END(scat_comp_gath_v_lm, "permute_block", block_size);
 //
-//        // communicate the request
-//        block_all2all_inplace(input, min_block_size, offset, _comm);
+//		  BL_BENCH_COLLECTIVE_START(scat_comp_gath_v_lm, "a2a_inplace", _comm);
+//		  block_all2all_inplace(in_buffer, block_bucket_size, 0, _comm);
+//		  BL_BENCH_END(scat_comp_gath_v_lm, "a2a_inplace", block_size);
 //
-//        // reserve
-//        out_buffer.clear();
-//        out_buffer.reserve(min_block_size);
+//		  // process
+//		  BL_BENCH_START(scat_comp_gath_v_lm);
+//		  op(in_buffer.begin(), in_buffer.begin() + block_size, output.begin() + i * block_size);
+//		  BL_BENCH_END(scat_comp_gath_v_lm, "compute1", block_size);
 //
-//        // process
-//        fsc::back_emplace_iterator<std::vector<T> > b_emplacer(out_buffer);
-//        op(input.begin() + offset, input.begin() + offset + _comm.size() * min_block_size, b_emplacer, result_send_counts);
-//
-//        // communicate the output
-//        mxx::all2allv(out_buffer.data(), result_send_counts, emplacer, _comm);
-//
+//		  // send the results back.  and reverse the input
+//		  // undo a2a, so that result data matches.
+//		  BL_BENCH_COLLECTIVE_START(scat_comp_gath_v_lm, "inverse_a2a_inplace", _comm);
+//		  block_all2all_inplace(output, block_bucket_size, i * block_size, _comm);
+//		  BL_BENCH_END(scat_comp_gath_v_lm, "inverse_a2a_inplace", block_size);
 //
 //      }
-//      BL_BENCH_END(distribute, "a2a_inplace", first_part);
 //
-////      // alloc
-////      BL_BENCH_START(distribute);
-////      out_buffer.clear();
-////      out_buffer.resize(std::max(first_part, second_part));
-////      BL_BENCH_END(distribute, "alloc_buffers", out_buffer.size());
 //
-////      // process
-////      BL_BENCH_START(distribute);
-////      fsc::back_emplace_iterator<std::vector<T> > emplacer(out_buffer);
-////      std::vector<SIZE> result_send_counts;
-////      op(input.begin(), input.begin() + first_part, emplacer, result_send_counts);
-////      BL_BENCH_END(distribute, "compute1", first_part);
+//      //======= process the second part
+//      // allocate output - output is same size as input
+//      BL_BENCH_START(scat_comp_gath_v_lm);
+//      if (out_buffer.capacity() < second_part_remote) out_buffer.clear();
+//      out_buffer.resize(second_part_remote);
+//      BL_BENCH_END(scat_comp_gath_v_lm, "alloc_outbuf", out_buffer.size());
 //
-//      // send the results back.  and reverse the input
-//      // undo a2a, so that result data matches.
-//      BL_BENCH_START(distribute);
-//      for (SIZE i = 0; i < nblocks; ++i) {
-//        offset = i * _comm.size() * min_bucket_size;
-//        block_all2all_inplace(input, min_bucket_size, offset,  _comm);
-//      }
-//      mxx::all2allv(output.data(), min_bucket_size, offset, offset, _comm);
-//      BL_BENCH_END(distribute, "inverse_a2a_inplace", first_part);
+//	  // permute
+//	  BL_BENCH_START(scat_comp_gath_v_lm);
+//	  ::imxx::local::permute_for_output_range(input.begin(), input.end(), i2o.begin(),
+//			  in_buffer.begin(), in_buffer.begin() + second_part_local, first_part);
+//	  BL_BENCH_END(scat_comp_gath_v_lm, "permute_block", second_part_local);
 //
-//      //== process second part
-//      BL_BENCH_START(distribute);
-//      if (in_buffer.capacity() < second_part) in_buffer.clear();
-//      in_buffer.resize(second_part);
-//      if (out_buffer.capacity() < second_part) out_buffer.clear();
-//      out_buffer.resize(second_part);
-//      BL_BENCH_END(distribute, "alloc_buffers", out_buffer.size());
-//
-//      // send second part
-//      BL_BENCH_START(distribute);
-//      mxx::all2allv(input.data() + first_part, send_counts,
-//                    in_buffer.data(), recv_counts, _comm);
-//      BL_BENCH_END(distribute, "a2av", in_buffer.size());
+//      // send second part.  reuse entire in_buffer
+//      BL_BENCH_COLLECTIVE_START(scat_comp_gath_v_lm, "a2av", _comm);
+//      ::mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
+//	  mxx::all2allv(in_buffer.data(), send_counts,
+//                    in_buffer.data() + second_part_local, recv_counts, _comm);
+//      BL_BENCH_END(scat_comp_gath_v_lm, "a2av", second_part_local);
 //
 //      // process the second part.
-//      BL_BENCH_START(distribute);
-//      std::transform(in_buffer.begin(), in_buffer.end(), out_buffer.begin(), op);
-//      BL_BENCH_END(distribute, "compute2", out_buffer.size());
+//      BL_BENCH_START(scat_comp_gath_v_lm);
+//      op(in_buffer.begin() + second_part_local, in_buffer.begin() + second_part_local + second_part_remote, out_buffer.begin());
+//      BL_BENCH_END(scat_comp_gath_v_lm, "compute2", second_part_remote);
 //
 //      // send the results back
-//      BL_BENCH_START(distribute);
-//      mxx::all2allv(out_buffer.data(), recv_counts,
+//      BL_BENCH_COLLECTIVE_START(scat_comp_gath_v_lm, "inverse_a2av", _comm);
+//	  mxx::all2allv(out_buffer.data(), recv_counts,
 //                    output.data() + first_part, send_counts, _comm);
-//      BL_BENCH_END(distribute, "a2av", output.size());
+//      BL_BENCH_END(scat_comp_gath_v_lm, "inverse_a2av", second_part_remote);
 //
 //      // permute
 //      if (preserve_input) {
-//        BL_BENCH_START(distribute);
+//        // in_buffer was already allocated to be same size as input.
 //        ::imxx::local::unpermute_inplace(input, i2o, 0, input.size());
+//        // out_buffer is small, so should do this inplace.
 //        ::imxx::local::unpermute_inplace(output, i2o, 0, output.size());
-//        BL_BENCH_END(distribute, "unpermute_inplace", output.size());
+//        BL_BENCH_END(scat_comp_gath_v_lm, "unpermute_inplace", output.size());
 //      }
 //
-//      BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+//      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_v_lm, "map_base:scat_comp_gath_v_lm", _comm);
 //  }
+//
 
-
-
-
-
-//== transform before or after communication
-
-//== communicate, process (one to one), return communication  - order matters
-
+//== TODO: transform before or after communication
 
 
 //== communicate, process (not one to one), return communication  - order does not matter
 
 
-// mpi3 versions?
+// TODO mpi3 versions?
 
 } // namespace imxx

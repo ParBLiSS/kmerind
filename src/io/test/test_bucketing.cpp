@@ -130,9 +130,9 @@ class BucketTest : public ::testing::TestWithParam<BucketTestInfo>
         for (size_t i = 0; i < p.bucket_count; ++i) {
 
           for (size_t j = 0; j < gold[i].size(); ++j, ++sid) {
-//            if (gold[i][j].first != bucketed[sid].first) {
-//              std::cout << "NO MATCH gold bucket " << i << " pos " << j << " " << gold[i][j].first << " from " << gold[i][j].second << "; bucketed id " << sid << " " << bucketed[sid].first << " from " << bucketed[sid].second << std::endl;
-//            }
+            if (gold[i][j].first != bucketed[sid].first) {
+              std::cout << "NO MATCH gold bucket " << i << " pos " << j << " " << gold[i][j].first << " from " << gold[i][j].second << "; bucketed id " << sid << " " << bucketed[sid].first << " from " << bucketed[sid].second << std::endl;
+            }
 
             same &= (gold[i][j] == bucketed[sid]);
           }
@@ -228,7 +228,7 @@ TEST_P(BucketTest, bucket)
                                    this->p.first, this->p.last);
 }
 
-TEST_P(BucketTest, permute)
+TEST_P(BucketTest, permute )
 {
 	this->unbucketed.clear();
   this->mapping.clear();
@@ -247,15 +247,16 @@ TEST_P(BucketTest, permute)
   imxx::local::bucket_to_permutation(this->bcounts, this->mapping, this->p.first, this->p.last);
 
 
-  if (pp.bucket_count > 0) {
+  if ((pp.bucket_count > 0) && (this->p.last <= this->p.input_size) && (this->p.first <= this->p.last) ) {
 
 	  // allocate.
 	  this->bucketed.resize(this->p.input_size);
 
-	  imxx::local::permute(this->data,
-						   this->mapping,
-							  this->bucketed, this->p.first, this->p.last);
 
+	  imxx::local::permute(this->data.begin() + this->p.first, this->data.begin() + this->p.last,
+						   this->mapping.begin() + this->p.first,
+						   this->bucketed.begin() + this->p.first,
+						   this->p.first);
   }
 }
 
@@ -309,14 +310,16 @@ TEST_P(BucketTest, unpermute)
 
 
 
-	  if (pp.bucket_count > 0) {
+	  if ((pp.bucket_count > 0) && (this->p.last <= this->p.input_size) && (this->p.first <= this->p.last) ) {
 
 
 		  // allocate.
 		  this->bucketed.resize(this->p.input_size);
 
-		  imxx::local::permute(this->data,
-							   this->mapping, this->bucketed, this->p.first, this->p.last);
+		  imxx::local::permute(this->data.begin() + this->p.first, this->data.begin() + this->p.last,
+							   this->mapping.begin() + this->p.first,
+								  this->bucketed.begin() + this->p.first,
+							   this->p.first);
 
 
 
@@ -325,8 +328,10 @@ TEST_P(BucketTest, unpermute)
 
 		  // copy
 
-		  imxx::local::unpermute(this->bucketed,
-							   this->mapping, this->unbucketed, this->p.first, this->p.last);
+		  imxx::local::unpermute(this->bucketed.begin() + this->p.first, this->bucketed.begin() + this->p.last,
+							   this->mapping.begin() + this->p.first,
+							   this->unbucketed.begin() + this->p.first,
+							   this->p.first);
 	  }
 }
 
@@ -347,13 +352,15 @@ TEST_P(BucketTest, inplace_unpermute)
 
 	  imxx::local::bucket_to_permutation(this->bcounts, this->mapping, this->p.first, this->p.last);
 
-	  if (pp.bucket_count > 0) {
+	  if ((pp.bucket_count > 0) && (this->p.last <= this->p.input_size) && (this->p.first <= this->p.last) ) {
 
 		  // allocate.
 		  this->bucketed.resize(this->p.input_size);
 
-		  imxx::local::permute(this->data,
-							   this->mapping, this->bucketed, this->p.first, this->p.last);
+		  imxx::local::permute(this->data.begin() + this->p.first, this->data.begin() + this->p.last,
+							   this->mapping.begin() + this->p.first,
+								  this->bucketed.begin() + this->p.first,
+							   this->p.first);
 
 		  // allocate.
 		  this->unbucketed.resize(this->p.input_size);

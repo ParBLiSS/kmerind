@@ -135,7 +135,7 @@ TEST_P(BucketBenchmark, make_permutation)
 
 }
 
-TEST_P(BucketBenchmark, inplace_bucket)
+TEST_P(BucketBenchmark, destructive_bucket)
 {
 	this->unbucketed.clear();
   this->mapping.clear();
@@ -218,7 +218,6 @@ TEST_P(BucketBenchmark, permute)
   // allocate.
   this->mapping.reserve(this->p.input_size);
 
-
   imxx::local::assign_to_buckets(this->data, [&pp](std::pair<size_t, size_t> const & x){ return x.first % pp.bucket_count; },
 		  this->p.bucket_count,
                                  this->bcounts, this->mapping, this->p.first, this->p.last);
@@ -231,9 +230,10 @@ TEST_P(BucketBenchmark, permute)
 	  // allocate.
 	  this->bucketed.resize(this->p.input_size);
 
-	  imxx::local::permute(this->data,
-						   this->mapping,
-							  this->bucketed, this->p.first, this->p.last);
+	  imxx::local::permute(this->data.begin() + this->p.first, this->data.begin() + this->p.last,
+						   this->mapping.begin() + this->p.first,
+							  this->bucketed.begin() + this->p.first,
+						   this->p.first);
 
   }
 }
@@ -294,8 +294,10 @@ TEST_P(BucketBenchmark, unpermute)
 		  // allocate.
 		  this->bucketed.resize(this->p.input_size);
 
-		  imxx::local::permute(this->data,
-							   this->mapping, this->bucketed, this->p.first, this->p.last);
+		  imxx::local::permute(this->data.begin() + this->p.first, this->data.begin() + this->p.last,
+							   this->mapping.begin() + this->p.first,
+								  this->bucketed.begin() + this->p.first,
+							   this->p.first);
 
 
 
@@ -303,9 +305,11 @@ TEST_P(BucketBenchmark, unpermute)
 		  this->unbucketed.resize(this->p.input_size);
 
 		  // copy
+		  imxx::local::unpermute(this->bucketed.begin() + this->p.first, this->bucketed.begin() + this->p.last,
+							   this->mapping.begin() + this->p.first,
+							   this->unbucketed.begin() + this->p.first,
+							   this->p.first);
 
-		  imxx::local::unpermute(this->bucketed,
-							   this->mapping, this->unbucketed, this->p.first, this->p.last);
 	  }
 }
 
@@ -331,8 +335,12 @@ TEST_P(BucketBenchmark, inplace_unpermute)
 		  // allocate.
 		  this->bucketed.resize(this->p.input_size);
 
-		  imxx::local::permute(this->data,
-							   this->mapping, this->bucketed, this->p.first, this->p.last);
+
+		  imxx::local::permute(this->data.begin() + this->p.first, this->data.begin() + this->p.last,
+							   this->mapping.begin() + this->p.first,
+								  this->bucketed.begin() + this->p.first,
+							   this->p.first);
+
 
 		  // allocate.
 		  this->unbucketed.resize(this->p.input_size);
