@@ -285,7 +285,7 @@ namespace imxx
 
         if (f == l) return;  // no data in question.
 
-        i2o.resize(input.size());  // need exactly input size.
+        i2o.resize(input.size(), 0);  // need exactly input size.
 
         // single bucket.
         if (num_buckets == 1) {
@@ -423,7 +423,7 @@ namespace imxx
      * 						checking counter shows that the array is visited approximately 2x. reducing this is unlikely to improve performance
      * 							due to move/copy cost.
      * 						move/copy cost is associated with std::pair.
-     *				loop unrolling did not help much.
+     *				loop unrolling did not help much.  trying to change read/write dependence does not seem to help much either.
      *				issue is random read and write, probably.  perf profiling identifies the problem as such.
      *
      */
@@ -825,7 +825,7 @@ namespace imxx
 
   /**
    * @brief distribute function.  input is replaced with a2a output. uses a temporary buffer.
-   *
+   *  TO BE DEPRECATED
    */
   template <typename V, typename ToRank, typename SIZE>
   void destructive_distribute(::std::vector<V>& input, ToRank const & to_rank,
@@ -878,7 +878,7 @@ namespace imxx
     mxx::all2allv(output.data(), send_counts, input.data(), recv_counts, _comm);
     BL_BENCH_END(distribute, "a2a", input.size());
 
-    BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+    BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:destructive_distribute", _comm);
 
 
   }
@@ -914,9 +914,15 @@ namespace imxx
     BL_BENCH_END(distribute, "to_pos", input.size());
 
     BL_BENCH_START(distribute);
+    if (output.capacity() < input.size()) output.clear();
+    output.resize(input.size());
+    output.swap(input);  // swap the 2.
+    BL_BENCH_END(distribute, "alloc_permute", output.size());
+
+    BL_BENCH_START(distribute);
     // distribute (communication part)
-    imxx::local::permute_inplace(input, i2o, 0, input.size());
-    BL_BENCH_END(distribute, "permute_inplace", input.size());
+    imxx::local::permute(output, i2o, input, 0, input.size());  // input now holds permuted entries.
+    BL_BENCH_END(distribute, "permute", input.size());
 
     // distribute (communication part)
     BL_BENCH_START(distribute);
@@ -926,6 +932,7 @@ namespace imxx
     BL_BENCH_END(distribute, "a2a_count", recv_counts.size());
 
     BL_BENCH_START(distribute);
+    // now resize output
     if (output.capacity() < total) output.clear();
     output.resize(total);
     BL_BENCH_END(distribute, "realloc_out", output.size());
@@ -936,7 +943,7 @@ namespace imxx
 
     if (preserve_input) {
       BL_BENCH_START(distribute);
-      // distribute (communication part)
+      // unpermute.  may be able to work around this so leave it as "_inplace"
       imxx::local::unpermute_inplace(input, i2o, 0, input.size());
       BL_BENCH_END(distribute, "unpermute_inplace", input.size());
     }
@@ -1023,10 +1030,17 @@ namespace imxx
       total += first_part;
       BL_BENCH_END(distribute, "a2av_count", total);
 
+      BL_BENCH_START(distribute);
+      if (output.capacity() < input.size()) output.clear();
+      output.resize(input.size());
+      output.swap(input);
+      BL_BENCH_END(distribute, "alloc_out", output.size());
+
+
       // permute
       BL_BENCH_START(distribute);
-      ::imxx::local::permute_inplace(input, i2o, 0, input.size());
-      BL_BENCH_END(distribute, "permute_inplace", input.size());
+      ::imxx::local::permute(output, i2o, input, 0, input.size());
+      BL_BENCH_END(distribute, "permute", input.size());
 
       BL_BENCH_START(distribute);
       if (output.capacity() < total) output.clear();
@@ -1056,7 +1070,7 @@ namespace imxx
 
   /**
    * @brief distribute function.  input is replaced by the communication output.  out is used temporarily only
-   *
+   * TO BE DEPRECATED
    */
   template <typename V, typename ToRank, typename SIZE>
   void destructive_distribute_2part(::std::vector<V>& input, ToRank const & to_rank,
