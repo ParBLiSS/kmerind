@@ -36,8 +36,6 @@
 #include <cstdint> // for uint64_t, etc.
 #include <type_traits>  // for integral_constant
 
-#include <io/incremental_mxx.hpp>
-
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -48,6 +46,15 @@
 #include <cstdint>  // uint32_t
 #include <utility>  // pair
 #include <vector>
+
+#include "io/incremental_mxx.hpp"
+#include "containers/dsc_container_utils.hpp"
+
+// includ the murmurhash code.
+#ifndef _MURMURHASH3_H_
+#include <smhasher/MurmurHash3.cpp>
+#endif
+
 
 
 //===============  BLOCK All2All tests
@@ -239,6 +246,33 @@ INSTANTIATE_TEST_CASE_P(Bliss, A2ADistributeBenchmark, ::testing::Values(
 
 //=========================  DISTRIBUTE TESTS
 
+class murmurhash {
+
+protected:
+
+  uint32_t seed;
+
+public:
+  murmurhash(uint32_t const & _seed = 43) : seed(_seed) {};
+
+  template <typename T>
+  inline uint64_t operator()(const T & x) const
+  {
+	// produces 128 bit hash.
+	  uint64_t h[2];
+	// let compiler optimize out all except one of these.
+	if (sizeof(void*) == 8)
+	  MurmurHash3_x64_128(&x, sizeof(T), seed, h);
+	else if (sizeof(void*) == 4)
+	  MurmurHash3_x86_128(&x, sizeof(T), seed, h);
+	else
+	  throw ::std::logic_error("ERROR: neither 32 bit nor 64 bit system");
+
+	// use the upper 64 bits.
+	return h[0];
+  }
+};
+
 
 template <typename IIT, typename OIT>
 struct copy {
@@ -252,10 +286,11 @@ struct copy {
 
 struct DistributeBenchmarkInfo {
     size_t input_size;
+    uint8_t hash_type;
 
     DistributeBenchmarkInfo() = default;
-    DistributeBenchmarkInfo(size_t const & _input_size) :
-      input_size(_input_size) {};
+    DistributeBenchmarkInfo(size_t const & _input_size, uint8_t const & _hash_type) :
+        input_size(_input_size), hash_type(_hash_type) {};
 
     DistributeBenchmarkInfo(DistributeBenchmarkInfo const & other) = default;
     DistributeBenchmarkInfo& operator=(DistributeBenchmarkInfo const & other) = default;
@@ -339,8 +374,15 @@ TEST_P(DistributeBenchmark, distribute_preserve_input)
   std::vector<size_t> recv_counts;
   std::vector<size_t> mapping;
 
-  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->distributed, comm, true);
+  if (this->p.hash_type == 0)
+	  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+					   recv_counts, mapping, this->distributed, comm, true);
+  else {
+	  murmurhash hs;
+	  imxx::distribute(this->roundtripped, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+					   recv_counts, mapping, this->distributed, comm, true);
+  }
+
 
 }
 
@@ -361,11 +403,49 @@ TEST_P(DistributeBenchmark, distribute)
   std::vector<size_t> recv_counts;
   std::vector<size_t> mapping;
 
-  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->distributed, comm, false);
+  if (this->p.hash_type == 0)
+	  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+					   recv_counts, mapping, this->distributed, comm, false);
+  else {
+	  murmurhash hs;
+	  imxx::distribute(this->roundtripped, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+					   recv_counts, mapping, this->distributed, comm, false);
+  }
 
   this->roundtripped.clear();
 }
+
+TEST_P(DistributeBenchmark, dsc_distribute)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->distributed.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  bool sorted = false;
+
+  if (this->p.hash_type == 0)
+	  recv_counts = ::dsc::distribute(this->distributed, [&p](T const & x ){ return x.first % p; },
+	                   sorted, comm);
+  else {
+	  murmurhash hs;
+	  recv_counts = ::dsc::distribute(this->distributed, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+	                   sorted, comm);
+  }
+
+  this->roundtripped.clear();
+}
+
 
 
 TEST_P(DistributeBenchmark, distribute_preserve_input_rt)
@@ -385,8 +465,16 @@ TEST_P(DistributeBenchmark, distribute_preserve_input_rt)
   std::vector<size_t> recv_counts;
   std::vector<size_t> mapping;
 
-  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->distributed, comm, true);
+  if (this->p.hash_type == 0)
+	  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+					   recv_counts, mapping, this->distributed, comm, true);
+  else {
+	  murmurhash hs;
+	  imxx::distribute(this->roundtripped, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+					   recv_counts, mapping, this->distributed, comm, true);
+  }
+
+
 
   imxx::undistribute(distributed, recv_counts, mapping, this->roundtripped, comm, true);
 
@@ -409,11 +497,49 @@ TEST_P(DistributeBenchmark, distribute_rt)
   std::vector<size_t> recv_counts;
   std::vector<size_t> mapping;
 
-  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->distributed, comm, false);
+  if (this->p.hash_type == 0)
+	  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+					   recv_counts, mapping, this->distributed, comm, true);
+  else {
+	  murmurhash hs;
+	  imxx::distribute(this->roundtripped, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+					   recv_counts, mapping, this->distributed, comm, true);
+  }
 
   imxx::undistribute(distributed, recv_counts, mapping, this->roundtripped, comm, true);
 }
+
+
+TEST_P(DistributeBenchmark, dsc_distribute_rt)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->distributed.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  bool sorted = false;
+  if (this->p.hash_type == 0)
+	  recv_counts = ::dsc::distribute(this->distributed, [&p](T const & x ){ return x.first % p; },
+	                   sorted, comm);
+  else {
+	  murmurhash hs;
+	  recv_counts = ::dsc::distribute(this->distributed, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+	                   sorted, comm);
+  }
+
+  this->roundtripped = mxx::all2allv(this->distributed, recv_counts, comm);
+}
+
 
 TEST_P(DistributeBenchmark, scatter_compute_gather)
 {
@@ -437,16 +563,28 @@ TEST_P(DistributeBenchmark, scatter_compute_gather)
   std::vector<T> inbuf;
   std::vector<T> outbuf;
 
-  imxx::scatter_compute_gather(this->distributed, [&p](T const & x ){ return x.first % p; },
-                                     copy<typename std::vector<T>::const_iterator,
-                                          typename std::vector<T>::iterator>(),
-                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+
+
+  if (this->p.hash_type == 0)
+	  imxx::scatter_compute_gather(this->distributed, [&p](T const & x ){ return x.first % p; },
+	                                     copy<typename std::vector<T>::const_iterator,
+	                                          typename std::vector<T>::iterator>(),
+	                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+  else {
+	  murmurhash hs;
+	  imxx::scatter_compute_gather(this->distributed, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+	                                     copy<typename std::vector<T>::const_iterator,
+	                                          typename std::vector<T>::iterator>(),
+	                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+  }
+
 
 }
 
 INSTANTIATE_TEST_CASE_P(Bliss, DistributeBenchmark, ::testing::Values(
 
-    DistributeBenchmarkInfo((1UL << 24))   // 3
+    DistributeBenchmarkInfo((1UL << 24), 0),   // 3
+    DistributeBenchmarkInfo((1UL << 24), 1)   // 3
 
 ));
 
@@ -458,10 +596,11 @@ INSTANTIATE_TEST_CASE_P(Bliss, DistributeBenchmark, ::testing::Values(
 
 struct Distribute2PartBenchmarkInfo {
     size_t input_size;
+    uint8_t hash_type;
 
     Distribute2PartBenchmarkInfo() = default;
-    Distribute2PartBenchmarkInfo(size_t const & _input_size) :
-      input_size(_input_size) {};
+    Distribute2PartBenchmarkInfo(size_t const & _input_size, uint8_t const & _hash_type) :
+      input_size(_input_size), hash_type(_hash_type) {};
 
     Distribute2PartBenchmarkInfo(Distribute2PartBenchmarkInfo const & other) = default;
     Distribute2PartBenchmarkInfo& operator=(Distribute2PartBenchmarkInfo const & other) = default;
@@ -546,9 +685,14 @@ TEST_P(Distribute2PartBenchmark, distribute_preserve_input_2part)
   std::vector<size_t> recv_counts;
   std::vector<size_t> mapping;
 
-  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->distributed, comm, true);
-
+  if (this->p.hash_type == 0)
+	  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+					   recv_counts, mapping, this->distributed, comm, true);
+  else {
+	  murmurhash hs;
+	  imxx::distribute_2part(this->roundtripped, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+					   recv_counts, mapping, this->distributed, comm, true);
+  }
 }
 
 TEST_P(Distribute2PartBenchmark, distribute_2part)
@@ -568,8 +712,14 @@ TEST_P(Distribute2PartBenchmark, distribute_2part)
   std::vector<size_t> recv_counts;
   std::vector<size_t> mapping;
 
-  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->distributed, comm, false);
+  if (this->p.hash_type == 0)
+	  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+					   recv_counts, mapping, this->distributed, comm, false);
+  else {
+	  murmurhash hs;
+	  imxx::distribute_2part(this->roundtripped, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+					   recv_counts, mapping, this->distributed, comm, false);
+  }
 
   this->roundtripped.clear();
 }
@@ -592,8 +742,15 @@ TEST_P(Distribute2PartBenchmark, distribute_preserve_input_2part_rt)
   std::vector<size_t> recv_counts;
   std::vector<size_t> mapping;
 
-  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->distributed, comm, true);
+  if (this->p.hash_type == 0)
+	  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+					   recv_counts, mapping, this->distributed, comm, true);
+  else {
+	  murmurhash hs;
+	  imxx::distribute_2part(this->roundtripped, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+					   recv_counts, mapping, this->distributed, comm, true);
+  }
+
 
   imxx::undistribute_2part(this->distributed, recv_counts, mapping, this->roundtripped, comm, true);
 
@@ -616,8 +773,15 @@ TEST_P(Distribute2PartBenchmark, distribute_2part_rt)
   std::vector<size_t> recv_counts;
   std::vector<size_t> mapping;
 
-  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
-                   recv_counts, mapping, this->distributed, comm, false);
+
+  if (this->p.hash_type == 0)
+	  imxx::distribute_2part(this->roundtripped, [&p](T const & x ){ return x.first % p; },
+					   recv_counts, mapping, this->distributed, comm, false);
+  else {
+	  murmurhash hs;
+	  imxx::distribute_2part(this->roundtripped, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+					   recv_counts, mapping, this->distributed, comm, false);
+  }
 
   imxx::undistribute_2part(this->distributed, recv_counts, mapping, this->roundtripped, comm, true);
 }
@@ -645,10 +809,19 @@ TEST_P(Distribute2PartBenchmark, scatter_compute_gather_2part)
   std::vector<T> inbuf;
   std::vector<T> outbuf;
 
-  imxx::scatter_compute_gather_2part(this->distributed, [&p](T const & x ){ return x.first % p; },
-                                     copy<typename std::vector<T>::const_iterator,
-                                          typename std::vector<T>::iterator>(),
-                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+  if (this->p.hash_type == 0)
+	  imxx::scatter_compute_gather_2part(this->distributed, [&p](T const & x ){ return x.first % p; },
+	                                     copy<typename std::vector<T>::const_iterator,
+	                                          typename std::vector<T>::iterator>(),
+	                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+  else {
+	  murmurhash hs;
+	  imxx::scatter_compute_gather_2part(this->distributed, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+	                                     copy<typename std::vector<T>::const_iterator,
+	                                          typename std::vector<T>::iterator>(),
+	                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+  }
+
 
 }
 
@@ -675,17 +848,29 @@ TEST_P(Distribute2PartBenchmark, scatter_compute_gather_lowmem)
   std::vector<T> inbuf;
   std::vector<T> outbuf;
 
-  imxx::scatter_compute_gather_lowmem(this->distributed, [&p](T const & x ){ return x.first % p; },
-                                     copy<typename std::vector<T>::const_iterator,
-                                          typename std::vector<T>::iterator>(),
-                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+
+  if (this->p.hash_type == 0)
+	  imxx::scatter_compute_gather_lowmem(this->distributed, [&p](T const & x ){ return x.first % p; },
+	                                     copy<typename std::vector<T>::const_iterator,
+	                                          typename std::vector<T>::iterator>(),
+	                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+  else {
+	  murmurhash hs;
+	  imxx::scatter_compute_gather_lowmem(this->distributed, [&p, &hs](T const & x ){ return hs(x.first) % p; },
+	                                     copy<typename std::vector<T>::const_iterator,
+	                                          typename std::vector<T>::iterator>(),
+	                   mapping, this->roundtripped, inbuf, outbuf, comm, false);
+  }
+
+
 
 }
 
 
 INSTANTIATE_TEST_CASE_P(Bliss, Distribute2PartBenchmark, ::testing::Values(
 
-    Distribute2PartBenchmarkInfo((1UL << 24))   // 3
+    Distribute2PartBenchmarkInfo((1UL << 24), 0),   // 3
+    Distribute2PartBenchmarkInfo((1UL << 24), 1)   // 3
 
 ));
 

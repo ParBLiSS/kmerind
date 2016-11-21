@@ -44,9 +44,10 @@
 
 class Timer {
   protected:
-    std::chrono::steady_clock::time_point t1, t2;
+    std::chrono::steady_clock::time_point first, t1, t2;
     std::vector<std::string> names;
-    std::vector<double> durations; 
+    std::vector<double> durations;
+    std::vector<double> cumulative;
     std::vector<double> counts;
     std::chrono::duration<double> time_span;
 
@@ -54,11 +55,17 @@ class Timer {
     std::unordered_map<size_t, std::chrono::duration<double> > loop_span;
 
   public:
+    Timer() {
+    	reset();
+    }
+
     void reset() {
       names.clear();
       durations.clear();
+      cumulative.clear();
       counts.clear();
 
+      first = std::chrono::steady_clock::now();
       loop_t1.clear();
       loop_span.clear();
     }
@@ -79,6 +86,8 @@ class Timer {
     void loop_end(size_t const & id, ::std::string const & name, double const & n_elem) {
     	names.push_back(name);
     	durations.push_back(loop_span[id].count());
+        std::chrono::steady_clock::time_point lt2 = std::chrono::steady_clock::now();
+    	cumulative.push_back((std::chrono::duration_cast<std::chrono::duration<double> >(lt2 - first)).count());
     	counts.push_back(n_elem);
 
     	loop_span.erase(id);
@@ -98,6 +107,7 @@ class Timer {
       ::std::string tmp("barrier_"); tmp.append(name);
       names.push_back(tmp);
       durations.push_back(time_span.count());
+      cumulative.push_back((std::chrono::duration_cast<std::chrono::duration<double> >(t2 - first)).count());
       counts.push_back(0);
 
       t1 = std::chrono::steady_clock::now();
@@ -108,6 +118,7 @@ class Timer {
 
       names.push_back(name);
       durations.push_back(time_span.count());
+      cumulative.push_back((std::chrono::duration_cast<std::chrono::duration<double> >(t2 - first)).count());
       counts.push_back(n_elem);
     }
     void collective_end(::std::string const & name, double const & n_elem, ::mxx::comm const & comm) {
@@ -134,8 +145,8 @@ class Timer {
         std::copy(durations.begin(), durations.end(), dit);
         output << "]" << ::std::endl;
 
-        output << "[TIME] " << title << "\tcum\t[,";
-        std::partial_sum(durations.begin(), durations.end(), dit);
+        output << "[TIME] " << title << "\tcum2\t[,";
+        std::copy(cumulative.begin(), cumulative.end(), dit);
         output << "]" << ::std::endl;
 
         output.precision(0);
@@ -251,7 +262,6 @@ class Timer {
 #endif
 
     void report(::std::string const & title, ::mxx::comm const & comm) {
-      std::vector<double> cumulative(durations);
       std::vector<double> dur_mins, dur_maxs, dur_means, dur_stdevs;
       std::vector<double> cum_mins, cum_maxs, cum_means, cum_stdevs;
       std::vector<double> cnt_mins, cnt_maxs, cnt_means, cnt_stdevs;
@@ -269,7 +279,6 @@ class Timer {
         dur_stdevs = ::mxx::reduce(durations, 0, ::std::plus<double>(), comm);
 
         // compute partial sum of times.
-        ::std::partial_sum(cumulative.begin(), cumulative.end(), cumulative.begin());
         cum_mins = ::mxx::reduce(cumulative, 0,
                                       [](double const & x, double const & y) { return ::std::min(x, y); }, comm);
         cum_maxs = ::mxx::reduce(cumulative, 0,
@@ -337,19 +346,19 @@ class Timer {
 
 
           output.precision(9);
-          output << "[TIME] " << title << "\tcum_min\t[,";
+          output << "[TIME] " << title << "\tcum_min2\t[,";
           std::copy(cum_mins.begin(), cum_mins.end(), dit);
           output << "]" << std::endl;
 
-          output << "[TIME] " << title << "\tcum_max\t[,";
+          output << "[TIME] " << title << "\tcum_max2\t[,";
           std::copy(cum_maxs.begin(), cum_maxs.end(), dit);
           output << "]" << std::endl;
 
-          output << "[TIME] " << title << "\tcum_mean\t[,";
+          output << "[TIME] " << title << "\tcum_mean2\t[,";
           std::copy(cum_means.begin(), cum_means.end(), dit);
           output << "]" << std::endl;
 
-          output << "[TIME] " << title << "\tcum_stdev\t[,";
+          output << "[TIME] " << title << "\tcum_stdev2\t[,";
           std::copy(cum_stdevs.begin(), cum_stdevs.end(), dit);
           output << "]" << std::endl;
 
@@ -383,7 +392,7 @@ class Timer {
 
 
 #define BL_TIMER_INIT(title)      Timer title##_timer;
-#define BL_TIMER_RESET(title)     do {  title##_timer.reset(); } while (0)
+#define BL_TIMER_RESET(title)     do { title##_timer.reset(); } while (0)
 
 #define BL_TIMER_LOOP_START(title, id)     do { title##_timer.loop_start(id); } while (0)
 #define BL_TIMER_LOOP_RESUME(title, id)    do { title##_timer.loop_resume(id); } while (0)

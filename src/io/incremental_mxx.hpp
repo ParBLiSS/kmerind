@@ -1039,8 +1039,11 @@ namespace imxx
                   ::mxx::comm const &_comm, bool const & preserve_input = true) {
     BL_BENCH_INIT(distribute);
 
+    BL_BENCH_COLLECTIVE_START(distribute, "empty", _comm);
     bool empty = input.size() == 0;
     empty = mxx::all_of(empty);
+    BL_BENCH_END(distribute, "empty", input.size());
+
     if (empty) {
       BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
       return;
@@ -1074,7 +1077,7 @@ namespace imxx
     BL_BENCH_END(distribute, "permute", input.size());
 
     // distribute (communication part)
-    BL_BENCH_COLLECTIVE_START(distribute, "a2a_count", _comm);
+    BL_BENCH_START(distribute);
     recv_counts.resize(_comm.size());
     mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
     size_t total = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
@@ -1086,7 +1089,7 @@ namespace imxx
     output.resize(total);
     BL_BENCH_END(distribute, "realloc_out", output.size());
 
-    BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
+    BL_BENCH_START(distribute);
     mxx::all2allv(input.data(), send_counts, output.data(), recv_counts, _comm);
     BL_BENCH_END(distribute, "a2a", output.size());
 
@@ -1108,8 +1111,11 @@ namespace imxx
                   ::mxx::comm const &_comm, bool const & restore_order = true) {
     BL_BENCH_INIT(undistribute);
 
+    BL_BENCH_COLLECTIVE_START(undistribute, "empty", _comm);
     bool empty = input.size() == 0;
     empty = mxx::all_of(empty);
+    BL_BENCH_END(undistribute, "empty", input.size());
+
     if (empty) {
       BL_BENCH_REPORT_MPI_NAMED(undistribute, "map_base:undistribute", _comm);
       return;
@@ -1127,7 +1133,7 @@ namespace imxx
     output.resize(total);
     BL_BENCH_END(undistribute, "realloc_out", output.size());
 
-    BL_BENCH_COLLECTIVE_START(undistribute, "a2av", _comm);
+    BL_BENCH_START(undistribute);
     mxx::all2allv(input.data(), recv_counts, output.data(), send_counts, _comm);
     BL_BENCH_END(undistribute, "a2av", input.size());
 
@@ -1155,8 +1161,11 @@ namespace imxx
     BL_BENCH_INIT(distribute);
 
       // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
+    BL_BENCH_COLLECTIVE_START(distribute, "empty", _comm);
     bool empty = input.size() == 0;
     empty = mxx::all_of(empty);
+    BL_BENCH_END(distribute, "empty", input.size());
+
     if (empty) {
       BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
       return;
@@ -1186,7 +1195,7 @@ namespace imxx
       BL_BENCH_END(distribute, "to_pos", input.size());
 
       // compute receive counts and total
-      BL_BENCH_COLLECTIVE_START(distribute, "a2av_count", _comm);
+      BL_BENCH_START(distribute);
       recv_counts.resize(_comm.size());
       mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
       SIZE total = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
@@ -1209,7 +1218,7 @@ namespace imxx
       output.resize(total);
       BL_BENCH_END(distribute, "alloc_out", output.size());
 
-      BL_BENCH_COLLECTIVE_START(distribute, "a2a", _comm);
+      BL_BENCH_START(distribute);
       block_all2all(input, min_bucket_size, output, 0, 0, _comm);
       BL_BENCH_END(distribute, "a2a", first_part);
 
@@ -1241,8 +1250,11 @@ namespace imxx
                   ::mxx::comm const &_comm, bool const & restore_order = true) {
     BL_BENCH_INIT(undistribute);
 
+    BL_BENCH_COLLECTIVE_START(undistribute, "empty", _comm);
     bool empty = input.size() == 0;
     empty = mxx::all_of(empty);
+    BL_BENCH_END(undistribute, "empty", input.size());
+
     if (empty) {
       BL_BENCH_REPORT_MPI_NAMED(undistribute, "map_base:undistribute", _comm);
       return;
@@ -1264,7 +1276,7 @@ namespace imxx
     output.resize(first_part + second_part);
     BL_BENCH_END(undistribute, "realloc_out", output.size());
 
-    BL_BENCH_COLLECTIVE_START(undistribute, "a2a", _comm);
+    BL_BENCH_START(undistribute);
     mxx::all2all(input.data(), first_part / _comm.size(), output.data(), _comm);
     BL_BENCH_END(undistribute, "a2a", first_part);
 
@@ -1302,8 +1314,11 @@ namespace imxx
       BL_BENCH_INIT(scat_comp_gath);
 
       // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath, "empty", _comm);
       bool empty = input.size() == 0;
       empty = mxx::all_of(empty);
+      BL_BENCH_END(scat_comp_gath, "empty", input.size());
+
       if (empty) {
         BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath, "map_base:scat_comp_gath", _comm);
         return;
@@ -1374,8 +1389,11 @@ namespace imxx
       BL_BENCH_INIT(scat_comp_gath_2);
 
       // speed over mem use.  mxx all2allv already has to double memory usage. same as stable scat_comp_gath_2.
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "empty", _comm);
       bool empty = input.size() == 0;
       empty = mxx::all_of(empty);
+      BL_BENCH_END(scat_comp_gath_2, "empty", input.size());
+
       if (empty) {
         BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_2, "map_base:scat_comp_gath_2", _comm);
         return;
@@ -1394,7 +1412,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath_2, "bucket", input.size());
 
       // then compute minimum block size.
-      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "min_bucket_size", _comm);
+      BL_BENCH_START(scat_comp_gath_2);
       SIZE min_bucket_size = *(::std::min_element(send_counts.begin(), send_counts.end()));
       min_bucket_size = ::mxx::allreduce(min_bucket_size, mxx::min<SIZE>(), _comm);
       SIZE first_part = _comm.size() * min_bucket_size;
@@ -1406,7 +1424,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath_2, "to_pos", input.size());
 
       // compute receive counts and total
-      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "a2av_count", _comm);
+      BL_BENCH_START(scat_comp_gath_2);
       recv_counts.resize(_comm.size());
       mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
       SIZE second_part = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
@@ -1433,7 +1451,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath_2, "alloc_out", output.size());
 
       //== process first part.  communicate in place
-      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "a2a_inplace", _comm);
+      BL_BENCH_START(scat_comp_gath_2);
       block_all2all(input, min_bucket_size, in_buffer, 0, 0, _comm);
       BL_BENCH_END(scat_comp_gath_2, "a2a_inplace", first_part);
 
@@ -1444,7 +1462,7 @@ namespace imxx
 
       // send the results back.  and reverse the input
       // undo a2a, so that result data matches.
-      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "inverse_a2a_inplace", _comm);
+      BL_BENCH_START(scat_comp_gath_2);
       block_all2all_inplace(output, min_bucket_size, 0, _comm);
       BL_BENCH_END(scat_comp_gath_2, "inverse_a2a_inplace", first_part);
 
@@ -1457,7 +1475,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath_2, "alloc_outbuf", out_buffer.size());
 
       // send second part.  reuse entire in_buffer
-      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "a2av", _comm);
+      BL_BENCH_START(scat_comp_gath_2);
 	  mxx::all2allv(input.data() + first_part, send_counts,
                     in_buffer.data(), recv_counts, _comm);
       BL_BENCH_END(scat_comp_gath_2, "a2av", in_buffer.size());
@@ -1468,7 +1486,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath_2, "compute2", out_buffer.size());
 
       // send the results back
-      BL_BENCH_COLLECTIVE_START(scat_comp_gath_2, "inverse_a2av", _comm);
+      BL_BENCH_START(scat_comp_gath_2);
 	  mxx::all2allv(out_buffer.data(), recv_counts,
                     output.data() + first_part, send_counts, _comm);
       BL_BENCH_END(scat_comp_gath_2, "inverse_a2av", output.size());
@@ -1568,8 +1586,11 @@ namespace imxx
                               bool const & preserve_input = true) {
       BL_BENCH_INIT(scat_comp_gath_lm);
 
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "empty", _comm);
       bool empty = input.size() == 0;
       empty = mxx::all_of(empty);
+      BL_BENCH_END(scat_comp_gath_lm, "empty", input.size());
+
       if (empty) {
         BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_lm, "map_base:scat_comp_gath_lm", _comm);
         return;
@@ -1590,7 +1611,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath_lm, "bucket", input.size());
 
       // then compute minimum block size.
-      BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "a2av_count", _comm);
+      BL_BENCH_START(scat_comp_gath_lm);
       SIZE min_bucket_size = *(::std::min_element(send_counts.begin(), send_counts.end()));
       min_bucket_size = ::mxx::allreduce(min_bucket_size, mxx::min<SIZE>(), _comm);
       SIZE block_bucket_size = min_bucket_size / 2;  // block_bucket_size is at least 1/2 as large as the largest bucket.
@@ -1643,7 +1664,7 @@ namespace imxx
 		  ::imxx::local::permute_for_output_range(input.begin(), input.end(), i2o.begin(), in_buffer.begin(), in_buffer.begin() + block_size, i * block_size);
 		  BL_BENCH_END(scat_comp_gath_lm, "permute_block", block_size);
 
-		  BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "a2a_inplace", _comm);
+		  BL_BENCH_START(scat_comp_gath_lm);
 		  block_all2all_inplace(in_buffer, block_bucket_size, 0, _comm);
 		  BL_BENCH_END(scat_comp_gath_lm, "a2a_inplace", block_size);
 
@@ -1654,7 +1675,7 @@ namespace imxx
 
 		  // send the results back.  and reverse the input
 		  // undo a2a, so that result data matches.
-		  BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "inverse_a2a_inplace", _comm);
+		  BL_BENCH_START(scat_comp_gath_lm);
 		  block_all2all_inplace(output, block_bucket_size, i * block_size, _comm);
 		  BL_BENCH_END(scat_comp_gath_lm, "inverse_a2a_inplace", block_size);
 
@@ -1674,7 +1695,7 @@ namespace imxx
 	  BL_BENCH_END(scat_comp_gath_lm, "permute_block", second_part_local);
 
       // send second part.  reuse entire in_buffer
-      BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "a2av", _comm);
+      BL_BENCH_START(scat_comp_gath_lm);
       ::mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
 	  mxx::all2allv(in_buffer.data(), send_counts,
                     in_buffer.data() + second_part_local, recv_counts, _comm);
@@ -1686,7 +1707,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath_lm, "compute2", second_part_remote);
 
       // send the results back
-      BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "inverse_a2av", _comm);
+      BL_BENCH_START(scat_comp_gath_lm);
 	  mxx::all2allv(out_buffer.data(), recv_counts,
                     output.data() + first_part, send_counts, _comm);
       BL_BENCH_END(scat_comp_gath_lm, "inverse_a2av", second_part_remote);
@@ -1723,8 +1744,11 @@ namespace imxx
       BL_BENCH_INIT(scat_comp_gath_v);
 
       // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
+      BL_BENCH_COLLECTIVE_START(scat_comp_gath_v, "empty", _comm);
       bool empty = input.size() == 0;
       empty = mxx::all_of(empty);
+      BL_BENCH_END(scat_comp_gath_v, "empty", input.size());
+
       if (empty) {
         BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_v, "map_base:scat_comp_gath_v", _comm);
         return;

@@ -228,17 +228,22 @@ namespace bliss {
 
       /**
        * @brief Kmer specialization for MurmurHash.  generated hash is 128 bit.
+       *
+       * TODO: move KMER type template param to operator.
+       * TODO: change h to member variable.
        */
       template <typename KMER, bool Prefix = false>
       class murmur {
 
+
         protected:
           static constexpr unsigned int nBytes = (KMER::nBits + 7) / 8;
+          uint32_t seed;
 
         public:
           static const unsigned int default_init_value = 24U;  // allow 16M processors.  but it's ignored here.
 
-          murmur(const unsigned int prefix_bits = default_init_value) {};
+          murmur(uint32_t const & _seed = 43, const unsigned int prefix_bits = default_init_value) : seed(_seed) {};
 
           inline uint64_t operator()(const KMER & kmer) const
           {
@@ -246,9 +251,9 @@ namespace bliss {
             uint64_t h[2];
             // let compiler optimize out all except one of these.
             if (sizeof(void*) == 8)
-              MurmurHash3_x64_128(kmer.getData(), nBytes, 42, h);
+              MurmurHash3_x64_128(kmer.getData(), nBytes, seed, h);
             else if (sizeof(void*) == 4)
-              MurmurHash3_x86_128(kmer.getData(), nBytes, 42, h);
+              MurmurHash3_x86_128(kmer.getData(), nBytes, seed, h);
             else
               throw ::std::logic_error("ERROR: neither 32 bit nor 64 bit system");
 

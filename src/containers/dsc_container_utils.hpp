@@ -34,6 +34,8 @@
 
 #include "utils/benchmark_utils.hpp"
 
+#include <mxx/distribution.hpp>
+#include <mxx/samplesort.hpp>
 
 namespace dsc {
 
