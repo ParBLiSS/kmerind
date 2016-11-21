@@ -156,15 +156,15 @@ endforeach(store)
 
     
 #================== 8 targets - slow backends, or potentially no advantage
-# store model changes the collision characteristics, so study these...
-foreach(store SINGLE BIMOLECULE CANONICAL) 
-#  add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED COUNT IDEN FARM FARM)
-  
-#  add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED POS IDEN FARM FARM)
-  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} VEC POS IDEN FARM FARM)
-  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} COMPACTVEC POS IDEN FARM FARM)
-#  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
-endforeach(store)
+## store model changes the collision characteristics, so study these...
+#foreach(store SINGLE BIMOLECULE CANONICAL) 
+##  add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED COUNT IDEN FARM FARM)
+#  
+##  add_orderedmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} ORDERED POS IDEN FARM FARM)
+#  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} VEC POS IDEN FARM FARM)
+#  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} COMPACTVEC POS IDEN FARM FARM)
+##  add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 ${store} HASHEDVEC POS IDEN FARM FARM)
+#endforeach(store)
 
 #   then add for SINGLE strand store, different distribution transforms for COUNT and POS
 foreach(disttrans XOR LEX)
@@ -184,7 +184,7 @@ endforeach(hash)
 foreach(hash IDEN STD MURMUR)
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE UNORDERED COUNT IDEN FARM ${hash})
   add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE DENSEHASH COUNT IDEN FARM ${hash})
-  foreach(map VEC COMPACTVEC UNORDERED DENSEHASH)  #HASHEDVEC 
+  foreach(map UNORDERED DENSEHASH)  #HASHEDVEC VEC COMPACTVEC 
     add_hashmap_target(BenchmarkKmerIndex.cpp testKmerIndex FASTQ 4 31 SINGLE ${map} POS IDEN FARM ${hash})
   endforeach(map)
 endforeach(hash)  

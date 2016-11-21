@@ -260,19 +260,20 @@ using CountType = uint32_t;
 
   // DEFINE THE MAP TYPE base on the type of data to be stored.
   #if (pINDEX == POS) || (pINDEX == POSQUAL)  // multimap
-    #if (pMAP == VEC)
-      using MapType = ::dsc::unordered_multimap_vec<
-          KmerType, ValType, MapParams>;
-
-    #elif (pMAP == UNORDERED)
+//    #if (pMAP == VEC)
+//      using MapType = ::dsc::unordered_multimap_vec<
+//          KmerType, ValType, MapParams>;
+//
+//   #elif (pMAP == UNORDERED)
+    #if (pMAP == UNORDERED)
       using MapType = ::dsc::unordered_multimap<
           KmerType, ValType, MapParams>;
-    #elif (pMAP == COMPACTVEC)
-      using MapType = ::dsc::unordered_multimap_compact_vec<
-          KmerType, ValType, MapParams>;
-    #elif (pMAP == HASHEDVEC)
-      using MapType = ::dsc::unordered_multimap_hashvec<
-          KmerType, ValType, MapParams>;
+//    #elif (pMAP == COMPACTVEC)
+//      using MapType = ::dsc::unordered_multimap_compact_vec<
+//          KmerType, ValType, MapParams>;
+//    #elif (pMAP == HASHEDVEC)
+//      using MapType = ::dsc::unordered_multimap_hashvec<
+//          KmerType, ValType, MapParams>;
     #elif (pMAP == DENSEHASH)
       using MapType = ::dsc::densehash_multimap<
           KmerType, ValType, MapParams, SpecialKeys>;
