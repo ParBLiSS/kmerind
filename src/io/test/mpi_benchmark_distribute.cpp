@@ -36,8 +36,6 @@
 #include <cstdint> // for uint64_t, etc.
 #include <type_traits>  // for integral_constant
 
-#include <io/incremental_mxx.hpp>
-
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -49,6 +47,8 @@
 #include <utility>  // pair
 #include <vector>
 
+#include "io/incremental_mxx.hpp"
+#include "containers/dsc_container_utils.hpp"
 
 //===============  BLOCK All2All tests
 
@@ -367,6 +367,31 @@ TEST_P(DistributeBenchmark, distribute)
   this->roundtripped.clear();
 }
 
+TEST_P(DistributeBenchmark, dsc_distribute)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->distributed.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  bool sorted = false;
+  recv_counts = ::dsc::distribute(this->distributed, [&p](T const & x ){ return x.first % p; },
+                   sorted, comm);
+
+  this->roundtripped.clear();
+}
+
+
 
 TEST_P(DistributeBenchmark, distribute_preserve_input_rt)
 {
@@ -414,6 +439,32 @@ TEST_P(DistributeBenchmark, distribute_rt)
 
   imxx::undistribute(distributed, recv_counts, mapping, this->roundtripped, comm, true);
 }
+
+
+TEST_P(DistributeBenchmark, dsc_distribute_rt)
+{
+
+  ::mxx::comm comm;
+
+  this->init(comm);
+
+
+  // copy data into roundtripped.
+  this->distributed.resize(this->data.size());
+  std::copy(this->data.begin(), this->data.end(), this->distributed.begin());
+
+  // distribute
+  int p = comm.size();
+  std::vector<size_t> recv_counts;
+  std::vector<size_t> mapping;
+
+  bool sorted = false;
+  recv_counts = ::dsc::distribute(this->distributed, [&p](T const & x ){ return x.first % p; },
+                   sorted, comm);
+
+  this->roundtripped = mxx::all2allv(this->distributed, recv_counts, comm);
+}
+
 
 TEST_P(DistributeBenchmark, scatter_compute_gather)
 {
