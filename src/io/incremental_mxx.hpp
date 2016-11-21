@@ -1036,7 +1036,7 @@ namespace imxx
                   ::std::vector<SIZE> & recv_counts,
                   ::std::vector<SIZE> & i2o,
                   ::std::vector<V>& output,
-                  ::mxx::comm const &_comm, bool const & preserve_input = true) {
+                  ::mxx::comm const &_comm, bool const & preserve_input = false) {
     BL_BENCH_INIT(distribute);
 
     BL_BENCH_COLLECTIVE_START(distribute, "empty", _comm);
@@ -1157,7 +1157,7 @@ namespace imxx
                         ::std::vector<SIZE> & recv_counts,
                         ::std::vector<SIZE> & i2o,
                         ::std::vector<V>& output,
-                        ::mxx::comm const &_comm, bool const & preserve_input = true) {
+                        ::mxx::comm const &_comm, bool const & preserve_input = false) {
     BL_BENCH_INIT(distribute);
 
       // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
@@ -1310,7 +1310,7 @@ namespace imxx
                               ::std::vector<T>& output,
                               ::std::vector<V>& in_buffer, std::vector<T>& out_buffer,
                               ::mxx::comm const &_comm,
-                              bool const & preserve_input = true) {
+                              bool const & preserve_input = false) {
       BL_BENCH_INIT(scat_comp_gath);
 
       // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
@@ -1385,7 +1385,7 @@ namespace imxx
                               ::std::vector<T>& output,
                               ::std::vector<V>& in_buffer, std::vector<T>& out_buffer,
                               ::mxx::comm const &_comm,
-                              bool const & preserve_input = true) {
+                              bool const & preserve_input = false) {
       BL_BENCH_INIT(scat_comp_gath_2);
 
       // speed over mem use.  mxx all2allv already has to double memory usage. same as stable scat_comp_gath_2.
@@ -1583,7 +1583,7 @@ namespace imxx
                               ::std::vector<T>& output,
                               ::std::vector<V>& in_buffer, std::vector<T>& out_buffer,
                               ::mxx::comm const &_comm,
-                              bool const & preserve_input = true) {
+                              bool const & preserve_input = false) {
       BL_BENCH_INIT(scat_comp_gath_lm);
 
       BL_BENCH_COLLECTIVE_START(scat_comp_gath_lm, "empty", _comm);
@@ -1740,7 +1740,7 @@ namespace imxx
                               ::std::vector<T>& output,
                               ::std::vector<V>& in_buffer, std::vector<T>& out_buffer,
                               ::mxx::comm const &_comm,
-                              bool const & preserve_input = true) {
+                              bool const & preserve_input = false) {
       BL_BENCH_INIT(scat_comp_gath_v);
 
       // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
@@ -1890,7 +1890,7 @@ namespace imxx
 //                              ::std::vector<T>& output,
 //                              ::std::vector<V>& in_buffer, std::vector<T>& out_buffer,
 //                              ::mxx::comm const &_comm,
-//                              bool const & preserve_input = true) {
+//                              bool const & preserve_input = false) {
 //      BL_BENCH_INIT(scat_comp_gath_v_lm);
 //
 //      bool empty = input.size() == 0;
