@@ -570,7 +570,6 @@ int main(int argc, char** argv) {
 	    BL_BENCH_COLLECTIVE_END(test, "find_overlap", found.size(), comm);
 	    }
     // separate test because of it being potentially very slow depending on imbalance.
-#if 0
     {
       auto lquery = query;
 
@@ -578,7 +577,6 @@ int main(int argc, char** argv) {
     auto found = idx.find_sendrecv(lquery);
     BL_BENCH_COLLECTIVE_END(test, "find_sendrecv", found.size(), comm);
     }
-#endif
 
 	  BL_BENCH_START(test);
 	  idx.erase(query);
