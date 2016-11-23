@@ -499,14 +499,14 @@ TEST_P(DistributeBenchmark, distribute_rt)
 
   if (this->p.hash_type == 0)
 	  imxx::distribute(this->roundtripped, [&p](T const & x ){ return x.first % p; },
-					   recv_counts, mapping, this->distributed, comm, true);
+					   recv_counts, mapping, this->distributed, comm, false);
   else {
 	  murmurhash hs;
 	  imxx::distribute(this->roundtripped, [&p, &hs](T const & x ){ return hs(x.first) % p; },
-					   recv_counts, mapping, this->distributed, comm, true);
+					   recv_counts, mapping, this->distributed, comm, false);
   }
 
-  imxx::undistribute(distributed, recv_counts, mapping, this->roundtripped, comm, true);
+  imxx::undistribute(distributed, recv_counts, mapping, this->roundtripped, comm, false);
 }
 
 
@@ -583,7 +583,7 @@ TEST_P(DistributeBenchmark, scatter_compute_gather)
 
 INSTANTIATE_TEST_CASE_P(Bliss, DistributeBenchmark, ::testing::Values(
 
-    DistributeBenchmarkInfo((1UL << 24), 0),   // 3
+//    DistributeBenchmarkInfo((1UL << 24), 0),   // 3
     DistributeBenchmarkInfo((1UL << 24), 1)   // 3
 
 ));
@@ -783,7 +783,7 @@ TEST_P(Distribute2PartBenchmark, distribute_2part_rt)
 					   recv_counts, mapping, this->distributed, comm, false);
   }
 
-  imxx::undistribute_2part(this->distributed, recv_counts, mapping, this->roundtripped, comm, true);
+  imxx::undistribute_2part(this->distributed, recv_counts, mapping, this->roundtripped, comm, false);
 }
 
 
@@ -869,7 +869,7 @@ TEST_P(Distribute2PartBenchmark, scatter_compute_gather_lowmem)
 
 INSTANTIATE_TEST_CASE_P(Bliss, Distribute2PartBenchmark, ::testing::Values(
 
-    Distribute2PartBenchmarkInfo((1UL << 24), 0),   // 3
+//    Distribute2PartBenchmarkInfo((1UL << 24), 0),   // 3
     Distribute2PartBenchmarkInfo((1UL << 24), 1)   // 3
 
 ));
