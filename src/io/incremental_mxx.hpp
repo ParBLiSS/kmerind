@@ -23,6 +23,10 @@
  *
  */
 
+#ifndef IMXX_HPP
+#define IMXX_HPP
+
+
 #include <algorithm>
 #include <mxx/datatypes.hpp>
 #include <mxx/comm.hpp>
@@ -2039,3 +2043,6 @@ namespace imxx
 // TODO mpi3 versions?
 
 } // namespace imxx
+
+
+#endif // IMXX_HPP

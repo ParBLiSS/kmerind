@@ -65,6 +65,7 @@
 #include "containers/distributed_map_base.hpp"
 #include "common/kmer_transform.hpp"
 #include "containers/dsc_container_utils.hpp"
+#include "io/incremental_mxx.hpp"
 
 
 namespace dsc  // distributed std container
@@ -1219,10 +1220,17 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           this->redistribute();
           BL_BENCH_END(erase, "global_sort", this->local_size());
 
-          // remove duplicates
           BL_BENCH_START(erase);
-          auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
-          BLISS_UNUSED(recv_counts);
+//            auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
+//            BLISS_UNUSED(recv_counts);
+          std::vector<size_t> recv_counts;
+          {
+				std::vector<size_t> i2o;
+				std::vector<Key > buffer;
+				::imxx::distribute(keys, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+				//::imxx::destructive_distribute(input, this->key_to_rank, recv_counts, buffer, this->comm);
+				keys.swap(buffer);
+          }
           BL_BENCH_END(erase, "dist_query", keys.size());
 
           sorted_input = false;  // keys not sorted across buckets.
