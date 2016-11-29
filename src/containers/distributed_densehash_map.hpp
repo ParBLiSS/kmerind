@@ -1839,11 +1839,11 @@ namespace dsc  // distributed std container
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find_a2a(find_element, keys, sorted_input, pred);
-      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find_a2a(find_element, keys, sorted_input, pred);
+//      }
       template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
@@ -1855,11 +1855,11 @@ namespace dsc  // distributed std container
     		  Predicate const& pred = Predicate(), Transform const & trans = Transform()) const {
           return Base::find(find_element, keys, sorted_input, pred, trans);
       }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
-      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
+//      }
 
       template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
@@ -2194,16 +2194,16 @@ namespace dsc  // distributed std container
     		  Transform const & trans = Transform()) const {
           return Base::find(find_element, keys, sorted_input, pred, trans);
       }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find_a2a(find_element, keys, sorted_input, pred);
-      }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
-      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find_a2a(find_element, keys, sorted_input, pred);
+//      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
+//      }
 
 
 
