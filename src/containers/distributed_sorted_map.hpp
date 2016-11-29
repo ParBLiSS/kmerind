@@ -245,7 +245,8 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
               auto el_end = range_begin;
               size_t count = 0;
-              bool linear = (static_cast<double>(dist_query) * ::std::log2(dist_range)) > dist_range;
+              // CHECK DISABLED FOR NOW - dist_range for count index may not be big enough, causing linear to be used?
+              bool linear = false; // (static_cast<double>(dist_query) * ::std::log2(dist_range)) > dist_range;
               typename ::std::iterator_traits<QueryIter>::value_type v;
 
               if (linear) {  // based on number of input and search source, choose a method to search.
@@ -382,7 +383,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           size_t operator()(DBIter &range_begin, DBIter &el_end, DBIter const &range_end, Query const &v, OutputIter &output) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
               range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);  // range_begin at equal or greater than v.
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);  // el_end at greater than v.
+              el_end = ::fsc::upper_bound<true>(range_begin, range_end, v, store_comp);  // el_end at greater than v.
               // difference between the 2 iterators is the part that's equal.
 
               // add the output entry.
@@ -398,7 +399,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
                             Predicate const& pred) const {
               // TODO: LINEAR SEARCH, O(n).  vs BINARY SEARCH, O(mlogn)
               range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);  // range_begin at equal or greater than v.
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);  // el_end at greater than v.
+              el_end = ::fsc::upper_bound<true>(range_begin, range_end, v, store_comp);  // el_end at greater than v.
               // difference between the 2 iterators is the part that's equal.
 
               // add the output entry.
@@ -433,7 +434,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               size_t dist = std::distance(last_end, curr_start);
 
               // find of end of the segment to delete == start of next segment to keep
-              last_end = ::fsc::upper_bound<linear>(curr_start, range_end, v, store_comp);
+              last_end = ::fsc::upper_bound<true>(curr_start, range_end, v, store_comp);
               return dist;
           }
           /// Return how much was KEPT.
@@ -453,7 +454,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               size_t dist = std::distance(last_end, curr_start);
 
               // find of end of the segment to delete == start of next segment to keep
-              last_end = ::fsc::upper_bound<linear>(curr_start, range_end, v, store_comp);
+              last_end = ::fsc::upper_bound<true>(curr_start, range_end, v, store_comp);
 
               typename ::std::iterator_traits<DBIter>::value_type x;
               if (!pred(curr_start, last_end)) {  // if NOTHING in range matches, then no erase.
@@ -2235,7 +2236,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
               range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);
 
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);
+              el_end = ::fsc::upper_bound<true>(range_begin, range_end, v, store_comp);
 
               // difference between the 2 iterators is the part that's equal.
               if (range_begin == range_end) return 0;
@@ -2253,7 +2254,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
               range_begin = ::fsc::lower_bound<linear>(el_end, range_end, v, store_comp);
 
-              el_end = ::fsc::upper_bound<linear>(range_begin, range_end, v, store_comp);
+              el_end = ::fsc::upper_bound<true>(range_begin, range_end, v, store_comp);
 
               // difference between the 2 iterators is the part that's equal.
               if (range_begin == range_end) return 0;
