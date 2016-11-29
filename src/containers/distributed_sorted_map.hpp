@@ -65,6 +65,7 @@
 #include "containers/distributed_map_base.hpp"
 #include "common/kmer_transform.hpp"
 #include "containers/dsc_container_utils.hpp"
+#include "io/incremental_mxx.hpp"
 
 
 namespace dsc  // distributed std container
@@ -509,6 +510,11 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           this->transform_input(keys);
           BL_BENCH_END(find, "begin", keys.size());
 
+          BL_BENCH_START(find);
+          ::fsc::sorted_unique(keys, sorted_input,
+        		  typename Base::StoreTransformedFunc(),
+				  typename Base::StoreTransformedEqual());
+          BL_BENCH_END(find, "unique", keys.size());
 
           if (this->comm.size() > 1) {
 
@@ -518,12 +524,18 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               BL_BENCH_END(find, "global_sort", this->local_size());
 
               BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
-              // distribute (communication part)
-              std::vector<size_t> recv_counts;
-            		  ::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
-            				  typename Base::StoreTransformedFunc(),
-            				  typename Base::StoreTransformedEqual()).swap(recv_counts);
-              BL_BENCH_END(find, "dist_query", keys.size());
+            // distribute (communication part)
+            std::vector<size_t> recv_counts;
+            {
+				std::vector<size_t> i2o;
+				std::vector<Key > buffer;
+				::imxx::distribute(keys, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+				keys.swap(buffer);
+//      		  ::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
+//      				  typename Base::StoreTransformedFunc(),
+//      				  typename Base::StoreTransformedEqual()).swap(recv_counts);
+            }
+            BL_BENCH_END(find, "dist_query", keys.size());
 
 
             //====== local count to determine amount of memory to allocate at destination.
@@ -705,20 +717,32 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           this->transform_input(keys);
           BL_BENCH_END(find, "begin", keys.size());
 
+          BL_BENCH_START(find);
+          ::fsc::sorted_unique(keys, sorted_input,
+        		  typename Base::StoreTransformedFunc(),
+				  typename Base::StoreTransformedEqual());
+          BL_BENCH_END(find, "unique", keys.size());
+
           if (this->comm.size() > 1) {
-              // ensure that the container splitters are setup properly, and load balanced.  this also ensures that locally we are sorted.
+
+              // ensure that the container splitters are setup properly, and load balanced.
               BL_BENCH_COLLECTIVE_START(find, "global_sort", this->comm);
               this->redistribute();
               BL_BENCH_END(find, "global_sort", this->local_size());
 
               BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
-              // distribute (communication part)
-              std::vector<size_t> recv_counts;
-            		  ::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
-            				  typename Base::StoreTransformedFunc(),
-            				  typename Base::StoreTransformedEqual()).swap(recv_counts);
-              BL_BENCH_END(find, "dist_query", keys.size());
-
+            // distribute (communication part)
+            std::vector<size_t> recv_counts;
+            {
+				std::vector<size_t> i2o;
+				std::vector<Key > buffer;
+				::imxx::distribute(keys, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+				keys.swap(buffer);
+//      		  ::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
+//      				  typename Base::StoreTransformedFunc(),
+//      				  typename Base::StoreTransformedEqual()).swap(recv_counts);
+            }
+            BL_BENCH_END(find, "dist_query", keys.size());
 
             // local find. memory utilization a potential problem.
             // do for each src proc one at a time.
@@ -1000,24 +1024,34 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         this->transform_input(keys);
         BL_BENCH_END(count, "begin", keys.size());
 
+        if (remove_duplicate) {
+			BL_BENCH_START(count);
+			::fsc::sorted_unique(keys, sorted_input,
+				  typename Base::StoreTransformedFunc(),
+					  typename Base::StoreTransformedEqual());
+			BL_BENCH_END(count, "unique", keys.size());
+        }
 
         if (this->comm.size() > 1) {
+
             // ensure that the container splitters are setup properly, and load balanced.
             BL_BENCH_COLLECTIVE_START(count, "global_sort", this->comm);
             this->redistribute();
             BL_BENCH_END(count, "global_sort", this->local_size());
 
-
-            BL_BENCH_START(count);
-            std::vector<size_t> recv_counts;
-            if (remove_duplicate)
-				::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
-							  typename Base::StoreTransformedFunc(),
-							  typename Base::StoreTransformedEqual()).swap(recv_counts);
-            else
-				::dsc::distribute_sorted(keys, this->key_to_rank, sorted_input, this->comm,
-							  typename Base::StoreTransformedFunc()).swap(recv_counts);
-            BL_BENCH_END(count, "dist_query", keys.size());
+            BL_BENCH_COLLECTIVE_START(count, "dist_query", this->comm);
+          // distribute (communication part)
+          std::vector<size_t> recv_counts;
+          {
+				std::vector<size_t> i2o;
+				std::vector<Key > buffer;
+				::imxx::distribute(keys, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+				keys.swap(buffer);
+//      		  ::dsc::distribute_sorted_unique(keys, this->key_to_rank, sorted_input, this->comm,
+//      				  typename Base::StoreTransformedFunc(),
+//      				  typename Base::StoreTransformedEqual()).swap(recv_counts);
+          }
+          BL_BENCH_END(count, "dist_query", keys.size());
 
 
           BL_BENCH_START(count);
@@ -1220,10 +1254,17 @@ using SortedMapParams = ::dsc::DistributedMapParams<
           this->redistribute();
           BL_BENCH_END(erase, "global_sort", this->local_size());
 
-          // remove duplicates
           BL_BENCH_START(erase);
-          auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
-          BLISS_UNUSED(recv_counts);
+//            auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
+//            BLISS_UNUSED(recv_counts);
+          std::vector<size_t> recv_counts;
+          {
+				std::vector<size_t> i2o;
+				std::vector<Key > buffer;
+				::imxx::distribute(keys, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+				//::imxx::destructive_distribute(input, this->key_to_rank, recv_counts, buffer, this->comm);
+				keys.swap(buffer);
+          }
           BL_BENCH_END(erase, "dist_query", keys.size());
 
           sorted_input = false;  // keys not sorted across buckets.
@@ -2134,16 +2175,16 @@ using SortedMapParams = ::dsc::DistributedMapParams<
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
-    		  Predicate const& pred = Predicate()) const {
-          return Base::find_a2a(find_element, keys, sorted_input, pred);
-      }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
-      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+//    		  Predicate const& pred = Predicate()) const {
+//          return Base::find_a2a(find_element, keys, sorted_input, pred);
+//      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
+//      }
 
       template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
@@ -2432,16 +2473,16 @@ using SortedMapParams = ::dsc::DistributedMapParams<
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
-    		  Predicate const& pred = Predicate()) const {
-          return Base::find_a2a(find_element, keys, sorted_input, pred);
-      }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
-      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+//    		  Predicate const& pred = Predicate()) const {
+//          return Base::find_a2a(find_element, keys, sorted_input, pred);
+//      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
+//      }
 
       template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {

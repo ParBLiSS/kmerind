@@ -69,6 +69,8 @@
 
 #include "containers/dsc_container_utils.hpp"
 
+#include "io/incremental_mxx.hpp"
+
 namespace dsc  // distributed std container
 {
 
@@ -379,16 +381,27 @@ namespace dsc  // distributed std container
           this->transform_input(keys);
           BL_BENCH_END(find, "transform_input", keys.size());
 
-          if (this->comm.size() > 1) {
+  		BL_BENCH_START(find);
+  		::fsc::unique(keys, sorted_input,
+  						typename Base::StoreTransformedFunc(),
+  						typename Base::StoreTransformedEqual());
+  		BL_BENCH_END(find, "unique", keys.size());
 
-            BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
-            // distribute (communication part)
-            std::vector<size_t> recv_counts;
-            		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-            				typename Base::StoreTransformedFunc(),
-            				typename Base::StoreTransformedEqual()).swap(recv_counts);
+            if (this->comm.size() > 1) {
 
-            BL_BENCH_END(find, "dist_query", keys.size());
+              BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
+              // distribute (communication part)
+              std::vector<size_t> recv_counts;
+              {
+  				std::vector<size_t> i2o;
+  				std::vector<Key > buffer;
+  				::imxx::distribute(keys, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+  				keys.swap(buffer);
+  	//            ::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+  	//            				typename Base::StoreTransformedFunc(),
+  	//            				typename Base::StoreTransformedEqual()).swap(recv_counts);
+              }
+              BL_BENCH_END(find, "dist_query", keys.size());
 
 
             //======= local count to determine amount of memory to allocate at destination.
@@ -558,15 +571,27 @@ namespace dsc  // distributed std container
           this->transform_input(keys);
           BL_BENCH_END(find, "input_transform", keys.size());
 
-          if (this->comm.size() > 1) {
+    		BL_BENCH_START(find);
+    		::fsc::unique(keys, sorted_input,
+    						typename Base::StoreTransformedFunc(),
+    						typename Base::StoreTransformedEqual());
+    		BL_BENCH_END(find, "unique", keys.size());
 
-            BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
-            // distribute (communication part)
-            std::vector<size_t> recv_counts;
-            		::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-            				typename Base::StoreTransformedFunc(),
-            				typename Base::StoreTransformedEqual()).swap(recv_counts);
-            BL_BENCH_END(find, "dist_query", keys.size());
+              if (this->comm.size() > 1) {
+
+                BL_BENCH_COLLECTIVE_START(find, "dist_query", this->comm);
+                // distribute (communication part)
+                std::vector<size_t> recv_counts;
+                {
+  				  std::vector<size_t> i2o;
+  				  std::vector<Key > buffer;
+  				  ::imxx::distribute(keys, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+  				  keys.swap(buffer);
+  	  //            ::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+  	  //            				typename Base::StoreTransformedFunc(),
+  	  //            				typename Base::StoreTransformedEqual()).swap(recv_counts);
+                }
+                BL_BENCH_END(find, "dist_query", keys.size());
 
 
             // local find. memory utilization a potential problem.
@@ -701,10 +726,18 @@ namespace dsc  // distributed std container
 
           if (this->comm.size() > 1) {
 
-            BL_BENCH_START(erase);
-            auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
-            BLISS_UNUSED(recv_counts);
-            BL_BENCH_END(erase, "dist_query", keys.size());
+              BL_BENCH_START(erase);
+  //            auto recv_counts(::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm));
+  //            BLISS_UNUSED(recv_counts);
+              std::vector<size_t> recv_counts;
+              {
+  				std::vector<size_t> i2o;
+  				std::vector<Key > buffer;
+  				::imxx::distribute(keys, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+  				//::imxx::destructive_distribute(input, this->key_to_rank, recv_counts, buffer, this->comm);
+  				keys.swap(buffer);
+              }
+              BL_BENCH_END(erase, "dist_query", keys.size());
 
             // don't try to run unique further - have to use a set so might as well just have erase_element handle it.
             sorted_input = false;
@@ -862,18 +895,30 @@ namespace dsc  // distributed std container
           BL_BENCH_END(count, "transform_intput", keys.size());
 
 
+          if (remove_duplicate) {
+      		BL_BENCH_START(count);
+      		::fsc::unique(keys, sorted_input,
+      						typename Base::StoreTransformedFunc(),
+      						typename Base::StoreTransformedEqual());
+      		BL_BENCH_END(count, "unique", keys.size());
+          }
+
           if (this->comm.size() > 1) {
 
-            BL_BENCH_START(count);
-            // distribute (communication part)
-            std::vector<size_t> recv_counts;
-            if (remove_duplicate)
-				::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
-								typename Base::StoreTransformedFunc(),
-								typename Base::StoreTransformedEqual()).swap(recv_counts);
-            else
-				::dsc::distribute(keys, this->key_to_rank, sorted_input, this->comm).swap(recv_counts);
-            BL_BENCH_END(count, "dist_query", keys.size());
+
+              BL_BENCH_COLLECTIVE_START(count, "dist_query", this->comm);
+              // distribute (communication part)
+              std::vector<size_t> recv_counts;
+              {
+				  std::vector<size_t> i2o;
+				  std::vector<Key > buffer;
+				  ::imxx::distribute(keys, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+				  keys.swap(buffer);
+	  //            ::dsc::distribute_unique(keys, this->key_to_rank, sorted_input, this->comm,
+	  //            				typename Base::StoreTransformedFunc(),
+	  //            				typename Base::StoreTransformedEqual()).swap(recv_counts);
+              }
+              BL_BENCH_END(count, "dist_query", keys.size());
 
 
             // local count. memory utilization a potential problem.
@@ -1103,21 +1148,21 @@ namespace dsc  // distributed std container
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
 
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find_a2a(find_element, keys, sorted_input, pred);
-      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find_a2a(find_element, keys, sorted_input, pred);
+//      }
       template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
-      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
+//      }
 
       template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(Predicate const& pred = Predicate()) const {
@@ -1149,8 +1194,13 @@ namespace dsc  // distributed std container
           BL_BENCH_START(insert);
           // get mapping to proc
           // TODO: keep unique only may not be needed - comm speed may be faster than we can compute unique.
-          auto recv_counts(::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm));
-          BLISS_UNUSED(recv_counts);
+//          auto recv_counts(::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm));
+//          BLISS_UNUSED(recv_counts);
+          std::vector<size_t> recv_counts;
+			  std::vector<size_t> i2o;
+			  std::vector<::std::pair<Key, T> > buffer;
+			  ::imxx::distribute(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+			  input.swap(buffer);
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
@@ -1294,16 +1344,16 @@ namespace dsc  // distributed std container
                                                           Predicate const& pred = Predicate()) const {
           return Base::find(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find_a2a(find_element, keys, sorted_input, pred);
-      }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
-      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find_a2a(find_element, keys, sorted_input, pred);
+//      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_sendrecv(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find_sendrecv(find_element, keys, sorted_input, pred);
+//      }
 
 
 
@@ -1430,8 +1480,15 @@ namespace dsc  // distributed std container
         if (this->comm.size() > 1) {
           BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
-          BLISS_UNUSED(recv_counts);
+
+          std::vector<size_t> recv_counts;
+          std::vector<size_t> i2o;
+          std::vector<::std::pair<Key, T> > buffer;
+          ::imxx::distribute(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+          input.swap(buffer);
+
+          //auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
+          //BLISS_UNUSED(recv_counts);
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
@@ -1650,10 +1707,17 @@ namespace dsc  // distributed std container
         if (this->comm.size() > 1) {
           BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
-          BLISS_UNUSED(recv_counts);
+          std::vector<size_t> recv_counts;
+          std::vector<size_t> i2o;
+          std::vector<::std::pair<Key, T> > buffer;
+          ::imxx::distribute(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+          input.swap(buffer);
+
+//          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
+//          BLISS_UNUSED(recv_counts);
           BL_BENCH_END(insert, "dist_data", input.size());
         }
+
 
         //
         //        // after communication, sort again to keep unique  - may not be needed
@@ -1774,15 +1838,22 @@ namespace dsc  // distributed std container
         });
         BL_BENCH_END(insert, "convert", input.size());
 
-
+        // then send the raw k-mers.
         // communication part
         if (this->comm.size() > 1) {
           BL_BENCH_START(insert);
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
-          auto recv_counts = ::dsc::distribute(temp, this->key_to_rank, sorted_input, this->comm);
-          BLISS_UNUSED(recv_counts);
+          std::vector<size_t> recv_counts;
+          std::vector<size_t> i2o;
+          std::vector<::std::pair<Key, T> > buffer;
+          ::imxx::distribute(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+          input.swap(buffer);
+
+//          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
+//          BLISS_UNUSED(recv_counts);
           BL_BENCH_END(insert, "dist_data", input.size());
         }
+
 
         //
         //        // after communication, sort again to keep unique  - may not be needed

@@ -23,6 +23,10 @@
  *
  */
 
+#ifndef IMXX_HPP
+#define IMXX_HPP
+
+
 #include <algorithm>
 #include <mxx/datatypes.hpp>
 #include <mxx/comm.hpp>
@@ -1045,7 +1049,7 @@ namespace imxx
     BL_BENCH_END(distribute, "empty", input.size());
 
     if (empty) {
-      BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+      BL_BENCH_REPORT_MPI_NAMED(distribute, "imxx:distribute", _comm);
       return;
     }
     // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
@@ -1099,7 +1103,7 @@ namespace imxx
       imxx::local::unpermute_inplace(input, i2o, 0, input.size());
       BL_BENCH_END(distribute, "unpermute_inplace", input.size());
     }
-    BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+    BL_BENCH_REPORT_MPI_NAMED(distribute, "imxx:distribute", _comm);
 
   }
 
@@ -1117,7 +1121,7 @@ namespace imxx
     BL_BENCH_END(undistribute, "empty", input.size());
 
     if (empty) {
-      BL_BENCH_REPORT_MPI_NAMED(undistribute, "map_base:undistribute", _comm);
+      BL_BENCH_REPORT_MPI_NAMED(undistribute, "imxx:undistribute", _comm);
       return;
     }
 
@@ -1144,7 +1148,7 @@ namespace imxx
       BL_BENCH_END(undistribute, "unpermute_inplace", output.size());
 
     }
-    BL_BENCH_REPORT_MPI_NAMED(undistribute, "map_base:undistribute", _comm);
+    BL_BENCH_REPORT_MPI_NAMED(undistribute, "imxx:undistribute", _comm);
 
   }
 
@@ -1167,7 +1171,7 @@ namespace imxx
     BL_BENCH_END(distribute, "empty", input.size());
 
     if (empty) {
-      BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+      BL_BENCH_REPORT_MPI_NAMED(distribute, "imxx:distribute_2", _comm);
       return;
     }
 
@@ -1235,7 +1239,7 @@ namespace imxx
         BL_BENCH_END(distribute, "unpermute_inplace", input.size());
       }
 
-      BL_BENCH_REPORT_MPI_NAMED(distribute, "map_base:distribute", _comm);
+      BL_BENCH_REPORT_MPI_NAMED(distribute, "imxx:distribute_2", _comm);
   }
 
 
@@ -1256,7 +1260,7 @@ namespace imxx
     BL_BENCH_END(undistribute, "empty", input.size());
 
     if (empty) {
-      BL_BENCH_REPORT_MPI_NAMED(undistribute, "map_base:undistribute", _comm);
+      BL_BENCH_REPORT_MPI_NAMED(undistribute, "imxx:undistribute_2", _comm);
       return;
     }
 
@@ -1291,7 +1295,7 @@ namespace imxx
       BL_BENCH_END(undistribute, "unpermute_inplace", output.size());
 
     }
-    BL_BENCH_REPORT_MPI_NAMED(undistribute, "map_base:undistribute", _comm);
+    BL_BENCH_REPORT_MPI_NAMED(undistribute, "imxx:undistribute_2", _comm);
 
   }
 
@@ -1320,7 +1324,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath, "empty", input.size());
 
       if (empty) {
-        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath, "map_base:scat_comp_gath", _comm);
+        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath, "imxx:scat_comp_gath", _comm);
         return;
       }
 
@@ -1368,7 +1372,7 @@ namespace imxx
         BL_BENCH_END(scat_comp_gath, "unpermute_inplace", output.size());
       }
 
-      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath, "map_base:scat_comp_gath", _comm);
+      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath, "imxx:scat_comp_gath", _comm);
   }
 
 
@@ -1395,7 +1399,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath_2, "empty", input.size());
 
       if (empty) {
-        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_2, "map_base:scat_comp_gath_2", _comm);
+        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_2, "imxx:scat_comp_gath_2", _comm);
         return;
       }
 
@@ -1503,7 +1507,7 @@ namespace imxx
         BL_BENCH_END(scat_comp_gath_2, "unpermute_inplace", output.size());
       }
 
-      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_2, "map_base:scat_comp_gath_2", _comm);
+      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_2, "imxx:scat_comp_gath_2", _comm);
   }
 
   /**
@@ -1592,7 +1596,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath_lm, "empty", input.size());
 
       if (empty) {
-        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_lm, "map_base:scat_comp_gath_lm", _comm);
+        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_lm, "imxx:scat_comp_gath_lm", _comm);
         return;
       }
 
@@ -1635,7 +1639,7 @@ namespace imxx
           BL_BENCH_END(scat_comp_gath_lm, "switch_to_trad", output.size());
 
 
-        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_lm, "map_base:scat_comp_gath_lm", _comm);
+        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_lm, "imxx:scat_comp_gath_lm", _comm);
         return;
       }
 
@@ -1721,7 +1725,7 @@ namespace imxx
         BL_BENCH_END(scat_comp_gath_lm, "unpermute_inplace", output.size());
       }
 
-      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_lm, "map_base:scat_comp_gath_lm", _comm);
+      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_lm, "imxx:scat_comp_gath_lm", _comm);
   }
 
   // TODO: non-one-to-one version.
@@ -1750,7 +1754,7 @@ namespace imxx
       BL_BENCH_END(scat_comp_gath_v, "empty", input.size());
 
       if (empty) {
-        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_v, "map_base:scat_comp_gath_v", _comm);
+        BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_v, "imxx:scat_comp_gath_v", _comm);
         return;
       }
 
@@ -1808,7 +1812,7 @@ namespace imxx
         BL_BENCH_END(scat_comp_gath_v, "unpermute_inplace", output.size());
       }
 
-      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_v, "map_base:scat_comp_gath_v", _comm);
+      BL_BENCH_REPORT_MPI_NAMED(scat_comp_gath_v, "imxx:scat_comp_gath_v", _comm);
   }
 
   //TODO:
@@ -2039,3 +2043,6 @@ namespace imxx
 // TODO mpi3 versions?
 
 } // namespace imxx
+
+
+#endif // IMXX_HPP
