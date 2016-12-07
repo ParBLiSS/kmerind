@@ -870,6 +870,10 @@ include_directories("${EXT_PROJECTS_DIR}/Nadeau")
 include_directories("${EXT_PROJECTS_DIR}/mxx/include")
 include_directories("${EXT_PROJECTS_DIR}/mxx/ext")
 include_directories("${EXT_PROJECTS_DIR}/tclap-1.2.1/include")
+
+set(ENV{CXXFLAGS} "-std=c++11")
+execute_process(COMMAND "./configure" WORKING_DIRECTORY "${EXT_PROJECTS_DIR}/sparsehash" OUTPUT_QUIET)
+execute_process(COMMAND "make" WORKING_DIRECTORY "${EXT_PROJECTS_DIR}/sparsehash" OUTPUT_QUIET)
 include_directories("${EXT_PROJECTS_DIR}/sparsehash/src")
 
 
