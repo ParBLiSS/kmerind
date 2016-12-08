@@ -78,9 +78,10 @@ void clear_cache() {
 
     iter_cleared = 0;
     lj = 0;
+#if defined(USE_OPENMP)
 #pragma omp parallel for num_threads(max_threads) shared(nchunks, chunk, dummy) reduction(+:lj, iter_cleared)
-    for (size_t i = 0; i < nchunks; ++i) {
-
+#endif
+      for (size_t i = 0; i < nchunks; ++i) {
       // (c|m)alloc/free seems to be optimized out.  using new works.
       size_t * ptr = new size_t[(chunk / sizeof(size_t))];
 
@@ -88,7 +89,9 @@ void clear_cache() {
       memset(ptr, 0, chunk);
       ptr[0] = i;
 
+#if defined(USE_OPENMP)
 #pragma omp critical
+#endif
       {
         dummy.push_back(ptr);
       }

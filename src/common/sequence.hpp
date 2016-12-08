@@ -78,7 +78,7 @@ namespace bliss
           return ost;
         }
 
-        SequenceId() = default;
+        SequenceId() : pos_in_file(0), seq_id(0), file_id(0) {};
 
         SequenceId(size_t const & _file_pos, size_t const & _seq_id = 0, uint16_t const & _file_id = 0) :
           pos_in_file(_file_pos), seq_id(_seq_id), file_id(_file_id) {};
@@ -145,7 +145,7 @@ namespace bliss
         }
 
 
-        ShortSequenceKmerId() = default;
+        ShortSequenceKmerId() : id(0) {};
 
         ShortSequenceKmerId(size_t const & file_pos, uint8_t file_id = 0, uint16_t const & pos_in_seq = 0 ) :
           id(((file_pos & 0x000000FFFFFFFFFF) << 16) | (static_cast<size_t>(file_id) << 56) | static_cast<size_t>(pos_in_seq) ) {}
@@ -247,7 +247,7 @@ namespace bliss
           return ost;
         }
 
-        LongSequenceKmerId() = default;
+        LongSequenceKmerId() : id(0) {};
 
         LongSequenceKmerId(size_t const & file_pos, uint8_t file_id = 0, uint16_t const & seq_id = 0) :
           id((file_pos & 0x000000FFFFFFFFFF) | (static_cast<size_t>(file_id) << 56) | (static_cast<size_t>(seq_id) << 40)) {}
@@ -358,7 +358,7 @@ namespace bliss
         }
 
 
-        Sequence() = default;  // needed for copy
+        Sequence() : record_size(0), seq_offset(0), seq_begin_offset(0) {};  // needed for copy
 
         Sequence(IdType const & _id, size_t const & _record_size, size_t const& _seq_offset, size_t const& _seq_begin_offset, Iterator const & _begin, Iterator const & _end) :
           id(_id), record_size(_record_size), seq_offset(_seq_offset), seq_begin_offset(_seq_begin_offset), seq_begin(_begin), seq_end(_end) {}
