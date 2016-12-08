@@ -716,7 +716,9 @@ namespace fsc {  // fast standard container
 
           // copy it in.
           vec.reserve(prev_size + std::distance(first, last));
-          auto middle = vec.insert(vec.cend(), first, last);
+          vec.insert(vec.end(), first, last);
+          auto middle = vec.begin() + prev_size;   // get the middle this way because clang 3.5 and gcc 4.8's STL implementation (libc++?)
+                                                   // on Travis is not c++11 compliant and does not return the insertion point iterator.
 
           Less less;
           // sort the new part
