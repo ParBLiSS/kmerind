@@ -1265,10 +1265,9 @@ class densehash_multimap {
       vs.clear();
       vs.reserve(size());
 
-      subcontainer_type & vec;
       for (auto it = lower_map.begin(), max = lower_map.end(); it != max; ++it) {
         if (it->second < 0) {
-          vec = vecX[it->second & ::std::numeric_limits<int64_t>::max()];
+          subcontainer_type & vec = vecX[it->second & ::std::numeric_limits<int64_t>::max()];
           for (auto it2 = vec.begin(), max2 = vec.end(); it2 != max2; ++it2) {
             vs.emplace_back(*it2);
           }
@@ -1278,7 +1277,7 @@ class densehash_multimap {
       }
       for (auto it = upper_map.begin(), max = upper_map.end(); it != max; ++it) {
         if (it->second < 0) {
-          vec = vecX[it->second & ::std::numeric_limits<int64_t>::max()];
+          subcontainer_type & vec = vecX[it->second & ::std::numeric_limits<int64_t>::max()];
           for (auto it2 = vec.begin(), max2 = vec.end(); it2 != max2; ++it2) {
             vs.emplace_back(*it2);
           }
@@ -2684,8 +2683,6 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
         if (this->size() == 0) return 0;
 
         size_t before = this->size();
-
-        bool erased = false;
 
         auto new_end = ::std::remove_if(vec.begin(), vec.end(), pred);
         vec.erase(new_end, vec.end());

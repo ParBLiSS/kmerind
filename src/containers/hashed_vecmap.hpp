@@ -813,8 +813,6 @@ namespace fsc {  // fast standard container
 
         size_t before = this->size();
 
-        bool erased = false;
-
         auto new_end = ::std::remove_if(vec.begin(), vec.end(), pred);
         vec.erase(new_end, vec.end());
 
