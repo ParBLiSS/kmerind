@@ -2587,7 +2587,8 @@ class densehash_multimap<Key, T, ::fsc::TruePredicate, Hash, Equal, Allocator> {
 
           // copy it in.
           vec.reserve(prev_size + std::distance(first, last));
-          auto middle = vec.insert(vec.end(), first, last);
+          vec.insert(vec.end(), first, last);
+          auto middle = vec.begin() + prev_size;
 
           Less less;
           // sort the new part
