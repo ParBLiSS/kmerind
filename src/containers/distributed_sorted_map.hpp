@@ -237,8 +237,8 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
               //auto output_start = output;
 
-              auto dist_range = ::std::distance(range_begin, range_end);
-              auto dist_query = ::std::distance(query_begin, query_end);
+//              auto dist_range = ::std::distance(range_begin, range_end);
+//              auto dist_query = ::std::distance(query_begin, query_end);
 
               //if (!sorted_target) Base::sort_ascending(range_begin, range_end);  range_begin and range_end often are const iterators.
               if (!sorted_query)
