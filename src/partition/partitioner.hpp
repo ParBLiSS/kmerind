@@ -27,6 +27,7 @@
 #define PARTITIONER_HPP_
 
 #include <stdexcept>
+#include <cmath>
 #include <atomic>
 #include "bliss-config.hpp"
 #include <type_traits>
