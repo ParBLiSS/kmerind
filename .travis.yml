@@ -175,6 +175,7 @@ before_script:
 script:
     # run tests.
     - ctest -E benchmark 
+    - ./test/test-mpi-bliss-io-distribute
     - ./bin/testFASTA_load
     - mpiexec -np 4 ./bin/testFASTA_load
     - ./bin/testFASTQ_load
