@@ -151,8 +151,8 @@ before_script:
     - if [ "$COMPILER" = "clang" ]; then cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=OFF -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF ../;
         else cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=ON -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF ../; fi
     # do it again else the gtests will not be built
-    - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_TEST_APPLICATIONS=ON -DENABLE_COVERAGE=OFF -DCMAKE_VERBOSE_MAKEFILE=ON ../;
-        else cmake -DBUILD_TEST_APPLICATIONS=ON -DENABLE_COVERAGE=ON -DCMAKE_VERBOSE_MAKEFILE=ON ../; fi
+    - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_TEST_APPLICATIONS=ON -DENABLE_COVERAGE=OFF -DCMAKE_VERBOSE_MAKEFILE=OFF ../;
+        else cmake -DBUILD_TEST_APPLICATIONS=ON -DENABLE_COVERAGE=ON -DCMAKE_VERBOSE_MAKEFILE=OFF ../; fi
     # build kmerind.  here so that if build fails, the tests are not run.
     - make
 
