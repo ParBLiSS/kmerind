@@ -46,7 +46,7 @@
 #include <string>
 #include <algorithm>  // std::min
 #include <sstream>
-
+#include <cmath>
 #include <io/io_exception.hpp>
 #include <mxx/reduction.hpp>
 
