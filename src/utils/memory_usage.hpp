@@ -29,10 +29,10 @@
 #ifndef SRC_UTILS_MEMORY_USAGE_HPP_
 #define SRC_UTILS_MEMORY_USAGE_HPP_
 
+#include "bliss-config.hpp"
 #include "bliss-logger_config.hpp"
 
 
-#if BL_BENCHMARK_MEM == 1
 
 #include <sys/resource.h>  // getrusage
 #include <sys/types.h>     // meminfo
@@ -166,6 +166,7 @@ class MemUsage {
       mem_curr.push_back(::getCurrentRSS());
       mem_max.push_back(::getPeakRSS());
     }
+#if defined(USE_MPI)
     void collective_mark(::std::string const & name, ::mxx::comm const & comm) {
 
 		// time a barrier.
@@ -173,6 +174,7 @@ class MemUsage {
 
 		mark(name);
     }
+#endif
 
     void report(::std::string const & title) {
         auto BtoMB = [](double const & x) { return x / (1024.0 * 1024.0); };
@@ -202,6 +204,7 @@ class MemUsage {
         printf("%s\n", output.str().c_str());
         fflush(stdout);
     }
+#if defined(USE_MPI)
 
 #if 0
     // do not use this function for now.  mxx::min_element and max_element has invalid
@@ -393,19 +396,22 @@ class MemUsage {
         }
         comm.barrier();
     }
-
+#endif
 };
 
+#if BL_BENCHMARK_MEM == 1
 
 #define BL_MEMUSE_INIT(title)      MemUsage title##_memusage;
 
-
 #define BL_MEMUSE_RESET(title)     do {  title##_memusage.reset(); } while (0)
 
-#define BL_MEMUSE_COLLECTIVE_MARK(title, name, comm) do { title##_memusage.collective_mark(name, comm); } while (0)
 #define BL_MEMUSE_MARK(title, name) do { title##_memusage.mark(name); } while (0)
 #define BL_MEMUSE_REPORT(title) do { title##_memusage.report(#title); } while (0)
 #define BL_MEMUSE_REPORT_NAMED(title, name) do { title##_memusage.report(name); } while (0)
+
+#if defined(USE_MPI)
+
+#define BL_MEMUSE_COLLECTIVE_MARK(title, name, comm) do { title##_memusage.collective_mark(name, comm); } while (0)
 
 #if 0
 // do not use this function for now.  mxx::min_element and max_element has invalid read problem, reported by valgrind.
@@ -415,17 +421,23 @@ class MemUsage {
 #define BL_MEMUSE_REPORT_MPI(title, comm) do { title##_memusage.report(#title, comm); } while (0)
 #define BL_MEMUSE_REPORT_MPI_NAMED(title, name, comm) do { title##_memusage.report(name, comm); } while (0)
 
+#endif
 
 #else
 
 #define BL_MEMUSE_INIT(title)
 #define BL_MEMUSE_RESET(title)
-#define BL_MEMUSE_COLLECTIVE_MARK(title, name, comm)
 #define BL_MEMUSE_MARK(title, name)
 #define BL_MEMUSE_REPORT(title)
-#define BL_MEMUSE_REPORT_MPI(title, comm)
 #define BL_MEMUSE_REPORT_NAMED(title, name)
+
+#if defined(USE_MPI)
+
+#define BL_MEMUSE_COLLECTIVE_MARK(title, name, comm)
+#define BL_MEMUSE_REPORT_MPI(title, comm)
 #define BL_MEMUSE_REPORT_MPI_NAMED(title, name, comm)
+
+#endif
 
 #endif
 

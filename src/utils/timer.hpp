@@ -25,9 +25,9 @@
 #ifndef SRC_UTILS_TIMER_HPP_
 #define SRC_UTILS_TIMER_HPP_
 
+#include "bliss-config.hpp"
 #include "bliss-logger_config.hpp"
 
-#if BL_BENCHMARK_TIME == 1
 
 #include <chrono>   // clock
 //#include <cstdio>   // printf
@@ -70,6 +70,8 @@ class Timer {
 
 //============ timer start
     void start() { t1 = std::chrono::steady_clock::now(); }
+#if defined(USE_MPI)
+
     void collective_start(::std::string const & name, ::mxx::comm const & comm) {
 
       // time a barrier.
@@ -85,6 +87,7 @@ class Timer {
 
       t1 = std::chrono::steady_clock::now();
     }
+#endif
     void end(::std::string const & name, double const & n_elem) {
       t2 = std::chrono::steady_clock::now();
       time_span = (std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1));
@@ -93,6 +96,7 @@ class Timer {
       durations.push_back(time_span.count());
       counts.push_back(n_elem);
     }
+#if defined(USE_MPI)
     void collective_end(::std::string const & name, double const & n_elem, ::mxx::comm const & comm) {
 
 		// time a barrier.
@@ -100,6 +104,7 @@ class Timer {
 
 		end(name, n_elem);
     }
+#endif
     void report(::std::string const & title) {
         std::stringstream output;
 
@@ -131,6 +136,9 @@ class Timer {
         printf("%s\n", output.str().c_str());
         fflush(stdout);
     }
+
+#if defined(USE_MPI)
+
 
 #if 0
     // do not use this function for now.  mxx::min_element and max_element has invalid
@@ -361,8 +369,10 @@ class Timer {
         }
         comm.barrier();
     }
-
+#endif
 };
+
+#if BL_BENCHMARK_TIME == 1
 
 
 #define BL_TIMER_INIT(title)      Timer title##_timer;
@@ -375,11 +385,12 @@ class Timer {
 
 #define BL_TIMER_START(title)     do { title##_timer.start(); } while (0)
 #define BL_TIMER_END(title, name, n_elem) do { title##_timer.end(name, n_elem); } while (0)
-#define BL_TIMER_COLLECTIVE_START(title, name, comm) do { title##_timer.collective_start(name, comm); } while (0)
-#define BL_TIMER_COLLECTIVE_END(title, name, n_elem, comm) do { title##_timer.collective_end(name, n_elem, comm); } while (0)
 #define BL_TIMER_REPORT(title) do { title##_timer.report(#title); } while (0)
 #define BL_TIMER_REPORT_NAMED(title, name) do { title##_timer.report(name); } while (0)
 
+#if defined(USE_MPI)
+#define BL_TIMER_COLLECTIVE_START(title, name, comm) do { title##_timer.collective_start(name, comm); } while (0)
+#define BL_TIMER_COLLECTIVE_END(title, name, n_elem, comm) do { title##_timer.collective_end(name, n_elem, comm); } while (0)
 #if 0
 // do not use this function for now.  mxx::min_element and max_element has invalid read problem, reported by valgrind.
 #define BL_TIMER_REPORT_MPI_LOC(title, comm) do { title##_timer.report_loc(#title, comm); } while (0)
@@ -387,7 +398,7 @@ class Timer {
 
 #define BL_TIMER_REPORT_MPI(title, comm) do { title##_timer.report(#title, comm); } while (0)
 #define BL_TIMER_REPORT_MPI_NAMED(title, name, comm) do { title##_timer.report(name, comm); } while (0)
-
+#endif
 
 #else
 
@@ -399,12 +410,16 @@ class Timer {
 #define BL_TIMER_LOOP_END(title, name, n_elem)
 #define BL_TIMER_START(title)
 #define BL_TIMER_END(title, name, n_elem)
+#define BL_TIMER_REPORT(title)
+#define BL_TIMER_REPORT_NAMED(title, name)
+
+#if defined(USE_MPI)
 #define BL_TIMER_COLLECTIVE_START(title, name, comm)
 #define BL_TIMER_COLLECTIVE_END(title, name, n_elem, comm)
-#define BL_TIMER_REPORT(title)
+
 #define BL_TIMER_REPORT_MPI(title, comm)
-#define BL_TIMER_REPORT_NAMED(title, name)
 #define BL_TIMER_REPORT_MPI_NAMED(title, name, comm)
+#endif
 
 #endif
 

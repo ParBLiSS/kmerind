@@ -281,7 +281,6 @@ endif(OPENMP_STRICT_SCOPING)
 
 ###### External Library Settings
 #### Boost Library
-#set(EXTRA_LIBS pthread)
 if (LOG_ENGINE STREQUAL "BOOST_TRIVIAL" OR
                 LOG_ENGINE STREQUAL "BOOST_CUSTOM")
     set(Boost_USE_MULTITHREADED ON)
@@ -379,7 +378,7 @@ else(OPENMP_FOUND)
 	  	set(OpenMP_C_FLAGS "-fopenmp=libomp")
 	  	set(OpenMP_CXX_FLAGS "-fopenmp=libomp")
 	  	
-   	    set(CLANG_OPENMP_HOME "${CLANG_COMPILER_DIR}/../blah" CACHE PATH "Path to Clang OpenMP root directory.")
+   	    set(CLANG_OPENMP_HOME "${CLANG_COMPILER_DIR}/../lib" CACHE PATH "Path to Clang OpenMP root directory.")
    	    include_directories(${CLANG_OPENMP_HOME}/include)  # clang uses gcc headers, but can't find all gcc headers by itself.  this is for omp.h
    	    link_directories(${CLANG_OPENMP_HOME}/lib)
    	
@@ -559,10 +558,14 @@ if (ENABLE_TESTING)
 
   # GTEST use of pthreads does not appear to mix well with openmp code.
 #  if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-    #clang compile with gtest have trouble with pthreads.
-#    add_definitions(-DGTEST_HAS_PTHREAD=0)
+#  	if (USE_OPENMP)
+#	else(USE_OPENMP)
+#	    #clang compile with gtest have trouble with pthreads.
+#    	add_definitions(-DGTEST_HAS_PTHREAD=0)
+#   
+#    endif(USE_OPENMP)
 #  endif()
-  
+  set(gtest_disable_pthreads ON) 
 
   message(STATUS "Testing enabled")
   # include/load the Google Test framework
