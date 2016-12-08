@@ -33,6 +33,7 @@
 //#include <cstdio>   // printf
 #include <vector>
 #include <string>
+#include <cmath>
 #include <algorithm>  // std::min
 #include <sstream>
 
