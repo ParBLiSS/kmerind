@@ -888,6 +888,7 @@ include_directories("${EXT_PROJECTS_DIR}/tclap-1.2.1/include")
 ##include_directories("${CMAKE_CURRENT_BINARY_DIR}/sparsehash/include")
 ##	INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/sparsehash
 include_directories("${EXT_PROJECTS_DIR}/sparsehash-c11")
+message(STATUS "Forcing travis to rebuild...")
 
 #for when the linker (ld) has problem finding librt, e.g. error: undefined referecne clock_gettime@@GLIBC_2.2.5.  this needs to be close to the end of the ld list.
 #SET( CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -lrt" )
