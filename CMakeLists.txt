@@ -14,7 +14,7 @@ INCLUDE(CMakeDependentOption)
 
 ### REQUIRE C++11
 # Initialize CXXFLAGS.
-#add_definitions(-Wall -Wuninitialized -std=c++11 -fPIC)
+#add_definitions(-Wall -Wuninitialized --std=c++11 -fPIC)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wuninitialized --std=c++11 -fPIC")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -funroll-loops")
@@ -871,12 +871,23 @@ include_directories("${EXT_PROJECTS_DIR}/mxx/include")
 include_directories("${EXT_PROJECTS_DIR}/mxx/ext")
 include_directories("${EXT_PROJECTS_DIR}/tclap-1.2.1/include")
 
-set(ENV{CXXFLAGS} "-std=c++11")
-execute_process(COMMAND "./configure" WORKING_DIRECTORY "${EXT_PROJECTS_DIR}/sparsehash" OUTPUT_QUIET)
-execute_process(COMMAND "make" WORKING_DIRECTORY "${EXT_PROJECTS_DIR}/sparsehash" OUTPUT_QUIET)
-include_directories("${EXT_PROJECTS_DIR}/sparsehash/src")
 
-
+#configure_file(${PROJECT_SOURCE_DIR}/src/config/compiler_wrapper.sh.in compiler_wrapper.sh @ONLY)
+## has to use a wrapper to setup the environment (CXXFLAGS)
+#include(ExternalProject)
+#ExternalProject_Add(sparsehash
+#	PREFIX ${CMAKE_CURRENT_BINARY_DIR}/sparsehash
+#	SOURCE_DIR ${EXT_PROJECTS_DIR}/sparsehash
+#	CONFIGURE_COMMAND /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/compiler_wrapper.sh ${EXT_PROJECTS_DIR}/sparsehash/configure --prefix=${CMAKE_CURRENT_BINARY_DIR}/sparsehash
+#	BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/sparsehash-build
+#	BUILD_COMMAND /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/compiler_wrapper.sh make
+#	LOG_CONFIGURE 1
+#	LOG_BUILD 1
+#	LOG_INSTALL 1
+#)
+##include_directories("${CMAKE_CURRENT_BINARY_DIR}/sparsehash/include")
+##	INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/sparsehash
+include_directories("${EXT_PROJECTS_DIR}/sparsehash-c11")
 
 #for when the linker (ld) has problem finding librt, e.g. error: undefined referecne clock_gettime@@GLIBC_2.2.5.  this needs to be close to the end of the ld list.
 #SET( CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -lrt" )
