@@ -10,3 +10,6 @@
 [submodule "ext/tommyds"]
 	path = ext/tommyds
 	url = https://github.com/amadvance/tommyds.git
+[submodule "ext/sparsehash-c11"]
+	path = ext/sparsehash-c11
+	url = https://github.com/sparsehash/sparsehash-c11.git
