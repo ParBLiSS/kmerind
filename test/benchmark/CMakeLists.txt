@@ -259,6 +259,21 @@ endif()
 
 if (BUILD_TEST_APPLICATIONS)
 
+  add_executable(testKmerIndex-fastq BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-fastq
+     PROPERTIES COMPILE_FLAGS 
+     "-DpPARSER=FASTQ -DpDNA=4 -DpK=31 -DpKmerStore=BIMOLECULE -DpMAP=DENSEHASH -DpINDEX=POSQUAL -DpDistTrans=IDEN -DpDistHash=MURMUR -DpStoreHash=FARM -DpCompare")
+  target_link_libraries(testKmerIndex-fastq
+   ${EXTRA_LIBS})
+
+  add_executable(testKmerIndex-fasta BenchmarkKmerIndex.cpp)
+  SET_TARGET_PROPERTIES(testKmerIndex-fasta
+     PROPERTIES COMPILE_FLAGS 
+     "-DpPARSER=FASTA -DpDNA=5 -DpK=21 -DpKmerStore=CANONICAL -DpMAP=SORTED -DpINDEX=COUNT -DpCompare")
+  target_link_libraries(testKmerIndex-fasta
+   ${EXTRA_LIBS})
+
+
 add_executable(testFASTQ_load BenchmarkFileLoader.cpp)
 SET_TARGET_PROPERTIES(testFASTQ_load PROPERTIES COMPILE_FLAGS -DUSE_FASTQ_PARSER)
 target_link_libraries(testFASTQ_load ${EXTRA_LIBS})
