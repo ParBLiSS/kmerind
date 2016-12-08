@@ -716,7 +716,7 @@ namespace fsc {  // fast standard container
 
           // copy it in.
           vec.reserve(prev_size + std::distance(first, last));
-          auto middle = vec.insert(vec.end(), first, last);
+          auto middle = vec.insert(vec.cend(), first, last);
 
           Less less;
           // sort the new part
