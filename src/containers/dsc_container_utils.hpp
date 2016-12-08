@@ -27,6 +27,7 @@
 
 #include <iterator>  // iterator_traits
 #include <unordered_set>
+#include <random>
 #include <algorithm>  // upper bound, unique, sort, etc.
 
 #include "containers/fsc_container_utils.hpp"
