@@ -25,6 +25,8 @@
 #ifndef SRC_WIP_SYSTEM_UTILS_HPP_
 #define SRC_WIP_SYSTEM_UTILS_HPP_
 
+#include "bliss-logger_config.hpp"
+
 #include "utils/timer.hpp"
 #include "utils/memory_usage.hpp"
 

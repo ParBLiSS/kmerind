@@ -27,7 +27,6 @@
 
 #include "bliss-logger_config.hpp"
 
-#if BL_BENCHMARK_TIME == 1
 
 #include <chrono>   // clock
 //#include <cstdio>   // printf
@@ -391,6 +390,9 @@ class Timer {
 };
 
 
+#if BL_BENCHMARK_TIME == 1
+
+
 #define BL_TIMER_INIT(title)      Timer title##_timer;
 #define BL_TIMER_RESET(title)     do { title##_timer.reset(); } while (0)
 
@@ -426,7 +428,7 @@ class Timer {
 #define BL_TIMER_START(title)
 #define BL_TIMER_END(title, name, n_elem)
 #define BL_TIMER_COLLECTIVE_START(title, name, comm)
-#define BL_TIMER_COLLECTIVE_end(title, name, n_elem, comm)
+#define BL_TIMER_COLLECTIVE_END(title, name, n_elem, comm)
 #define BL_TIMER_REPORT(title)
 #define BL_TIMER_REPORT_MPI(title, comm)
 #define BL_TIMER_REPORT_NAMED(title, name)
