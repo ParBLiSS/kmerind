@@ -1,7 +1,7 @@
 # https://travis-ci.org/ParBLiSS/kmerind
 
 language: cpp
-dist: trusty
+
 sudo: false
 
 #compiler:
@@ -37,8 +37,9 @@ matrix:
             sources:
               - ubuntu-toolchain-r-test
             packages:
-              - openmpi-bin
-              - libopenmpi-dev
+#              - openmpi-bin
+#              - libopenmpi-dev
+	      - libopenmpi16
               - gcc-4.8
               - g++-4.8
         env: envCXX=g++-4.8 envCC=gcc-4.8
@@ -156,9 +157,9 @@ before_script:
     - mpiexec --version
     - export SRC_DIR=`pwd`
     # compile sparsehash
-    - cd ext/sparsehash
-    - ./configure CXXFLAGS=-std=c++11
-    - make
+    #- cd ext/sparsehash
+    #- ./configure CXXFLAGS=-std=c++11
+    #- make
     - cd $SRC_DIR
     # prepare build kmerind
     - mkdir build
