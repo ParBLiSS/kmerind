@@ -37,9 +37,9 @@ matrix:
             sources:
               - ubuntu-toolchain-r-test
             packages:
-#              - openmpi-bin
-#              - libopenmpi-dev
-              - libopenmpi1.6
+              - openmpi-bin
+              - libopenmpi-dev
+#              - libopenmpi1.6
               - gcc-4.8
               - g++-4.8
         env: envCXX=g++-4.8 envCC=gcc-4.8
@@ -49,8 +49,8 @@ matrix:
             sources:
               - ubuntu-toolchain-r-test
             packages:
-#              - openmpi-bin
-              - libopenmpi1.6
+              - openmpi-bin
+              - libopenmpi-dev
               - gcc-4.9
               - g++-4.9
         env: envCXX=g++-4.9 envCC=gcc-4.9
