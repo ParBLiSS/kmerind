@@ -37,7 +37,6 @@
 
 #include "partition/range.hpp"
 #include "common/sequence.hpp"
-#include "debruijn/de_bruijn_node_trait.hpp"
 
 namespace mxx {
 
@@ -178,68 +177,6 @@ namespace mxx {
     };
 
 
-  template<typename A, typename T>
-    struct datatype_builder<::bliss::de_bruijn::node::edge_counts<A, T> > :
-    public datatype_builder<decltype(::bliss::de_bruijn::node::edge_counts<A, T>::counts) > {
-
-      typedef datatype_builder<decltype(::bliss::de_bruijn::node::edge_counts<A, T>::counts) > baseType;
-
-      static MPI_Datatype get_type(){ 
-        return baseType::get_type(); 
-      }
-
-      static size_t num_basic_elements() {
-        return baseType::num_basic_elements();
-      }
-    };
-
-
-  template<typename A, typename T>
-    struct datatype_builder<const bliss::de_bruijn::node::edge_counts<A, T> > : 
-    public datatype_builder<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts) > {
-
-      typedef datatype_builder<decltype(bliss::de_bruijn::node::edge_counts<A, T>::counts) > baseType;
-
-      static MPI_Datatype get_type(){ 
-        return baseType::get_type(); 
-      }
-
-      static size_t num_basic_elements() {
-        return baseType::num_basic_elements();
-      }
-    };
-
-
-  template<typename A>
-    struct datatype_builder<bliss::de_bruijn::node::edge_exists<A> > : 
-    public datatype_builder<decltype(bliss::de_bruijn::node::edge_exists<A>::counts) > {
-
-      typedef datatype_builder<decltype(bliss::de_bruijn::node::edge_exists<A>::counts) > baseType;
-
-      static MPI_Datatype get_type(){ 
-        return baseType::get_type(); 
-      }
-
-      static size_t num_basic_elements() {
-        return baseType::num_basic_elements();
-      }
-    };
-
-
-  template<typename A>
-    struct datatype_builder<const bliss::de_bruijn::node::edge_exists<A> > : 
-    public datatype_builder<decltype(bliss::de_bruijn::node::edge_exists<A>::counts) > {
-
-      typedef datatype_builder<decltype(bliss::de_bruijn::node::edge_exists<A>::counts) > baseType;
-
-      static MPI_Datatype get_type(){ 
-        return baseType::get_type(); 
-      }
-
-      static size_t num_basic_elements() {
-        return baseType::num_basic_elements();
-      }
-    };
 }  // namespace mxx
 
 

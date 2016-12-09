@@ -53,6 +53,7 @@
 #include "utils/kmer_utils.hpp"
 
 #include "io/mxx_support.hpp"
+#include "debruijn/debruijn_mxx_support.hpp"
 #include "containers/distributed_unordered_map.hpp"
 #include "containers/distributed_densehash_map.hpp"
 #include "containers/distributed_sorted_map.hpp"
