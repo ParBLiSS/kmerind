@@ -11,9 +11,9 @@ Kmerind provides **k**-**mer** **ind**exing capability for biological sequence d
 Please take a look at our [Wiki](https://github.com/ParBLiSS/kmerind/wiki).
 
 ## Overview
-ParBLiSS is a C++ library for distributed and multi-core bioinformatics algorithms.  It requires C++ 11 features, as well as OpenMP, and MPI.  The library is implemented as a set of templated classes.  As such, most of the code is in header form, and are incorporated into the user code via `#include`.  
+ParBLiSS is a C++ library for distributed and multi-core bioinformatics algorithms.  It requires C++ 11 features and MPI (OpenMP not required).  The library is implemented as a set of templated classes.  As such, most of the code is in header form, and are incorporated into the user code via `#include`.  
 
-K-merind provides basic parallel sequence file access and k-mer index construction and query.  Currently, it supports indices for frequency, position, and quality of kmers from short reads and whole genomes.
+K-merind provides basic parallel sequence file access and k-mer index construction and query.  Currently, it supports indices for frequency, position, and quality of kmers from short reads and whole genomes, using FASTQ and FASTA formats.
 
 ## Build
 
@@ -26,7 +26,11 @@ Required:
 -- `icpc` (version 16+ due to constexpr functions and initializers) or
 -- `clang` (version 3.5+ - cmake generated make file has problems with prior versions. or 3.7+ if openmp is used)
 - `cmake` (version 2.8+)
-- `openmpi` or `mpich2` or `mvapich` or `intel mpi library`
+- an MPI implementation, one of the following
+-- `openmpi` (version 1.7+ due to use of MPI_IN_PLACE)
+-- `mpich2` (version 1.5 +)
+-- `mvapich` (tested with version 2.1.7)
+-- `intel mpi library` (poorly tested)
 
 See 
 http://en.cppreference.com/w/cpp/compiler_support
@@ -135,17 +139,17 @@ With Intel C Compiler (icc) version 15, the following compilation error is obser
 Internal error: assertion failed at: "shared/cfe/edgcpfe/il.c", line 18295
 ```
 
-While there is very little information to be found the internet related to this error, we have determined that this is a compiler bug related to auto type deduction in templated function instantiation.  It appears that ICC is unable to deduce the data type and size of a statically sized array of the form
+While there is very little information to be found on the internet related to this error, we have theorized that this is a compiler bug related to auto type deduction in templated function instantiation.  It appears that ICC is unable to auto deduce the data type and size of a statically sized array of the form
 ```sh
 datatype x[len]
 ```
-which is function parameter is specified as
+which as a function parameter is specified as
 ```sh
 datatype (&x)[len]
 ```
 with datatype and len being template parameters for the function.
 
-The workaround is to fully specify the template parameters for the function so to avoid automatic type deduction in this case.
+This error appears only for bitgroup_ops.hpp.  Attempts to replicate the error in a separate test code was not successful.  The workaround is to fully specify the template parameters for the function so to avoid automatic type deduction in this case.
 
 It is not clear if other function parameter forms also cause this error.
  
