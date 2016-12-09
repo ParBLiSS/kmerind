@@ -1,7 +1,7 @@
 # https://travis-ci.org/ParBLiSS/kmerind
 
 language: cpp
-
+dist: trusty
 sudo: false
 
 #compiler:
