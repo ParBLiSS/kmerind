@@ -505,7 +505,6 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
           BL_BENCH_START(find);
           // even if count is 0, still need to participate in mpi calls.  if (keys.size() == 0) return results;
-          ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
           this->transform_input(keys);
           BL_BENCH_END(find, "begin", keys.size());
@@ -597,13 +596,20 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             int recv_from, send_to;
             size_t found;
             total = 0;
-            std::vector<MPI_Request> reqs(2 * this->comm.size());
+            std::vector<MPI_Request> recv_reqs(this->comm.size());
+            std::vector<MPI_Request> send_reqs(this->comm.size());
 
             mxx::datatype dt = mxx::get_datatype<::std::pair<Key, T>>();
 
             for (int i = 0; i < this->comm.size(); ++i) {
 
               recv_from = (this->comm.rank() + (this->comm.size() - i)) % this->comm.size(); // rank to recv data from
+              // set up receive.
+              MPI_Irecv(&results[resp_displs[recv_from]], resp_counts[recv_from], dt.type(),
+                        recv_from, i, this->comm, &recv_reqs[i]);
+            }
+
+            for (int i = 0; i < this->comm.size(); ++i) {
               send_to = (this->comm.rank() + i) % this->comm.size();    // rank to send data to
 
               local_offset = (i % 2) * max_send_count;
@@ -623,20 +629,19 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               total += found;
               //== now send the results immediately - minimizing data usage so we need to wait for both send and recv to complete right now.
 
-              // set up receive.
-              MPI_Irecv(&results[resp_displs[recv_from]], resp_counts[recv_from], dt.type(),
-                        recv_from, i, this->comm, &reqs[2 * i]);
-
               MPI_Isend(&(local_results[local_offset]), found, dt.type(), send_to,
-                        i, this->comm, &reqs[2 * i + 1]);
+                        i, this->comm, &send_reqs[i]);
 
               // wait for previous requests to complete.
-              if (i > 0) MPI_Waitall(2, &reqs[2 * (i - 1)], MPI_STATUSES_IGNORE);
+              if (i > 0) MPI_Wait(&send_reqs[(i - 1)], MPI_STATUS_IGNORE);
 
               //printf("Rank %d local find send to %d:  query %d result sent %d (%d).  recv from %d received %d\n", this->comm.rank(), send_to, recv_counts[send_to], found, send_counts[send_to], recv_from, resp_counts[recv_from]);
             }
             // last pair
-            MPI_Waitall(2, &reqs[2 * (this->comm.size() - 1)], MPI_STATUSES_IGNORE);
+            MPI_Wait(&send_reqs[(this->comm.size() - 1)], MPI_STATUS_IGNORE);
+
+            // wait for all the receives
+            MPI_Waitall(this->comm.size(), &(recv_reqs[0]), MPI_STATUSES_IGNORE);
 
             BL_BENCH_END(find, "find_send", results.size());
 
@@ -661,6 +666,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             ::std::vector<::std::pair<Key, size_t> > count_results;
             count_results.reserve(keys.size());
             ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, size_t> > > count_emplace_iter(count_results);
+            ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(results);
 
             // count now.
             auto overlap = QueryProcessor<false>::intersect(this->c.begin(), this->c.end(),
