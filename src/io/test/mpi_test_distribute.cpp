@@ -196,7 +196,7 @@ TEST_P(A2ADistributeTest, block_a2a)
 
 }
 
-
+/*
 TEST_P(A2ADistributeTest, block_a2a_inplace)
 {
   ::mxx::comm comm;
@@ -216,7 +216,7 @@ TEST_P(A2ADistributeTest, block_a2a_inplace)
   imxx::block_all2all_inplace(this->distributed, pp.block_size,
                       pp.output_offset, comm);
 }
-
+*/
 
 
 TEST_P(A2ADistributeTest, block_roundtrip)
@@ -243,7 +243,7 @@ TEST_P(A2ADistributeTest, block_roundtrip)
 
 }
 
-
+/*
 TEST_P(A2ADistributeTest, block_roundtrip_inplace)
 {
   ::mxx::comm comm;
@@ -274,7 +274,7 @@ TEST_P(A2ADistributeTest, block_roundtrip_inplace)
                       pp.input_offset, comm);
 
 }
-
+*/
 
 
 INSTANTIATE_TEST_CASE_P(Bliss, A2ADistributeTest, ::testing::Values(
