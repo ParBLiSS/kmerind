@@ -663,7 +663,7 @@ namespace imxx
 
         assert((out_len <= in_len) && "input range is larger than output range");
 
-        size_t bucketed_max = bucketed_pos_offset + in_len - 1;
+        //size_t bucketed_max = bucketed_pos_offset + in_len - 1;
         assert((*(std::min_element(i2o, i2o + out_len)) >= bucketed_pos_offset) &&
         		(*(std::max_element(i2o, i2o + out_len)) <= (bucketed_pos_offset + in_len - 1)) &&
 				"ERROR, i2o [0, len) does not map to itself");

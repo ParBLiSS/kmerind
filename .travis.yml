@@ -37,34 +37,27 @@ matrix:
             sources:
               - ubuntu-toolchain-r-test
             packages:
-              - openmpi-bin
-              - libopenmpi-dev
-#              - libopenmpi1.6
               - gcc-4.8
               - g++-4.8
-        env: envCXX=g++-4.8 envCC=gcc-4.8
+        env: envCXX=g++-4.8 envCC=gcc-4.8 envMPI=openmpi18
       - compiler: gcc
         addons:
           apt:
             sources:
               - ubuntu-toolchain-r-test
             packages:
-              - openmpi-bin
-              - libopenmpi-dev
               - gcc-4.9
               - g++-4.9
-        env: envCXX=g++-4.9 envCC=gcc-4.9
+        env: envCXX=g++-4.9 envCC=gcc-4.9 envMPI=openmpi18
       - compiler: gcc
         addons:
           apt:
             sources:
               - ubuntu-toolchain-r-test
             packages:
-              - openmpi-bin
-              - libopenmpi-dev
               - gcc-5
               - g++-5
-        env: envCXX=g++-5 envCC=gcc-5
+        env: envCXX=g++-5 envCC=gcc-5 envMPI=openmpi18
       - compiler: clang
         addons:
           apt:
@@ -72,10 +65,8 @@ matrix:
               - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.5
             packages:
-              - openmpi-bin
-              - libopenmpi-dev
               - clang-3.5
-        env: envCXX=clang++-3.5 envCC=clang-3.5
+        env: envCXX=clang++-3.5 envCC=clang-3.5 envMPI=openmpi18
       - compiler: clang
         addons:
           apt:
@@ -83,10 +74,8 @@ matrix:
               - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.6
             packages:
-              - openmpi-bin
-              - libopenmpi-dev
               - clang-3.6
-        env: envCXX=clang++-3.6 envCC=clang-3.6
+        env: envCXX=clang++-3.6 envCC=clang-3.6 envMPI=openmpi18
       - compiler: clang
         addons:
           apt:
@@ -94,10 +83,8 @@ matrix:
               - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.7
             packages:
-              - openmpi-bin
-              - libopenmpi-dev
               - clang-3.7
-        env: envCXX=clang++-3.7 envCC=clang-3.7
+        env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=openmpi18
       - compiler: clang
         addons:
           apt:
@@ -105,10 +92,98 @@ matrix:
               - ubuntu-toolchain-r-test
               - llvm-toolchain-precise-3.8
             packages:
-              - openmpi-bin
-              - libopenmpi-dev
               - clang-3.8
-        env: envCXX=clang++-3.8 envCC=clang-3.8
+        env: envCXX=clang++-3.8 envCC=clang-3.8 envMPI=openmpi18
+      - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-4.8
+              - g++-4.8
+        env: envCXX=g++-4.8 envCC=gcc-4.8 envMPI=mpich2
+      - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-4.9
+              - g++-4.9
+        env: envCXX=g++-4.9 envCC=gcc-4.9 envMPI=mpich2
+      - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-5
+              - g++-5
+        env: envCXX=g++-5 envCC=gcc-5 envMPI=mpich2
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.5
+            packages:
+              - clang-3.5
+        env: envCXX=clang++-3.5 envCC=clang-3.5 envMPI=mpich2
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.6
+            packages:
+              - clang-3.6
+        env: envCXX=clang++-3.6 envCC=clang-3.6 envMPI=mpich2
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.7
+            packages:
+              - clang-3.7
+        env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=mpich2
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-precise-3.8
+            packages:
+              - clang-3.8
+        env: envCXX=clang++-3.8 envCC=clang-3.8 envMPI=mpich2
+      - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-4.8
+              - g++-4.8
+        env: envCXX=g++-4.8 envCC=gcc-4.8 envMPI=mpich3
+      - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-4.9
+              - g++-4.9
+        env: envCXX=g++-4.9 envCC=gcc-4.9 envMPI=mpich3
+      - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-5
+              - g++-5
+        env: envCXX=g++-5 envCC=gcc-5 envMPI=mpich3
       
 
 before_install:
@@ -137,17 +212,19 @@ before_install:
 # For the first test-run, the build has to be run sequentially (limit parallel
 # workers to 1) so that the cache can be correctly initialized. Once the cache
 # is build, parallel workers can be re-enabled.
-#cache:
-#  directories:
-#    - $HOME/local
+cache:
+  directories:
+    - $HOME/local
 
 before_script:
     # check if gcc or clang
     - if [ "$CXX" = "clang++" ]; then export COMPILER="clang"; else export COMPILER="gnu"; fi
 #    # install MPI - only 1 configuration for each compiler does this
-    - export MPI=openmpi
-    # set compiler to newer versions
-    - export CXX="$envCXX" CC="$envCC" OMPI_CC="$envCC" OMPI_CXX="$envCXX"
+    - export CXX="$envCXX" CC="$envCC" OMPI_CC="$envCC" OMPI_CXX="$envCXX" MPI="$envMPI"
+    # install MPI
+    - mkdir -p $HOME/local
+    - sh ./ext/mxx/conf/travis-install-mpi.sh $MPI
+    - ls -r $HOME/local
     # set up MPI location
     - export PATH=$PATH:$HOME/local/$MPI/bin
     - export LIBRARY_PATH=$LIBRARY_PATH:$HOME/local/$MPI/lib
@@ -175,8 +252,8 @@ before_script:
 
 script:
     # run tests.
-    - ctest -E benchmark 
     - ./test/test-mpi-bliss-io-distribute
+    - ctest -E benchmark 
     - ./bin/testFASTA_load
     - mpiexec -np 4 ./bin/testFASTA_load
     - ./bin/testFASTQ_load
