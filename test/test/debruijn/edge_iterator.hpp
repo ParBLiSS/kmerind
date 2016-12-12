@@ -30,6 +30,9 @@
 namespace bliss
 {
 
+  namespace de_bruijn
+  {
+
   namespace iterator
   {
 
@@ -320,7 +323,8 @@ namespace bliss
   	using raw_edge_iterator = edge_iterator<IT, bliss::common::ASCII>;
 
 
-  } // iterator
+  	  } // iterator
+  } // de_bruijn
 } // bliss
 
 

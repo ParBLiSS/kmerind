@@ -46,7 +46,7 @@
 #include "iterators/zip_iterator.hpp"
 #include "index/quality_score_iterator.hpp"
 
-#include "iterators/edge_iterator.hpp"
+#include "debruijn/edge_iterator.hpp"
 #include "index/kmer_index.hpp"
 #include "debruijn/de_bruijn_construct_engine.hpp"
 #include "debruijn/de_bruijn_nodes_distributed.hpp"

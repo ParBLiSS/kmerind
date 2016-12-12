@@ -19,7 +19,9 @@ if (BUILD_TEST_APPLICATIONS)
 #target_link_libraries(testKmerIndex_read_fasta ${EXTRA_LIBS})
 #-----------------
 
+
 add_executable(test_de_bruijn_graph_construction test_de_bruijn_graph_construction.cpp)
+target_include_directories(test_de_bruijn_graph_construction PUBLIC "${PROJECT_SOURCE_DIR}/test/test")
 target_link_libraries(test_de_bruijn_graph_construction ${EXTRA_LIBS})
 
 add_executable(test_get_file_size test_get_file_size.cpp)

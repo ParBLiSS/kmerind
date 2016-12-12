@@ -69,7 +69,7 @@
 #include "common/kmer_transform.hpp"
 #include "index/kmer_hash.hpp"
 #include "debruijn/de_bruijn_node_trait.hpp"
-#include "iterators/edge_iterator.hpp"
+#include "debruijn/edge_iterator.hpp"
 #include "index/kmer_index.hpp"
 
 #include "utils/benchmark_utils.hpp"
@@ -124,7 +124,7 @@ namespace bliss
 //		   static_assert((std::is_same<EdgeEncoder, bliss::common::ASCII>::value && std::is_same<EdgeType, uint16_t>::value) ||
 //		                 std::is_same<EdgeType, uint8_t>::value, "Edge Type is not compatible with EdgeEncoder type");
 
-       using EdgeIterType = bliss::iterator::edge_iterator<CharIter, EdgeEncoder>;
+       using EdgeIterType = bliss::de_bruijn::iterator::edge_iterator<CharIter, EdgeEncoder>;
 
 
 		   // combine kmer iterator and position iterator to create an index iterator type.
@@ -190,7 +190,7 @@ namespace bliss
 //          static_assert((std::is_same<EdgeEncoder, bliss::common::ASCII>::value && std::is_same<EdgeType, uint16_t>::value) ||
 //                          std::is_same<EdgeType, uint8_t>::value, "Edge Type is not compatible with EdgeEncoder type");
 
-          using EdgeIterType = bliss::iterator::edge_iterator<CharIter, EdgeEncoder>;
+          using EdgeIterType = bliss::de_bruijn::iterator::edge_iterator<CharIter, EdgeEncoder>;
 
           // also remove eol from quality score
           using QualIterType =
