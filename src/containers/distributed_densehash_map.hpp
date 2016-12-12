@@ -2032,7 +2032,7 @@ namespace dsc  // distributed std container
 //			::dsc::distribute_bucketed(input, recv_counts, this->comm).swap(input);
 			std::vector<size_t> recv_counts;
 			  std::vector<size_t> i2o;
-			  std::vector<::std::pair<Key, T> > buffer;
+			  std::vector<::std::pair<Key, V> > buffer;
 			  ::imxx::distribute(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
 			  input.swap(buffer);
 
@@ -2822,7 +2822,7 @@ namespace dsc  // distributed std container
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
           std::vector<size_t> recv_counts;
           std::vector<size_t> i2o;
-          std::vector<::std::pair<Key, T> > buffer;
+          std::vector< Key > buffer;
           ::imxx::distribute(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
           input.swap(buffer);
 
@@ -3065,7 +3065,7 @@ namespace dsc  // distributed std container
           std::vector<size_t> recv_counts;
           std::vector<size_t> i2o;
 
-          std::vector<::std::pair<Key, T> > buffer;
+          std::vector<Key > buffer;
           //::imxx::destructive_distribute(input, this->key_to_rank, recv_counts, buffer, this->comm);
           ::imxx::distribute(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
           input.swap(buffer);
