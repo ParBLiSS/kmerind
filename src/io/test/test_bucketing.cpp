@@ -18,6 +18,7 @@
 // include google test
 #include <gtest/gtest.h>
 #include "io/incremental_mxx.hpp"
+#include "mxx/algos.hpp"
 
 #include <string>
 #include <unordered_map>
@@ -228,6 +229,29 @@ TEST_P(BucketTest, bucket)
                                    this->p.first, this->p.last);
 }
 
+TEST_P(BucketTest, mxx_bucket)
+{
+	this->bcounts.clear();
+	this->unbucketed.clear();
+  this->mapping.clear();
+
+  // allocate.
+  this->bucketed.resize(this->p.input_size);
+
+  BucketTestInfo pp = this->p;
+
+  if ((this->p.first == 0) && (this->p.last == this->p.input_size)) {
+	  std::copy(this->data.begin(), this->data.end(), this->bucketed.begin());
+	  this->bcounts = mxx::bucketing(this->bucketed, [&pp](std::pair<size_t, size_t> const & x){ return x.first % pp.bucket_count; },
+			  this->p.bucket_count);
+  } else {
+	  std::cout << "not doing whole range, using imxx bucketing." << std::endl;
+			  imxx::local::bucketing_impl(this->data, [&pp](std::pair<size_t, size_t> const & x){ return x.first % pp.bucket_count; },
+					  this->p.bucket_count, this->bcounts,   this->bucketed,
+			                                   this->p.first, this->p.last);
+  }
+}
+
 TEST_P(BucketTest, permute )
 {
 	this->unbucketed.clear();
@@ -422,7 +446,9 @@ INSTANTIATE_TEST_CASE_P(Bliss, BucketTest, ::testing::Values(
     BucketTestInfo((1UL << 16), 1UL << 16,         0UL, (1UL << 16)),  // 35, full
     BucketTestInfo((1UL << 16), 1UL << 16, (1UL <<  2), (1UL <<  3)),  // 36, middle partial
     BucketTestInfo((1UL << 16), 1UL << 17,         0UL, (1UL << 16)),  // 37, full
-    BucketTestInfo((1UL << 16), 1UL << 17, (1UL <<  2), (1UL <<  3))   // 38, middle partial
+    BucketTestInfo((1UL << 16), 1UL << 17, (1UL <<  2), (1UL <<  3)),   // 38, middle partial
+
+	BucketTestInfo((1UL << 16), 960,         0UL, (1UL << 16))  // 33, full
 
 // //    BucketTestInfo((1UL << 16), 1UL << 32,         0UL, (1UL << 16)),  // full
 // //    BucketTestInfo((1UL << 16), 1UL << 32, (1UL <<  2), (1UL <<  3)),  // middle partial
