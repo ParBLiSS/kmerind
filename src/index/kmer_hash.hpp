@@ -243,7 +243,7 @@ namespace bliss {
         public:
           static const unsigned int default_init_value = 24U;  // allow 16M processors.  but it's ignored here.
 
-          murmur(uint32_t const & _seed = 43, const unsigned int prefix_bits = default_init_value) : seed(_seed) {};
+          murmur(const unsigned int prefix_bits = default_init_value, uint32_t const & _seed = 42 ) : seed(_seed) {};
 
           inline uint64_t operator()(const KMER & kmer) const
           {
