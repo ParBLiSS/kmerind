@@ -373,6 +373,116 @@ namespace imxx
 //    }
 
 
+    /**
+     * @brief perform permutation on i2o to produce x number of blocks, each with p number of buckets with specified per-bucket size s.  remainder are placed at end
+     *        and output bucket sizes are the remainders for each bucket.
+     * @details  kind of a division on the buckets.
+     *
+     *        operates within range [first, last) only.
+     *
+     * @param in_block_bucket_size   size of a bucket inside a block - all buckets are same size.
+     * @param bucket_sizes[in/out]   entire size of local buckets.
+     * @param i2o[in/out]            from bucket assignment, to permutation index.
+     * @return number of FULL blocks in the permutation.
+     */
+    template <typename SIZE = size_t>
+    void
+    bucket_to_block_permutation(SIZE const & block_bucket_size, SIZE const & nblocks,
+                                std::vector<SIZE> & bucket_sizes,
+                                std::vector<SIZE> & i2o,
+                                size_t first = 0,
+                                size_t last = std::numeric_limits<size_t>::max()) {
+
+      if (bucket_sizes.size() == 0)
+        throw std::invalid_argument("bucket_sizes is 0");
+
+
+      // if block_bucket_size is 0, use normal stuff
+      if ((block_bucket_size * nblocks * bucket_sizes.size()) > i2o.size()) {
+        throw std::invalid_argument("block is larger than total size");
+      }
+
+        // no block.  so do it without blocks
+      if ((block_bucket_size == 0) || (nblocks == 0)) {
+        // no blocks. use standard permutation
+        bucket_to_permutation(bucket_sizes, i2o, first, last);
+
+        return;
+      }
+
+      if (bucket_sizes.size() == 1)
+      {
+        // all go into the block.  no left overs.
+        bucket_to_permutation(bucket_sizes, i2o, first, last);
+        bucket_sizes[0] = i2o.size() - block_bucket_size * nblocks;
+        return;
+      }
+
+      SIZE min_bucket_size = *(std::min_element(bucket_sizes.begin(), bucket_sizes.end()));  // find the minimum
+      if (nblocks > (min_bucket_size / block_bucket_size)) {
+        // no blocks. use standard permutation
+        throw std::invalid_argument("min bucket is smaller than the number of requested blocks. ");
+      }
+
+      // else we do blocked permutation
+
+      size_t block_size = block_bucket_size * bucket_sizes.size();
+      size_t front_size = block_size * nblocks;
+
+      // ensure valid range
+      size_t f = std::min(first, i2o.size());
+      size_t l = std::min(last, i2o.size());
+      assert((f <= l) && "first should not exceed last" );
+
+      if (f == l) return;  // no data in question.
+
+
+      // initialize the offset, and reduce the bucket_sizes
+      std::vector<SIZE> offsets(bucket_sizes.size(), 0);
+      for (size_t i = 0; i < bucket_sizes.size(); ++i) {
+        offsets[i] = i * block_bucket_size;
+        bucket_sizes[i] -= block_bucket_size * nblocks;
+      }
+
+      //== convert bucket sizes to offsets as well.
+      // get offsets of where buckets start (= exclusive prefix sum), offset by the range.
+      // use bucket_sizes temporarily.
+      bucket_sizes.back() = l - bucket_sizes.back();  // offset from f, or alternatively, l.
+      // checking for >= 0 with unsigned and decrement is a bad idea.  need to check for > 0
+      for (size_t i = bucket_sizes.size() - 1; i > 0; --i) {
+        bucket_sizes[i-1] = bucket_sizes[i] - bucket_sizes[i-1];
+      }
+      assert((bucket_sizes.front() == (f + front_size)) && "prefix sum resulted in incorrect starting position");  // first one should be 0 at this point.
+
+
+      // walk through all.
+      size_t bucket;
+      for (size_t i = f; i < l; ++i) {
+        bucket = i2o[i];
+        i2o[i] = offsets[bucket]++;  // output position from bucket id (i2o[i]).  post increment.  already offset by f.
+
+        // if the offset entry indicates full, move the offset to next block, unless we already have max number of blocks.
+        if (offsets[bucket] > front_size) {
+          continue;  // last part with NONBLOCKS, so let it continue;
+//        } else if (offsets[bucket] == front_size) {  // last element of last bucket in last block in the front portion
+//          offsets[bucket] = bucket_sizes[bucket];
+        } else if (offsets[bucket] % block_bucket_size == 0) {  // full bucket.
+          if (((offsets[bucket] + block_size - 1) / block_size) == nblocks) { // in last block
+            offsets[bucket] = bucket_sizes[bucket];
+          } else {
+            offsets[bucket] += block_size - block_bucket_size;
+          }
+        }
+      }
+
+      // convert inclusive prefix sum back to counts.
+      // hopefully this is a fast process when compared to allocating memory.
+      for (size_t i = 0; i < bucket_sizes.size() - 1; ++i) {
+        bucket_sizes[i] = bucket_sizes[i+1] - bucket_sizes[i];
+      }
+      bucket_sizes.back() = l - bucket_sizes.back();
+
+    }
 
 
     //===  permute and unpermute are good for communication bucketing for partitions of INPUT data, using A2Av for communication (not for A2A)
@@ -781,116 +891,6 @@ namespace imxx
     }
 
 
-    /**
-     * @brief perform permutation on i2o to produce x number of blocks, each with p number of buckets with specified per-bucket size s.  remainder are placed at end
-     *        and output bucket sizes are the remainders for each bucket.
-     * @details  kind of a division on the buckets.
-     *
-     *        operates within range [first, last) only.
-     *
-     * @param in_block_bucket_size   size of a bucket inside a block - all buckets are same size.
-     * @param bucket_sizes[in/out]   entire size of local buckets.
-     * @param i2o[in/out]            from bucket assignment, to permutation index.
-     * @return number of FULL blocks in the permutation.
-     */
-    template <typename SIZE = size_t>
-    void
-    bucket_to_block_permutation(SIZE const & block_bucket_size, SIZE const & nblocks,
-                                std::vector<SIZE> & bucket_sizes,
-                                std::vector<SIZE> & i2o,
-                                size_t first = 0,
-                                size_t last = std::numeric_limits<size_t>::max()) {
-
-      if (bucket_sizes.size() == 0)
-        throw std::invalid_argument("bucket_sizes is 0");
-
-
-      // if block_bucket_size is 0, use normal stuff
-      if ((block_bucket_size * nblocks * bucket_sizes.size()) > i2o.size()) {
-        throw std::invalid_argument("block is larger than total size");
-      }
-
-        // no block.  so do it without blocks
-      if ((block_bucket_size == 0) || (nblocks == 0)) {
-        // no blocks. use standard permutation
-        bucket_to_permutation(bucket_sizes, i2o, first, last);
-
-        return;
-      }
-
-    	if (bucket_sizes.size() == 1)
-    	{
-    	  // all go into the block.  no left overs.
-    		bucket_to_permutation(bucket_sizes, i2o, first, last);
-    		bucket_sizes[0] = i2o.size() - block_bucket_size * nblocks;
-    		return;
-    	}
-
-      SIZE min_bucket_size = *(std::min_element(bucket_sizes.begin(), bucket_sizes.end()));  // find the minimum
-      if (nblocks > (min_bucket_size / block_bucket_size)) {
-        // no blocks. use standard permutation
-        throw std::invalid_argument("min bucket is smaller than the number of requested blocks. ");
-      }
-
-      // else we do blocked permutation
-
-      size_t block_size = block_bucket_size * bucket_sizes.size();
-      size_t front_size = block_size * nblocks;
-
-      // ensure valid range
-      size_t f = std::min(first, i2o.size());
-      size_t l = std::min(last, i2o.size());
-      assert((f <= l) && "first should not exceed last" );
-
-      if (f == l) return;  // no data in question.
-
-
-      // initialize the offset, and reduce the bucket_sizes
-      std::vector<SIZE> offsets(bucket_sizes.size(), 0);
-      for (size_t i = 0; i < bucket_sizes.size(); ++i) {
-        offsets[i] = i * block_bucket_size;
-        bucket_sizes[i] -= block_bucket_size * nblocks;
-      }
-
-      //== convert bucket sizes to offsets as well.
-      // get offsets of where buckets start (= exclusive prefix sum), offset by the range.
-      // use bucket_sizes temporarily.
-      bucket_sizes.back() = l - bucket_sizes.back();  // offset from f, or alternatively, l.
-      // checking for >= 0 with unsigned and decrement is a bad idea.  need to check for > 0
-      for (size_t i = bucket_sizes.size() - 1; i > 0; --i) {
-        bucket_sizes[i-1] = bucket_sizes[i] - bucket_sizes[i-1];
-      }
-      assert((bucket_sizes.front() == (f + front_size)) && "prefix sum resulted in incorrect starting position");  // first one should be 0 at this point.
-
-
-      // walk through all.
-      size_t bucket;
-      for (size_t i = f; i < l; ++i) {
-        bucket = i2o[i];
-        i2o[i] = offsets[bucket]++;  // output position from bucket id (i2o[i]).  post increment.  already offset by f.
-
-        // if the offset entry indicates full, move the offset to next block, unless we already have max number of blocks.
-        if (offsets[bucket] > front_size) {
-          continue;  // last part with NONBLOCKS, so let it continue;
-//        } else if (offsets[bucket] == front_size) {  // last element of last bucket in last block in the front portion
-//          offsets[bucket] = bucket_sizes[bucket];
-        } else if (offsets[bucket] % block_bucket_size == 0) {  // full bucket.
-          if (((offsets[bucket] + block_size - 1) / block_size) == nblocks) { // in last block
-            offsets[bucket] = bucket_sizes[bucket];
-          } else {
-            offsets[bucket] += block_size - block_bucket_size;
-          }
-        }
-      }
-
-      // convert inclusive prefix sum back to counts.
-      // hopefully this is a fast process when compared to allocating memory.
-      for (size_t i = 0; i < bucket_sizes.size() - 1; ++i) {
-        bucket_sizes[i] = bucket_sizes[i+1] - bucket_sizes[i];
-      }
-      bucket_sizes.back() = l - bucket_sizes.back();
-
-    }
 
   } // local namespace
 
@@ -1104,6 +1104,70 @@ namespace imxx
       BL_BENCH_END(distribute, "unpermute_inplace", input.size());
     }
     BL_BENCH_REPORT_MPI_NAMED(distribute, "imxx:distribute", _comm);
+
+  }
+
+  template <typename V, typename ToRank, typename SIZE>
+  void distribute(::std::vector<V>& input, ToRank const & to_rank,
+                  ::std::vector<SIZE> & recv_counts,
+                  ::std::vector<V>& output,
+                  ::mxx::comm const &_comm) {
+    BL_BENCH_INIT(distribute);
+
+    BL_BENCH_COLLECTIVE_START(distribute, "empty", _comm);
+    bool empty = input.size() == 0;
+    empty = mxx::all_of(empty);
+    BL_BENCH_END(distribute, "empty", input.size());
+
+    if (empty) {
+      BL_BENCH_REPORT_MPI_NAMED(distribute, "imxx:distribute", _comm);
+      return;
+    }
+    // speed over mem use.  mxx all2allv already has to double memory usage. same as stable distribute.
+
+    BL_BENCH_START(distribute);
+    std::vector<SIZE> send_counts(_comm.size(), 0);
+    BL_BENCH_END(distribute, "alloc_map", input.size());
+
+    BL_BENCH_START(distribute);
+    if (output.capacity() < input.size()) output.clear();
+    output.resize(input.size());
+    output.swap(input);  // swap the 2.
+    BL_BENCH_END(distribute, "alloc_permute", output.size());
+
+    // bucketing
+    BL_BENCH_START(distribute);
+    size_t comm_size = _comm.size();
+    if (comm_size <= std::numeric_limits<uint8_t>::max()) {
+      imxx::local::bucketing_impl(output, to_rank, static_cast< uint8_t>(comm_size), send_counts, input, 0, output.size());
+    } else if (comm_size <= std::numeric_limits<uint16_t>::max()) {
+      imxx::local::bucketing_impl(output, to_rank, static_cast<uint16_t>(comm_size), send_counts, input, 0, output.size());
+    } else if (comm_size <= std::numeric_limits<uint32_t>::max()) {
+      imxx::local::bucketing_impl(output, to_rank, static_cast<uint32_t>(comm_size), send_counts, input, 0, output.size());
+    } else {
+      imxx::local::bucketing_impl(output, to_rank, static_cast<uint64_t>(comm_size), send_counts, input, 0, output.size());
+    }
+    BL_BENCH_END(distribute, "bucket", input.size());
+
+
+    // distribute (communication part)
+    BL_BENCH_START(distribute);
+    recv_counts.resize(_comm.size());
+    mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
+    size_t total = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
+    BL_BENCH_END(distribute, "a2a_count", recv_counts.size());
+
+    BL_BENCH_START(distribute);
+    // now resize output
+    if (output.capacity() < total) output.clear();
+    output.resize(total);
+    BL_BENCH_END(distribute, "realloc_out", output.size());
+
+    BL_BENCH_START(distribute);
+    mxx::all2allv(input.data(), send_counts, output.data(), recv_counts, _comm);
+    BL_BENCH_END(distribute, "a2a", output.size());
+
+    BL_BENCH_REPORT_MPI_NAMED(distribute, "imxx:distribute_bucket", _comm);
 
   }
 
