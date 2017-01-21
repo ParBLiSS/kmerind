@@ -651,12 +651,12 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               this->local_sort();  // ensure data is locally sorted
               BL_BENCH_END(find, "local_sort", this->local_size());
 
-              // keep unique keys
-              BL_BENCH_START(find);
-              ::fsc::sorted_unique(keys, sorted_input,
-            		              				  typename Base::StoreTransformedFunc(),
-            		              				  typename Base::StoreTransformedEqual());
-              BL_BENCH_END(find, "uniq1", keys.size());
+//              // keep unique keys
+//              BL_BENCH_START(find);
+//              ::fsc::sorted_unique(keys, sorted_input,
+//            		              				  typename Base::StoreTransformedFunc(),
+//            		              				  typename Base::StoreTransformedEqual());
+//              BL_BENCH_END(find, "uniq1", keys.size());
 
 
 
@@ -806,13 +806,13 @@ using SortedMapParams = ::dsc::DistributedMapParams<
               this->local_sort();
               BL_BENCH_END(find, "local_sort", this->local_size());
 
-
-              // keep unique keys
-              BL_BENCH_START(find);
-              ::fsc::sorted_unique(keys, sorted_input,
-    				  typename Base::StoreTransformedFunc(),
-    				  typename Base::StoreTransformedEqual());
-              BL_BENCH_END(find, "uniq1", keys.size());
+//
+//              // keep unique keys
+//              BL_BENCH_START(find);
+//              ::fsc::sorted_unique(keys, sorted_input,
+//    				  typename Base::StoreTransformedFunc(),
+//    				  typename Base::StoreTransformedEqual());
+//              BL_BENCH_END(find, "uniq1", keys.size());
 
               BL_BENCH_START(find);
               results.reserve(keys.size());                   // TODO:  should estimate coverage.
@@ -1095,13 +1095,13 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             this->local_sort();
             BL_BENCH_END(count, "local_sort", this->local_size());
 
-            BL_BENCH_START(count);
-            // keep unique keys
-            if (remove_duplicate)
-				::fsc::sorted_unique(keys, sorted_input,
-					  typename Base::StoreTransformedFunc(),
-					  typename Base::StoreTransformedEqual());
-            BL_BENCH_END(count, "uniq1", keys.size());
+//            BL_BENCH_START(count);
+//            // keep unique keys
+//            if (remove_duplicate)
+//				::fsc::sorted_unique(keys, sorted_input,
+//					  typename Base::StoreTransformedFunc(),
+//					  typename Base::StoreTransformedEqual());
+//            BL_BENCH_END(count, "uniq1", keys.size());
 
           BL_BENCH_START(count);
           results.reserve(keys.size());

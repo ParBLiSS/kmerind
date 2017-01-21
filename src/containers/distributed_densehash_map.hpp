@@ -480,12 +480,6 @@ namespace dsc  // distributed std container
 
           } else {
 
-            BL_BENCH_START(find);
-            // keep unique keys
-            ::fsc::unique(keys, sorted_input,
-    				typename Base::StoreTransformedFunc(),
-    				typename Base::StoreTransformedEqual());
-            BL_BENCH_END(find, "uniq1", keys.size());
 
             // memory is constrained.  find EXACT count.
             BL_BENCH_START(find);
@@ -618,13 +612,6 @@ namespace dsc  // distributed std container
             BL_BENCH_END(find, "a2a2", results.size());
 
           } else {
-
-            BL_BENCH_START(find);
-            // keep unique keys
-            ::fsc::unique(keys, sorted_input,
-            		typename Base::StoreTransformedFunc(),
-            		typename Base::StoreTransformedEqual());
-            BL_BENCH_END(find, "uniq1", keys.size());
 
             BL_BENCH_START(find);
             results.reserve(keys.size());                   // TODO:  should estimate coverage.
@@ -769,12 +756,6 @@ namespace dsc  // distributed std container
 
           } else {
 
-            BL_BENCH_START(find);
-            // keep unique keys
-            ::fsc::unique(keys, sorted_input,
-            		typename Base::StoreTransformedFunc(),
-            		typename Base::StoreTransformedEqual());
-            BL_BENCH_END(find, "uniq1", keys.size());
 
             BL_BENCH_START(find);
             results.reserve(keys.size());                   // TODO:  should estimate coverage.
@@ -1143,18 +1124,19 @@ namespace dsc  // distributed std container
           this->transform_input(keys);
           BL_BENCH_END(count, "transform_intput", keys.size());
 
+          if (remove_duplicate) {
+      		BL_BENCH_START(count);
+      		::fsc::unique(keys, sorted_input,
+      						typename Base::StoreTransformedFunc(),
+      						typename Base::StoreTransformedEqual());
+      		BL_BENCH_END(count, "unique", keys.size());
+          }
 
           if (this->comm.size() > 1) {
 
             // distribute (communication part)
 
-            if (remove_duplicate) {
-        		BL_BENCH_START(count);
-        		::fsc::unique(keys, sorted_input,
-        						typename Base::StoreTransformedFunc(),
-        						typename Base::StoreTransformedEqual());
-        		BL_BENCH_END(count, "unique", keys.size());
-            }
+
 
             BL_BENCH_COLLECTIVE_START(count, "dist_query", this->comm);
             // distribute (communication part)
@@ -1201,15 +1183,6 @@ namespace dsc  // distributed std container
 
 
           } else {
-
-            BL_BENCH_START(count);
-            if (remove_duplicate) {
-				// keep unique keys
-				::fsc::unique(keys, sorted_input,
-						typename Base::StoreTransformedFunc(),
-						typename Base::StoreTransformedEqual());
-            }
-            BL_BENCH_END(count, "uniq1", keys.size());
 
 
             BL_BENCH_START(count);
@@ -1259,16 +1232,17 @@ namespace dsc  // distributed std container
           this->transform_input(keys);
           BL_BENCH_END(count, "transform_intput", keys.size());
 
+          if (remove_duplicate) {
+      		BL_BENCH_START(count);
+      		::fsc::unique(keys, sorted_input,
+      						typename Base::StoreTransformedFunc(),
+      						typename Base::StoreTransformedEqual());
+      		BL_BENCH_END(count, "unique", keys.size());
+          }
+
 
           if (this->comm.size() > 1) {
 
-              if (remove_duplicate) {
-          		BL_BENCH_START(count);
-          		::fsc::unique(keys, sorted_input,
-          						typename Base::StoreTransformedFunc(),
-          						typename Base::StoreTransformedEqual());
-          		BL_BENCH_END(count, "unique", keys.size());
-              }
 
               BL_BENCH_COLLECTIVE_START(count, "dist_query", this->comm);
               // distribute (communication part)
@@ -1313,15 +1287,6 @@ namespace dsc  // distributed std container
             mxx::all2allv(results, recv_counts, this->comm).swap(results);
             BL_BENCH_END(count, "a2a2", results.size());
           } else {
-
-            BL_BENCH_START(count);
-            if (remove_duplicate) {
-				// keep unique keys
-              ::fsc::unique(keys, sorted_input,
-                            typename Base::StoreTransformedFunc(),
-                            typename Base::StoreTransformedEqual());
-            }
-            BL_BENCH_END(count, "uniq1", keys.size());
 
 
             BL_BENCH_START(count);
