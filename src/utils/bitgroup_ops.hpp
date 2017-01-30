@@ -23,9 +23,9 @@
 
 #include "utils/logging.h"
 #include "bliss-config.hpp"
-#ifdef USE_SIMD
+//#ifdef USE_SIMD
 #include <x86intrin.h>   // all intrinsics.  will be enabled based on compiler flag such as __SSSE3__ internally.
-#endif
+//#endif
 
 // needed by clang else it does not know where to get the bswap function.  however, conflicts with farmhash.cc
 //#include <byteswap.h>
