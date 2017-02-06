@@ -1057,41 +1057,41 @@ namespace imxx
     BL_BENCH_START(distribute);
     std::vector<SIZE> send_counts(_comm.size(), 0);
     i2o.resize(input.size());
-    BL_BENCH_END(distribute, "alloc_map", input.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "alloc_map", input.size(), _comm);
 
     // bucketing
     BL_BENCH_START(distribute);
     imxx::local::assign_to_buckets(input, to_rank, _comm.size(), send_counts, i2o, 0, input.size());
-    BL_BENCH_END(distribute, "bucket", input.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "bucket", input.size(), _comm);
 
     BL_BENCH_START(distribute);
     // distribute (communication part)
     imxx::local::bucket_to_permutation(send_counts, i2o, 0, input.size());
-    BL_BENCH_END(distribute, "to_pos", input.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "to_pos", input.size(), _comm);
 
     BL_BENCH_START(distribute);
     if (output.capacity() < input.size()) output.clear();
     output.resize(input.size());
     output.swap(input);  // swap the 2.
-    BL_BENCH_END(distribute, "alloc_permute", output.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "alloc_permute", output.size(), _comm);
 
     BL_BENCH_START(distribute);
     // distribute (communication part)
     imxx::local::permute(output.begin(), output.end(), i2o.begin(), input.begin(), 0);  // input now holds permuted entries.
-    BL_BENCH_END(distribute, "permute", input.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "permute", input.size(), _comm);
 
     // distribute (communication part)
     BL_BENCH_START(distribute);
     recv_counts.resize(_comm.size());
     mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
     size_t total = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
-    BL_BENCH_END(distribute, "a2a_count", recv_counts.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "a2a_count", recv_counts.size(), _comm);
 
     BL_BENCH_START(distribute);
     // now resize output
     if (output.capacity() < total) output.clear();
     output.resize(total);
-    BL_BENCH_END(distribute, "realloc_out", output.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "realloc_out", output.size(), _comm);
 
     BL_BENCH_START(distribute);
     mxx::all2allv(input.data(), send_counts, output.data(), recv_counts, _comm);
@@ -1133,7 +1133,7 @@ namespace imxx
     if (output.capacity() < input.size()) output.clear();
     output.resize(input.size());
     output.swap(input);  // swap the 2.
-    BL_BENCH_END(distribute, "alloc_permute", output.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "alloc_permute", output.size(), _comm);
 
     // bucketing
     BL_BENCH_START(distribute);
@@ -1147,7 +1147,7 @@ namespace imxx
     } else {
       imxx::local::bucketing_impl(output, to_rank, static_cast<uint64_t>(comm_size), send_counts, input, 0, output.size());
     }
-    BL_BENCH_END(distribute, "bucket", input.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "bucket", input.size(), _comm);
 
 
     // distribute (communication part)
@@ -1155,13 +1155,13 @@ namespace imxx
     recv_counts.resize(_comm.size());
     mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
     size_t total = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
-    BL_BENCH_END(distribute, "a2a_count", recv_counts.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "a2a_count", recv_counts.size(), _comm);
 
     BL_BENCH_START(distribute);
     // now resize output
     if (output.capacity() < total) output.clear();
     output.resize(total);
-    BL_BENCH_END(distribute, "realloc_out", output.size());
+    BL_BENCH_COLLECTIVE_END(distribute, "realloc_out", output.size(), _comm);
 
     BL_BENCH_START(distribute);
     mxx::all2allv(input.data(), send_counts, output.data(), recv_counts, _comm);
@@ -1199,7 +1199,7 @@ namespace imxx
     BL_BENCH_START(undistribute);
     if (output.capacity() < total) output.clear();
     output.resize(total);
-    BL_BENCH_END(undistribute, "realloc_out", output.size());
+    BL_BENCH_COLLECTIVE_END(undistribute, "realloc_out", output.size(), _comm);
 
     BL_BENCH_START(undistribute);
     mxx::all2allv(input.data(), recv_counts, output.data(), send_counts, _comm);
@@ -1243,12 +1243,12 @@ namespace imxx
       BL_BENCH_START(distribute);
       std::vector<SIZE> send_counts(_comm.size(), 0);
       i2o.resize(input.size());
-      BL_BENCH_END(distribute, "alloc_map", input.size());
+      BL_BENCH_COLLECTIVE_END(distribute, "alloc_map", input.size(), _comm);
 
       // bucketing
       BL_BENCH_START(distribute);
       imxx::local::assign_to_buckets(input, to_rank, _comm.size(), send_counts, i2o, 0, input.size());
-      BL_BENCH_END(distribute, "bucket", input.size());
+      BL_BENCH_COLLECTIVE_END(distribute, "bucket", input.size(), _comm);
 
       // compute minimum block size.
       BL_BENCH_START(distribute);
@@ -1260,7 +1260,7 @@ namespace imxx
       BL_BENCH_START(distribute);
       ::imxx::local::bucket_to_block_permutation(min_bucket_size, 1UL, send_counts, i2o, 0, input.size());
       SIZE first_part = _comm.size() * min_bucket_size;
-      BL_BENCH_END(distribute, "to_pos", input.size());
+      BL_BENCH_COLLECTIVE_END(distribute, "to_pos", input.size(), _comm);
 
       // compute receive counts and total
       BL_BENCH_START(distribute);
@@ -1268,27 +1268,27 @@ namespace imxx
       mxx::all2all(send_counts.data(), 1, recv_counts.data(), _comm);
       SIZE total = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
       total += first_part;
-      BL_BENCH_END(distribute, "a2av_count", total);
+      BL_BENCH_COLLECTIVE_END(distribute, "a2av_count", total, _comm);
 
       BL_BENCH_START(distribute);
       if (output.capacity() < input.size()) output.clear();
       output.resize(input.size());
       output.swap(input);
-      BL_BENCH_END(distribute, "alloc_out", output.size());
+      BL_BENCH_COLLECTIVE_END(distribute, "alloc_out", output.size(), _comm);
 
       // permute
       BL_BENCH_START(distribute);
       imxx::local::permute(output.begin(), output.end(), i2o.begin(), input.begin(), 0);
-      BL_BENCH_END(distribute, "permute", input.size());
+      BL_BENCH_COLLECTIVE_END(distribute, "permute", input.size(), _comm);
 
       BL_BENCH_START(distribute);
       if (output.capacity() < total) output.clear();
       output.resize(total);
-      BL_BENCH_END(distribute, "alloc_out", output.size());
+      BL_BENCH_COLLECTIVE_END(distribute, "alloc_out", output.size(), _comm);
 
       BL_BENCH_START(distribute);
       block_all2all(input, min_bucket_size, output, 0, 0, _comm);
-      BL_BENCH_END(distribute, "a2a", first_part);
+      BL_BENCH_COLLECTIVE_END(distribute, "a2a", first_part, _comm);
 
 
       BL_BENCH_START(distribute);
@@ -1337,12 +1337,12 @@ namespace imxx
     std::vector<size_t> send_counts(recv_counts.size());
     mxx::all2all(recv_counts.data(), 1, send_counts.data(), _comm);
     second_part = std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0));
-    BL_BENCH_END(undistribute, "recv_counts", second_part);
+    BL_BENCH_COLLECTIVE_END(undistribute, "recv_counts", second_part, _comm);
 
     BL_BENCH_START(undistribute);
     if (output.capacity() < (first_part + second_part)) output.clear();
     output.resize(first_part + second_part);
-    BL_BENCH_END(undistribute, "realloc_out", output.size());
+    BL_BENCH_COLLECTIVE_END(undistribute, "realloc_out", output.size(), _comm);
 
     BL_BENCH_START(undistribute);
     mxx::all2all(input.data(), first_part / _comm.size(), output.data(), _comm);
