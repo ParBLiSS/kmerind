@@ -50,16 +50,33 @@ endmacro()
 
 
 # for intel compiler, when gcc is changed.
-function(update_gcc_binary varname cacheaccess varval) 
+function(update_gcc_binary varname cacheaccess varval)
+	message(STATUS "var name ${varname} val ${varval}")
+
+  if (NOT "${varval}" STREQUAL "")
+  
   EXECUTE_PROCESS( COMMAND ${varval} --version OUTPUT_VARIABLE gcc_full_version_string )
-  string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
+  string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION "${gcc_full_version_string}")
  
   # icc 16 and 17 fails when compiling test_kmer_reverse_op_DNA5 with gcc 5.3 and 5.4 headers.  4.9 is okay.
   if (GCC_VERSION VERSION_LESS 4.8.1 OR GCC_VERSION VERSION_EQUAL 5.0 OR GCC_VERSION VERSION_GREATER 5.0)
     message(FATAL_ERROR "${PROJECT_NAME} is using Intel compiler, which requires gcc headers from 4.8.1+, but not 5.x or 6.x. version: ${GCC_VERSION}")
   endif ()
-  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  
+  #update
+  message(STATUS "CXX FLAGS: ${CMAKE_CXX_FLAGS}")
+  string(FIND "${CMAKE_CXX_FLAGS}" "-gcc-name=" gcc_name_found)
+  message(STATUS " found gcc name: ${gcc_name_found}")
+  if ("${gcc_name_found}" MATCHES "-1")
+	  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gcc-name=${GCC_BINRARY}")  
+	  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -gcc-name=${GCC_BINRARY}")  
+  else()
+	  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+	  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  endif()
+  message(STATUS "CXX FLAGS after: ${CMAKE_CXX_FLAGS}")
+  
+  endif()
 endfunction(update_gcc_binary varname cacheaccess varval)
 
 
@@ -78,11 +95,23 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
   SET(SUPPORTS_COVERAGE OFF CACHE INTERNAL "compiler supports coverage?")
 
 # intel dependency on gcc.  should search.
+	  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gcc-name=gcc")  
+	  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -gcc-name=gcc")  
+
+
   set(GCC_BINARY "gcc" CACHE FILEPATH "gcc binary.  icc/icpc uses gcc headers.  Kmerind requires gcc 4.8.1+.  Max gcc version tested is 4.9.x")
   variable_watch(GCC_BINARY update_gcc_binary)
-  
-  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  message(STATUS "CXX FLAGS: ${CMAKE_CXX_FLAGS}")
+  string(FIND "${CMAKE_CXX_FLAGS}" "-gcc-name=" gcc_name_found)
+  message(STATUS " found gcc name: ${gcc_name_found}")
+  if ("${gcc_name_found}" MATCHES "-1")
+	  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gcc-name=${GCC_BINRARY}")  
+	  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -gcc-name=${GCC_BINRARY}")  
+  else()
+	  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+	  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  endif()
+  message(STATUS "CXX FLAGS after: ${CMAKE_CXX_FLAGS}")
  
   SET(EXTRA_WARNING_FLAGS "-Wextra -Wno-unused-parameter -Wcheck")
   SET(TYPE_CONVERSION_WARNING_FLAGS "-Wconversion")
