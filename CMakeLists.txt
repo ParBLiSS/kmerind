@@ -71,7 +71,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
   SET(SUPPORTS_COVERAGE OFF CACHE INTERNAL "compiler supports coverage?")
 
 # intel dependency on gcc.  should search.
-  set(GCC_BINARY "gcc" CACHE PATH "gcc binary.  icc/icpc uses gcc headers.  Kmerind requires gcc 4.8.1+.  Max gcc version tested is 4.9.x")
+  set(GCC_BINARY "gcc" CACHE FILEPATH "gcc binary.  icc/icpc uses gcc headers.  Kmerind requires gcc 4.8.1+.  Max gcc version tested is 4.9.x")
   variable_watch(GCC_BINARY update_gcc_binary)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gcc-name=${GCC_BINARY}")
  
