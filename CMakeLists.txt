@@ -12,13 +12,32 @@ INCLUDE(CMakeDependentOption)
 
 ##### General Compilation Settings
 
+
+message(AUTHOR_WARNING "cmake cxx flags. ${CMAKE_CXX_FLAGS}")
+message(AUTHOR_WARNING "cmake cxx debug flags. ${CMAKE_CXX_FLAGS_DEBUG}")
+message(AUTHOR_WARNING "cmake cxx flags release. ${CMAKE_CXX_FLAGS_RELEASE}")
+message(AUTHOR_WARNING "cmake cxx flags relwithdebinfo. ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+
+
 ### REQUIRE C++11
 # Initialize CXXFLAGS.
 #add_definitions(-Wall -Wuninitialized -std=c++11 -fPIC)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wuninitialized -std=c++11 -fPIC")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG -funroll-loops")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O3 -funroll-loops -g")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -funroll-loops")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -funroll-loops -g")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wuninitialized -fPIC")
+set(CMAKE_C_FLAGS_DEBUG "-g -O0")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -funroll-loops")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -funroll-loops -g")
+
+
+message(AUTHOR_WARNING "cmake cxx flags. ${CMAKE_CXX_FLAGS}")
+message(AUTHOR_WARNING "cmake cxx debug flags. ${CMAKE_CXX_FLAGS_DEBUG}")
+message(AUTHOR_WARNING "cmake cxx flags release. ${CMAKE_CXX_FLAGS_RELEASE}")
+message(AUTHOR_WARNING "cmake cxx flags relwithdebinfo. ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+
+
 
 set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
@@ -39,13 +58,13 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
   SET(SUPPORTS_SANITIZER OFF CACHE INTERNAL "compiler supports sanitizer?")
   SET(SUPPORTS_COVERAGE OFF CACHE INTERNAL "compiler supports coverage?")
 
-# intel dependency on gcc.  not compatible with gcc 5.  should search.
-  set(GCC_BINARY "/usr/bin/gcc" CACHE PATH "Path to gcc binary. Requires version 4.9 or earlier.  Intel compiler uses GCC headers.")
+# intel dependency on gcc.  should search.
+  set(GCC_BINARY "gcc" CACHE PATH "Path to gcc binary.  icc/icpc uses gcc headers.  Kmerind requires gcc 4.8.1+.  Max gcc version support depends on icc/icpc")
   EXECUTE_PROCESS( COMMAND ${GCC_BINARY} --version OUTPUT_VARIABLE gcc_full_version_string )
   string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
   
-  if (GCC_VERSION VERSION_GREATER 5.0.0 OR GCC_VERSION VERSION_EQUAL 5.0.0)
-    message(FATAL_ERROR "${PROJECT_NAME} is using Intel compiler, which requires gcc headers from version 4.9 or earlier.")
+  if (GCC_VERSION VERSION_LESS 4.8.1)
+    message(FATAL_ERROR "${PROJECT_NAME} is using Intel compiler, which requires gcc headers from version 4.8.1 or later.")
   endif ()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gcc-name=${GCC_BINARY}")
 
@@ -75,7 +94,7 @@ Found ${CMAKE_CXX_COMPILER_VERSION}")
   SET(TYPE_CONVERSION_WARNING_FLAGS "-Wdouble-promotion -Wconversion -Wsign-conversion -Wcast-qual -Wuseless-cast")
   SET(SUGGESTION_WARNING_FLAGS "-Wsuggest-override -Wsuggest-final-types -Wsuggest-final-methods")
   # gcc 4.9 colorize via: -fdiagnostics-color=always
-  
+
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
   # these 3 lines are needed because cmake < 2.8.10
   EXECUTE_PROCESS( COMMAND ${CMAKE_CXX_COMPILER} --version OUTPUT_VARIABLE
@@ -363,9 +382,23 @@ endif (MPI_FOUND)
 
 #### OpenMP
 include(FindOpenMP)
-
+# FindOpenMP defines the OpenMP_C_FLAGS and OpenMP_CXX_FLAGS.
 if (OPENMP_FOUND)
     message(STATUS "Found OpenMP")
+
+
+# for intel 17, -openmp is being deprecated and -qopenmp is being phased in.
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
+# below 2 lines are only for cmake < 2.8.10
+   execute_process(
+     COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE BLISS_CXX_COMPILER_VERSION)
+
+  if(BLISS_CXX_COMPILER_VERSION VERSION_GREATER "17.0" OR BLISS_CXX_COMPILER_VERSION VERSION_EQUAL "17.0" )
+     SET(OpenMP_C_FLAGS "-qopenmp")
+    SET(OpenMP_CXX_FLAGS "-qopenmp")
+  endif()
+endif()
+
 else(OPENMP_FOUND)
 	message(STATUS "NO OpenMP.  check compiler version now.")
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -393,6 +426,9 @@ CMAKE_DEPENDENT_OPTION(USE_OPENMP "Build with OpenMP support" ON
                         "OPENMP_FOUND" OFF)
 variable_watch(USE_OPENMP update_logging_engine)
 
+
+message(STATUS "using ${CMAKE_CXX_COMPILER_ID} compiler.  set openmp flags to ${OpenMP_CXX_FLAGS}")
+
 if (USE_OPENMP)
     # add OpenMP flags to compiler flags
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
@@ -401,6 +437,8 @@ if (USE_OPENMP)
 else (USE_OPENMP)
     set(OPENMP_DEFINE "")
 endif (USE_OPENMP)
+
+
 
 #### native hardware architecture
 OPTION(USE_SIMD_IF_AVAILABLE "Enable SIMD instructions, if available on hardware. (-march=native)" ON)
