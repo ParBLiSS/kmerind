@@ -43,6 +43,12 @@ set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
 #set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH}) 
 
+
+macro(replace_string_pattern var old new)
+  string(REPLACE "${old}" "${new}" $var "${CMAKE_CXX_FLAGS}")
+endmacro()
+
+
 # for intel compiler, when gcc is changed.
 function(update_gcc_binary varname cacheaccess varval) 
   EXECUTE_PROCESS( COMMAND ${varval} --version OUTPUT_VARIABLE gcc_full_version_string )
@@ -52,7 +58,8 @@ function(update_gcc_binary varname cacheaccess varval)
   if (GCC_VERSION VERSION_LESS 4.8.1 OR GCC_VERSION VERSION_EQUAL 5.0 OR GCC_VERSION VERSION_GREATER 5.0)
     message(FATAL_ERROR "${PROJECT_NAME} is using Intel compiler, which requires gcc headers from 4.8.1+, but not 5.x or 6.x. version: ${GCC_VERSION}")
   endif ()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gcc-name=${GCC_BINARY}")
+  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
 endfunction(update_gcc_binary varname cacheaccess varval)
 
 
@@ -73,7 +80,9 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
 # intel dependency on gcc.  should search.
   set(GCC_BINARY "gcc" CACHE FILEPATH "gcc binary.  icc/icpc uses gcc headers.  Kmerind requires gcc 4.8.1+.  Max gcc version tested is 4.9.x")
   variable_watch(GCC_BINARY update_gcc_binary)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gcc-name=${GCC_BINARY}")
+  
+  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  string(REGEX REPLACE "(.*)-gcc-name=[^ ]*(.*)" "\\1-gcc-name=${GCC_BINARY}\\2" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
  
   SET(EXTRA_WARNING_FLAGS "-Wextra -Wno-unused-parameter -Wcheck")
   SET(TYPE_CONVERSION_WARNING_FLAGS "-Wconversion")
