@@ -13,10 +13,10 @@ INCLUDE(CMakeDependentOption)
 ##### General Compilation Settings
 
 
-message(AUTHOR_WARNING "cmake cxx flags. ${CMAKE_CXX_FLAGS}")
-message(AUTHOR_WARNING "cmake cxx debug flags. ${CMAKE_CXX_FLAGS_DEBUG}")
-message(AUTHOR_WARNING "cmake cxx flags release. ${CMAKE_CXX_FLAGS_RELEASE}")
-message(AUTHOR_WARNING "cmake cxx flags relwithdebinfo. ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+message(STATUS "cmake cxx flags. ${CMAKE_CXX_FLAGS}")
+message(STATUS "cmake cxx debug flags. ${CMAKE_CXX_FLAGS_DEBUG}")
+message(STATUS "cmake cxx flags release. ${CMAKE_CXX_FLAGS_RELEASE}")
+message(STATUS "cmake cxx flags relwithdebinfo. ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
 
 
 ### REQUIRE C++11
@@ -32,16 +32,28 @@ set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -funroll-loops")
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -funroll-loops -g")
 
 
-message(AUTHOR_WARNING "cmake cxx flags. ${CMAKE_CXX_FLAGS}")
-message(AUTHOR_WARNING "cmake cxx debug flags. ${CMAKE_CXX_FLAGS_DEBUG}")
-message(AUTHOR_WARNING "cmake cxx flags release. ${CMAKE_CXX_FLAGS_RELEASE}")
-message(AUTHOR_WARNING "cmake cxx flags relwithdebinfo. ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+message(STATUS "cmake cxx flags. ${CMAKE_CXX_FLAGS}")
+message(STATUS "cmake cxx debug flags. ${CMAKE_CXX_FLAGS_DEBUG}")
+message(STATUS "cmake cxx flags release. ${CMAKE_CXX_FLAGS_RELEASE}")
+message(STATUS "cmake cxx flags relwithdebinfo. ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
 
 
 
 set(EXT_PROJECTS_DIR ${PROJECT_SOURCE_DIR}/ext)
 
 #set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH}) 
+
+# for intel compiler, when gcc is changed.
+function(update_gcc_binary varname cacheaccess varval) 
+  EXECUTE_PROCESS( COMMAND ${varval} --version OUTPUT_VARIABLE gcc_full_version_string )
+  string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
+ 
+  # icc 16 and 17 fails when compiling test_kmer_reverse_op_DNA5 with gcc 5.3 and 5.4 headers.  4.9 is okay.
+  if (GCC_VERSION VERSION_LESS 4.8.1 OR GCC_VERSION VERSION_EQUAL 5.0 OR GCC_VERSION VERSION_GREATER 5.0)
+    message(FATAL_ERROR "${PROJECT_NAME} is using Intel compiler, which requires gcc headers from 4.8.1+, but not 5.x or 6.x. version: ${GCC_VERSION}")
+  endif ()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gcc-name=${GCC_BINARY}")
+endfunction(update_gcc_binary varname cacheaccess varval)
 
 
 # Compiler-specific C++11 activation.
@@ -59,15 +71,10 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
   SET(SUPPORTS_COVERAGE OFF CACHE INTERNAL "compiler supports coverage?")
 
 # intel dependency on gcc.  should search.
-  set(GCC_BINARY "gcc" CACHE PATH "Path to gcc binary.  icc/icpc uses gcc headers.  Kmerind requires gcc 4.8.1+.  Max gcc version support depends on icc/icpc")
-  EXECUTE_PROCESS( COMMAND ${GCC_BINARY} --version OUTPUT_VARIABLE gcc_full_version_string )
-  string (REGEX REPLACE ".* ([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" GCC_VERSION ${gcc_full_version_string})
-  
-  if (GCC_VERSION VERSION_LESS 4.8.1)
-    message(FATAL_ERROR "${PROJECT_NAME} is using Intel compiler, which requires gcc headers from version 4.8.1 or later.")
-  endif ()
+  set(GCC_BINARY "gcc" CACHE PATH "gcc binary.  icc/icpc uses gcc headers.  Kmerind requires gcc 4.8.1+.  Max gcc version tested is 4.9.x")
+  variable_watch(GCC_BINARY update_gcc_binary)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gcc-name=${GCC_BINARY}")
-
+ 
   SET(EXTRA_WARNING_FLAGS "-Wextra -Wno-unused-parameter -Wcheck")
   SET(TYPE_CONVERSION_WARNING_FLAGS "-Wconversion")
   SET(SUGGESTION_WARNING_FLAGS "-Wremarks")
