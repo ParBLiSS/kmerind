@@ -31,6 +31,7 @@
 #include <mxx/datatypes.hpp>
 #include <mxx/comm.hpp>
 #include <mxx/collective.hpp>
+#include <mxx/samplesort.hpp>
 
 #include "utils/benchmark_utils.hpp"
 #include "utils/function_traits.hpp"
@@ -2105,6 +2106,641 @@ namespace imxx
 
 
 // TODO mpi3 versions?
+
+
+// ============== specialized parallel sample sorting for indexing. adapted from mxx =============
+
+
+  template <typename V, typename _Compare>
+  std::vector<size_t> stable_split(::std::vector<V>& input, _Compare comp,
+                                   const std::vector<V>& splitters,
+                                   const mxx::comm& comm) {
+      // 5. locally find splitter positions in data
+      //    (if an identical splitter appears at least three times (or more),
+      //    then split the intermediary buckets evenly) => send_counts
+      MXX_ASSERT(splitters.size() == (size_t) comm.size() - 1);
+
+      // check if there are repeated entries in local_splitters.
+      if (splitters.size() > 0) {
+        auto it = splitters.cbegin();
+        auto next = it;  ++next;
+        while (next != splitters.cend()) {
+          if (!comp(*it, *next)) {  // equal. since local_splitters are sorted, don't need to check for next < it
+            throw std::invalid_argument("ERROR: kmers for indexing should be somewhat evenly distributed so that there is no range spanning an entire processor.");
+          }
+          it = next;
+          ++next;
+        }
+      }
+
+
+      std::vector<size_t> send_counts(comm.size(), 0);
+      auto pos = input.cbegin();
+      auto splitter_end = pos;
+      for (std::size_t i = 0; i < splitters.size(); ++i) {
+          // get the range of equal elements
+          splitter_end = std::upper_bound(pos, input.cend(), splitters[i], comp);
+
+          // assign smaller elements to processor left of splitter (= `i`)
+          send_counts[i] = std::distance(pos, splitter_end);
+          pos = splitter_end;
+      }
+
+      // send last elements to last processor
+      send_counts[comm.size() - 1] = std::distance(pos, input.cend());
+      MXX_ASSERT(std::accumulate(send_counts.begin(), send_counts.end(), static_cast<size_t>(0)) == input.size());
+      return send_counts;
+  }
+
+
+  /**
+   * @brief modified version of mxx::samplesort with some optimizations
+   * @details  This version does not attempt to rebalance after parallel sort.
+   *    NOTE: if we want load balance, balance BEFORE calling this routine.
+   *    ASSUMPTION: data is close to uniformly distributed
+   *    ASSUMPTION: where data is not uniformly distributed, sampling results in good enough splits
+   *
+   *    return local splitters
+   */
+  template<bool _Stable = false, typename V, typename _Compare>
+  std::vector<V> samplesort(::std::vector<V>& input, ::std::vector<V>& output, _Compare comp, const mxx::comm& comm) {
+      // get value type of underlying data
+
+
+
+    BL_BENCH_INIT(imxx_samplesort);
+
+
+    bool empty = ::mxx::all_of(input.size() == 0, comm);
+    if (empty) {
+      BL_BENCH_REPORT_MPI_NAMED(imxx_samplesort, "noop-samplesort", comm);
+
+      return std::vector<V>();
+    }
+
+
+      int p = comm.size();
+
+
+
+      BL_BENCH_COLLECTIVE_START(imxx_samplesort, "init", comm);
+
+      // perform local (stable) sorting
+      if (_Stable)
+          std::stable_sort(input.begin(), input.end(), comp);
+      else
+          std::sort(input.begin(), input.end(), comp);
+
+      BL_BENCH_COLLECTIVE_END(imxx_samplesort, "local sort", input.size(), comm);
+
+      // sequential case: we're done
+      if (p == 1) {
+          output.resize(input.size());
+          std::copy(input.begin(), input.end(), output.begin());
+          BL_BENCH_REPORT_MPI_NAMED(imxx_samplesort, "p1-samplesort", comm);
+          return std::vector<V>();
+      }
+
+
+
+      BL_BENCH_START(imxx_samplesort);
+
+      // local size
+      std::size_t local_size = input.size();
+
+      // check if we have a perfect block decomposition
+      std::size_t global_size = ::mxx::allreduce(local_size, comm);
+      ::mxx::partition::block_decomposition<std::size_t> mypart(global_size, p, comm.rank());
+      bool _AssumeBlockDecomp = ::mxx::all_of(local_size == mypart.local_size(), comm);
+
+      // sample sort
+      // 1. local sort
+      // 2. pick `s` samples regularly spaced on each processor
+      // 3. bitonic sort samples
+      // 4. allgather the last sample of each process -> splitters
+      // 5. locally find splitter positions in data
+      //    //NO (if an identical splitter appears twice, then split evenly)
+      //    => send_counts
+      // 6. distribute send_counts with all2all to get recv_counts
+      // 7. allocate enough space (may be more than previously allocated) for receiving
+      // 8. all2allv
+      // 9. local reordering (multiway-merge or again std::sort)
+      // A. equalizing distribution into original size (e.g.,block decomposition)
+      //    by sending elements to neighbors
+
+      // get splitters, using the method depending on whether the input consists
+      // of arbitrary decompositions or not
+      std::vector<V> local_splitters;
+      // number of samples
+      size_t s = p-1;
+      if(_AssumeBlockDecomp)
+          local_splitters = ::mxx::impl::sample_block_decomp(input.cbegin(), input.cend(), comp, s, comm);
+      else
+          local_splitters = ::mxx::impl::sample_arbit_decomp(input.cbegin(), input.cend(), comp, s, comm);
+
+      BL_BENCH_END(imxx_samplesort, "get_splitters", s);
+
+      BL_BENCH_START(imxx_samplesort);
+
+
+      // 5. locally find splitter positions in data
+      //    (if an identical splitter appears at least three times (or more),
+      //    then split the intermediary buckets evenly) => send_counts
+      std::vector<size_t> send_counts = imxx::stable_split(input, comp, local_splitters, comm);  // always do stable split
+      BL_BENCH_END(imxx_samplesort, "send_counts", send_counts.size());
+
+      BL_BENCH_START(imxx_samplesort);
+
+
+      std::vector<size_t> recv_counts = ::mxx::all2all(send_counts, comm);
+      std::size_t recv_n = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
+      MXX_ASSERT(!_AssumeBlockDecomp || (local_size <= (size_t)p || recv_n <= 2* local_size));
+
+      // reserve
+      if (output.capacity() < recv_n) output.clear();
+      output.resize(recv_n);
+      BL_BENCH_END(imxx_samplesort, "reserve", recv_n);
+
+      BL_BENCH_START(imxx_samplesort);
+
+
+      // TODO: use collective with iterators [begin,end) instead of pointers!
+      ::mxx::all2allv(input.data(), send_counts, output.data(), recv_counts, comm);
+      BL_BENCH_END(imxx_samplesort, "all2all", local_size);
+
+      BL_BENCH_START(imxx_samplesort);
+
+      // 9. local reordering
+      /* multiway-merge (using the implementation in __gnu_parallel) */
+      // if p = 2, then merge
+      if (p == 2) {
+        // always stable.
+        std::inplace_merge(output.begin(), output.begin() + recv_counts[0], output.end(), comp);
+
+      } else {
+
+        // allocate half of the total space.  merge for first half, compact, copy, run the second half, copy.
+
+  #ifdef MXX_USE_GCC_MULTIWAY_MERGE
+        // NOTE: uses recv_n / 2 temp storage.
+
+      if (recv_n > (size_t)p*p) {  // should not be local_size.
+
+        BL_BENCH_INIT(imxx_samplesort_merge);
+
+
+        BL_BENCH_START(imxx_samplesort_merge);
+
+
+        // prepare the sequence offsets
+          typedef typename std::vector<V>::iterator val_it;
+
+          std::vector<std::pair<val_it, val_it> > seqs(p);
+          std::vector<size_t> recv_displs = mxx::impl::get_displacements(recv_counts);
+          for (int i = 0; i < p; ++i) {
+              seqs[i].first = output.begin() + recv_displs[i];
+              seqs[i].second = seqs[i].first + recv_counts[i];
+          }
+
+          BL_BENCH_END(imxx_samplesort_merge, "merge_ranges", seqs.size());
+
+          BL_BENCH_START(imxx_samplesort_merge);
+
+          // allocate the size.
+          // TODO: reasonable values for the buffer?
+          std::size_t merge_n = (recv_n + 1) / 2;
+          std::vector<V> merge_buf(merge_n);
+          // auto tmp = std::get_temporary_buffer<V>(merge_n);
+
+          BL_BENCH_END(imxx_samplesort_merge, "merge_buf_alloc", merge_n);
+
+          BL_BENCH_START(imxx_samplesort_merge);
+
+
+          val_it start_merge_it = output.begin();
+
+          V* merge_buf_begin = merge_buf.data();
+
+          __gnu_parallel::sequential_tag seq_tag;
+
+          // 2 iterations.  unroll loop.
+          // first half.
+          // i)   merge at most `merge_n` many elements sequentially
+          if (_Stable)
+            __gnu_parallel::stable_multiway_merge(seqs.begin(), seqs.end(), merge_buf_begin, merge_n, comp, seq_tag);
+          else
+            __gnu_parallel::multiway_merge(seqs.begin(), seqs.end(), merge_buf_begin, merge_n, comp, seq_tag);
+
+          BL_BENCH_END(imxx_samplesort_merge, "merge1", merge_n);
+
+          BL_BENCH_START(imxx_samplesort_merge);
+
+
+          // ii)  compact the remaining elements in `output`
+          // TCP:  doing this a fixed number of times makes it linear in data size.  if the number of iterations is dependent on data size, then it becomes quadratic.
+          for (int i = p-1; i > 0; --i)
+          {
+              seqs[i-1].first = std::move_backward(seqs[i-1].first, seqs[i-1].second, seqs[i].first);
+              seqs[i-1].second = seqs[i].first;
+          }
+
+          BL_BENCH_END(imxx_samplesort_merge, "compact", std::distance(seqs[0].first, seqs[p-1].second));
+
+          BL_BENCH_START(imxx_samplesort_merge);
+
+
+          // iii) copy the output buffer `merge_n` elements back into `output`
+          //      `recv_elements`.
+          start_merge_it = std::copy(merge_buf.begin(), merge_buf.begin() + merge_n, start_merge_it);
+          assert(start_merge_it == seqs[0].first);
+          BL_BENCH_END(imxx_samplesort_merge, "copy1", merge_n);
+
+          BL_BENCH_START(imxx_samplesort_merge);
+
+
+          // now the second half.
+          merge_n = recv_n  - merge_n;
+
+          // i)   merge at most `local_size` many elements sequentially
+          if (_Stable)
+            __gnu_parallel::stable_multiway_merge(seqs.begin(), seqs.end(), merge_buf_begin, merge_n, comp, seq_tag);
+          else
+            __gnu_parallel::multiway_merge(seqs.begin(), seqs.end(), merge_buf_begin, merge_n, comp, seq_tag);
+
+          BL_BENCH_END(imxx_samplesort_merge, "merge2", merge_n);
+
+          BL_BENCH_START(imxx_samplesort_merge);
+
+          // iii) copy the output buffer `merge_n` elements back into `output`
+          //      `recv_elements`.
+          start_merge_it = std::move(merge_buf.begin(), merge_buf.begin() + merge_n, start_merge_it);
+          assert(start_merge_it == output.end());
+
+          BL_BENCH_END(imxx_samplesort_merge, "copy2", merge_n);
+
+          BL_BENCH_START(imxx_samplesort_merge);
+
+
+          // clean up
+          merge_buf.clear(); std::vector<V>().swap(merge_buf);
+
+          BL_BENCH_END(imxx_samplesort_merge, "merge_buf_dealloc", merge_n);
+
+          BL_BENCH_REPORT_MPI_NAMED(imxx_samplesort_merge, "imxx_samplesort_merge", comm);
+
+      } else
+  #endif
+      { // sorting based.
+          if (_Stable)
+              std::stable_sort(output.begin(), output.end(), comp);
+          else
+              std::sort(output.begin(), output.end(), comp);
+      }
+      } // p > 2
+
+      BL_BENCH_COLLECTIVE_END(imxx_samplesort, "local_merge", recv_n, comm);
+
+
+//      // A. equalizing distribution into original size (e.g.,block decomposition)
+//      //    by elements to neighbors
+//      //    and save elements into the original iterator positions
+//      if (_AssumeBlockDecomp)
+//          ::mxx::stable_distribute(recv_elements.begin(), recv_elements.end(), begin, comm);
+//      else
+//          ::mxx::redo_arbit_decomposition(recv_elements.begin(), recv_elements.end(), begin, local_size, comm);
+//
+//      SS_TIMER_END_SECTION("fix_partition");
+
+      BL_BENCH_REPORT_MPI_NAMED(imxx_samplesort, "imxx_samplesort", comm);
+
+      return local_splitters;
+  }
+
+
+
+  /**
+   * @brief modified version of mxx::samplesort with some optimizations
+   * @details  This version does not attempt to rebalance after parallel sort.
+   *    NOTE: if we want load balance, balance BEFORE calling this routine.
+   *    ASSUMPTION: data is close to uniformly distributed
+   *    ASSUMPTION: where data is not uniformly distributed, sampling results in good enough splits
+   *
+   *    return local splitters
+   */
+  template<bool _Stable = false, typename V, typename _Compare>
+  std::vector<V> samplesort_buf(::std::vector<V>& input, ::std::vector<V>& output, _Compare comp, const mxx::comm& comm,
+		  char use_sort_override = 0, char full_buffer_override = 0) {
+      // get value type of underlying data
+
+    BL_BENCH_INIT(imxx_samplesort);
+
+
+    bool empty = ::mxx::all_of(input.size() == 0, comm);
+    if (empty) {
+      BL_BENCH_REPORT_MPI_NAMED(imxx_samplesort, "noop-samplesort", comm);
+
+      return std::vector<V>();
+    }
+
+
+      int p = comm.size();
+
+
+      BL_BENCH_COLLECTIVE_START(imxx_samplesort, "init", comm);
+
+      // perform local (stable) sorting
+      if (_Stable)
+          std::stable_sort(input.begin(), input.end(), comp);
+      else
+          std::sort(input.begin(), input.end(), comp);
+
+      BL_BENCH_COLLECTIVE_END(imxx_samplesort, "local sort", input.size(), comm);
+
+      // sequential case: we're done
+      if (p == 1) {
+          output.resize(input.size());
+          std::copy(input.begin(), input.end(), output.begin());
+          BL_BENCH_REPORT_MPI_NAMED(imxx_samplesort, "p1-samplesort", comm);
+          return std::vector<V>();
+      }
+
+
+      BL_BENCH_START(imxx_samplesort);
+
+      // local size
+      std::size_t local_size = input.size();
+
+      // check if we have a perfect block decomposition
+      std::size_t global_size = ::mxx::allreduce(local_size, comm);
+      ::mxx::partition::block_decomposition<std::size_t> mypart(global_size, p, comm.rank());
+      bool _AssumeBlockDecomp = ::mxx::all_of(local_size == mypart.local_size(), comm);
+
+      // sample sort
+      // 1. local sort
+      // 2. pick `s` samples regularly spaced on each processor
+      // 3. bitonic sort samples
+      // 4. allgather the last sample of each process -> splitters
+      // 5. locally find splitter positions in data
+      //    //NO (if an identical splitter appears twice, then split evenly)
+      //    => send_counts
+      // 6. distribute send_counts with all2all to get recv_counts
+      // 7. allocate enough space (may be more than previously allocated) for receiving
+      // 8. all2allv
+      // 9. local reordering (multiway-merge or again std::sort)
+      // A. equalizing distribution into original size (e.g.,block decomposition)
+      //    by sending elements to neighbors
+
+      // get splitters, using the method depending on whether the input consists
+      // of arbitrary decompositions or not
+      std::vector<V> local_splitters;
+      // number of samples
+      size_t s = p-1;
+      if(_AssumeBlockDecomp)
+          local_splitters = ::mxx::impl::sample_block_decomp(input.cbegin(), input.cend(), comp, s, comm);
+      else
+          local_splitters = ::mxx::impl::sample_arbit_decomp(input.cbegin(), input.cend(), comp, s, comm);
+
+      BL_BENCH_END(imxx_samplesort, "get_splitters", s);
+
+      BL_BENCH_START(imxx_samplesort);
+
+
+      // 5. locally find splitter positions in data
+      //    (if an identical splitter appears at least three times (or more),
+      //    then split the intermediary buckets evenly) => send_counts
+      std::vector<size_t> send_counts = imxx::stable_split(input, comp, local_splitters, comm);  // always do stable split
+      BL_BENCH_END(imxx_samplesort, "send_counts", send_counts.size());
+
+      BL_BENCH_START(imxx_samplesort);
+
+
+      std::vector<size_t> recv_counts = ::mxx::all2all(send_counts, comm);
+      std::size_t recv_n = std::accumulate(recv_counts.begin(), recv_counts.end(), static_cast<size_t>(0));
+      MXX_ASSERT(!_AssumeBlockDecomp || (local_size <= (size_t)p || recv_n <= 2* local_size));
+
+      // reserve output directly.
+      if (output.capacity() < recv_n) output.clear();
+      output.resize(recv_n);
+
+      BL_BENCH_END(imxx_samplesort, "reserve", recv_n);
+
+      BL_BENCH_START(imxx_samplesort);
+
+      bool full_buffer = true;  // is a full buffer availabel for use?
+      bool use_sort = (p > 2);
+
+#ifdef MXX_USE_GCC_MULTIWAY_MERGE
+      use_sort &= (recv_n <= (size_t)p * (size_t)p);  // if merge is defined, then use merge if p = 2, or if have enough entries.
+#endif
+
+      V* buf = nullptr;
+      std::ptrdiff_t buf_size = 0;
+      if (use_sort) {
+        full_buffer = false;
+      } else {
+        // not using sort, then let's check if we can alloc temp buffer
+        std::tie(buf, buf_size) = std::get_temporary_buffer<V>(recv_n);
+        full_buffer = (static_cast<size_t>(buf_size) >= recv_n);
+      }
+
+// for testing only.
+      if (use_sort_override != 0) {
+    	  use_sort = use_sort_override == 1;
+
+    	  if (comm.rank() == 0) std::cout << "SAMPLESORT using " << (use_sort ? "sort" : "merge") << std::endl;
+      }
+      if (full_buffer_override != 0) {
+    	  full_buffer = full_buffer_override == 1;
+
+    	  if (comm.rank() == 0) std::cout << "SAMPLESORT using " << (full_buffer ? "full" : "partial") << " buffer" << std::endl;
+      }
+
+
+
+      // if no gcc multiway merge, then use 2-way merge for p=2, and sort otherwise.
+
+      BL_BENCH_END(imxx_samplesort, "res_buf", recv_n);
+
+      BL_BENCH_START(imxx_samplesort);
+
+      // TODO: use collective with iterators [begin,end) instead of pointers!
+      if (use_sort || !full_buffer)
+        ::mxx::all2allv(input.data(), send_counts, output.data(), recv_counts, comm);
+      else
+        ::mxx::all2allv(input.data(), send_counts, buf, recv_counts, comm);
+
+      BL_BENCH_END(imxx_samplesort, "all2all", local_size);
+
+      BL_BENCH_START(imxx_samplesort);
+
+      // 9. local reordering
+      /* multiway-merge (using the implementation in __gnu_parallel) */
+      // if p = 2, then merge
+      if (use_sort) {
+        if (_Stable)
+            std::stable_sort(output.begin(), output.end(), comp);
+        else
+            std::sort(output.begin(), output.end(), comp);
+
+      } else {
+        if (p == 2) { // use 2-way merge.  always stable.
+          if (full_buffer) {
+            std::merge(buf, buf + recv_counts[0],
+                       buf + recv_counts[0], buf + recv_n,
+                       output.begin(), comp);
+
+          } else {
+            std::inplace_merge(output.begin(), output.begin() + recv_counts[0], output.end(), comp);
+          }
+#ifdef MXX_USE_GCC_MULTIWAY_MERGE
+
+        } else { // using multiway merge, and p > 2.
+          BL_BENCH_INIT(imxx_samplesort_merge);
+          __gnu_parallel::sequential_tag seq_tag;
+
+          if (full_buffer) {  // if we have full buffer, then all2all result is in the buf.  merge into output.
+            // buffer -> output
+
+            BL_BENCH_START(imxx_samplesort_merge);
+
+            std::vector<std::pair<V*, V*> > seqs(p);
+
+            std::vector<size_t> recv_displs = mxx::impl::get_displacements(recv_counts);
+            for (int i = 0; i < p; ++i) {
+              seqs[i].first = buf + recv_displs[i];   // point to buffer.
+              seqs[i].second = seqs[i].first + recv_counts[i];
+            }
+            BL_BENCH_END(imxx_samplesort_merge, "merge_ranges", seqs.size());
+
+            BL_BENCH_START(imxx_samplesort_merge);
+            if (_Stable)
+              __gnu_parallel::stable_multiway_merge(seqs.begin(), seqs.end(), output.data(), recv_n, comp, seq_tag);
+            else
+              __gnu_parallel::multiway_merge(seqs.begin(), seqs.end(), output.data(), recv_n, comp, seq_tag);
+
+            BL_BENCH_END(imxx_samplesort_merge, "merge", recv_n);
+
+          } else {  // buffer was not big enough, so all2all went into output.  now need to use buffer to merge and then copy into output.
+
+            // output -> temp buffer -> back to output, in iterations.
+            BL_BENCH_START(imxx_samplesort_merge);
+
+            // prepare the sequence offsets
+			typedef typename std::vector<V>::iterator val_it;
+
+			std::vector<std::pair<val_it, val_it> > seqs(p);
+			std::vector<size_t> recv_displs = mxx::impl::get_displacements(recv_counts);
+			for (int i = 0; i < p; ++i) {
+			  seqs[i].first = output.begin() + recv_displs[i];
+			  seqs[i].second = seqs[i].first + recv_counts[i];
+			}
+			BL_BENCH_END(imxx_samplesort_merge, "merge_ranges", seqs.size());
+
+
+			BL_BENCH_START(imxx_samplesort_merge);
+			size_t remain_n = recv_n;
+			size_t target_size = buf_size;
+
+            val_it start_merge_it = output.begin();
+            V* merge_buf_begin = buf;
+
+            BL_BENCH_LOOP_START(imxx_samplesort_merge, 0);
+            BL_BENCH_LOOP_START(imxx_samplesort_merge, 1);
+            BL_BENCH_LOOP_START(imxx_samplesort_merge, 2);
+            size_t count0 = 0;
+            size_t count1 = 0;
+            size_t count2 = 0;
+
+
+            while (remain_n > 0) {
+
+                BL_BENCH_LOOP_RESUME(imxx_samplesort_merge, 0);
+            	if (remain_n < target_size) target_size = remain_n;
+
+              // 2 iterations.  unroll loop.
+              // first half.
+              // i)   merge at most `merge_n` many elements sequentially
+              if (_Stable)
+                __gnu_parallel::stable_multiway_merge(seqs.begin(), seqs.end(), merge_buf_begin, target_size, comp, seq_tag);
+              else
+                __gnu_parallel::multiway_merge(seqs.begin(), seqs.end(), merge_buf_begin, target_size, comp, seq_tag);
+
+              BL_BENCH_LOOP_PAUSE(imxx_samplesort_merge, 0);
+              count0 += target_size;
+
+              BL_BENCH_LOOP_RESUME(imxx_samplesort_merge, 1);
+
+              // ii)  compact the remaining elements in `output`
+              // TCP:  doing this a fixed number of times makes it linear in data size.  if the number of iterations is dependent on data size, then it becomes quadratic.
+              for (int i = p-1; i > 0; --i)
+              {
+                  seqs[i-1].first = std::move_backward(seqs[i-1].first, seqs[i-1].second, seqs[i].first);
+                  seqs[i-1].second = seqs[i].first;
+              }
+              BL_BENCH_LOOP_PAUSE(imxx_samplesort_merge, 1);
+              count1 += std::distance(seqs[0].first, seqs[p-1].second);
+
+              BL_BENCH_LOOP_RESUME(imxx_samplesort_merge, 2);
+
+              // iii) copy the output buffer `merge_n` elements back into `output`
+              //      `recv_elements`.
+              start_merge_it = std::copy(merge_buf_begin, merge_buf_begin + target_size, start_merge_it);
+              assert(start_merge_it == seqs[0].first);
+
+              // now the second half.
+              remain_n -= target_size;
+              BL_BENCH_LOOP_PAUSE(imxx_samplesort_merge, 2);
+              count2 += target_size;
+              }
+            BL_BENCH_LOOP_END(imxx_samplesort_merge, 0, "merge", count0);
+            BL_BENCH_LOOP_END(imxx_samplesort_merge, 1, "compact", count1);
+            BL_BENCH_LOOP_END(imxx_samplesort_merge, 2, "copy", count2);
+          }
+
+
+
+          BL_BENCH_REPORT_MPI_NAMED(imxx_samplesort_merge, "imxx_samplesort_merge", comm);
+
+
+#endif
+
+        }  // else p > 2, in the absense of MXX_USE_GCC_MULTIWAY_MERGE, would be using SORT and handled earlier.
+
+
+
+      }
+
+      BL_BENCH_COLLECTIVE_END(imxx_samplesort, "local_merge", recv_n, comm);
+
+      BL_BENCH_START(imxx_samplesort);
+
+
+      // CLEAR the temp buffer.
+      if (!use_sort) std::return_temporary_buffer(buf);
+
+      BL_BENCH_END(imxx_samplesort, "rel_buf", buf_size);
+
+
+
+
+
+
+//      // A. equalizing distribution into original size (e.g.,block decomposition)
+//      //    by elements to neighbors
+//      //    and save elements into the original iterator positions
+//      if (_AssumeBlockDecomp)
+//          ::mxx::stable_distribute(recv_elements.begin(), recv_elements.end(), begin, comm);
+//      else
+//          ::mxx::redo_arbit_decomposition(recv_elements.begin(), recv_elements.end(), begin, local_size, comm);
+//
+//      SS_TIMER_END_SECTION("fix_partition");
+
+      BL_BENCH_REPORT_MPI_NAMED(imxx_samplesort, "imxx_samplesort", comm);
+
+      return local_splitters;
+  }
+
+
 
 } // namespace imxx
 
