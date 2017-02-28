@@ -64,7 +64,7 @@ class FilterIteratorTest : public ::testing::Test
       base_iter_begin = CountingIterator<T>(0, 1);
       base_iter_end = CountingIterator<T>(1000, 1);
       even_filter_begin = filter_iterator<Even, CountingIterator<T> >(Even(), base_iter_begin, base_iter_end);
-      even_filter_end = filter_iterator<Even, CountingIterator<T> >(Even(), base_iter_end, base_iter_begin);
+      even_filter_end = filter_iterator<Even, CountingIterator<T> >(Even(), base_iter_end);
       odd_filter_begin = filter_iterator<Odd, CountingIterator<T> >(Odd(), base_iter_begin, base_iter_end);
       odd_filter_end = filter_iterator<Odd, CountingIterator<T> >(Odd(), base_iter_end);
     }
@@ -78,6 +78,9 @@ TYPED_TEST_CASE_P(FilterIteratorTest);
 
 // testing the copy constructor
 TYPED_TEST_P(FilterIteratorTest, increment){
+
+	std::cout << "base: [" << *(this->base_iter_begin) << ", " << *(this->base_iter_end) << "]" << std::endl;
+
 
   TypeParam i = 0;
   auto it = this->even_filter_begin;
