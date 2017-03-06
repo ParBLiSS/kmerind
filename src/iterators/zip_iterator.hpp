@@ -251,6 +251,133 @@ namespace bliss
         }
 
 
+
+
+
+
+        // random access iterator
+
+        /**
+         * @brief compare to other iterator: >
+         * @param other   iterator to compare to.
+         * @return  bool, true if greater than, false otherwise.
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        bool operator>(const ZipIterator& other) const {
+          return iter1 > other.iter1;
+        }
+
+        /**
+         * @brief compare to other iterator: <
+         * @param other   iterator to compare to.
+         * @return  bool, true if less than, false otherwise.
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        bool operator<(const ZipIterator& other) const {
+          return iter1 < other.iter1;
+        }
+
+        /**
+         * @brief compare to other iterator: >=
+         * @param other   iterator to compare to.
+         * @return  bool, true if greater than or equal to, false otherwise.
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        bool operator>=(const ZipIterator& other) const {
+          return iter1 >= other.iter1;
+        }
+
+        /**
+         * @brief compare to other iterator: <=
+         * @param other   iterator to compare to.
+         * @return  bool, true if less than or equal to, false otherwise.
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        bool operator<=(const ZipIterator& other) const {
+          return iter1 <= other.iter1;
+        }
+
+
+        /**
+         * @brief   arithmetic increment by multiple steps
+         * @param diff    number of steps to increment by
+         * @return  incremented copy of iterator
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        ZipIterator operator+(const D& diff) {
+          ZipIterator out(*this);
+          out += diff;
+          return out;
+        }
+
+
+        /**
+         * @brief   arithmetic decrement by multiple steps
+         * @param diff    number of steps to decrement by
+         * @return  decremented copy of iterator
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        ZipIterator operator-(const D& diff) {
+          ZipIterator out(*this);
+          out -= diff;
+          return out;
+        }
+
+        /**
+         * @brief difference between 2 iterators;
+         * @param other         the iterator to subtract by
+         * @return              distance between the iterators
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        D operator-(const ZipIterator& other) {
+          return (iter1 - other.iter1);
+        }
+
+
+        /**
+         * semantics of -- does not have a bound on the start side.
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        ZipIterator& operator+=(D const & d )
+        {
+          iter1 += d;
+          iter2 += d;
+          return *this;
+        }
+
+
+        /**
+         * semantics of -- does not have a bound on the start side.
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        ZipIterator& operator-=(D const & d)
+        {
+          iter1 -= d;
+          iter2 -= d;
+          return *this;
+        }
+
+
+        /**
+         * @brief   offset dereference operator
+         * @param i offset at which the value is retrieved.
+         * @return  value for ith offset
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+              std::is_same<IterCat, std::random_access_iterator_tag>::value, int>::type >
+        T operator[](const D& d) const {
+
+          return *(*this + d);
+        }
     };
 
 
