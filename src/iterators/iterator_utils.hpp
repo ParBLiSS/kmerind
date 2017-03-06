@@ -170,6 +170,96 @@ struct iterator_tags
                 typename traits::iterator_category>::type inherit_bidir;
 };
 
+
+template <typename Iter1, typename Iter2>
+struct min_iter_tag {
+	using type = typename min_iter_tag<typename std::iterator_traits<Iter1>::iterator_category,
+			typename std::iterator_traits<Iter2>::iterator_category>::type;
+
+};
+
+template <>
+struct min_iter_tag<::std::input_iterator_tag, ::std::input_iterator_tag> {
+	using type = ::std::input_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::input_iterator_tag, ::std::forward_iterator_tag> {
+	using type = ::std::input_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::input_iterator_tag, ::std::bidirectional_iterator_tag> {
+	using type = ::std::input_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::input_iterator_tag, ::std::random_access_iterator_tag> {
+	using type = ::std::input_iterator_tag;
+};
+
+
+template <>
+struct min_iter_tag<::std::forward_iterator_tag, ::std::input_iterator_tag> {
+	using type = ::std::input_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::forward_iterator_tag, ::std::forward_iterator_tag> {
+	using type = ::std::forward_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::forward_iterator_tag, ::std::bidirectional_iterator_tag> {
+	using type = ::std::forward_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::forward_iterator_tag, ::std::random_access_iterator_tag> {
+	using type = ::std::forward_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::bidirectional_iterator_tag, ::std::input_iterator_tag> {
+	using type = ::std::input_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::bidirectional_iterator_tag, ::std::forward_iterator_tag> {
+	using type = ::std::forward_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::bidirectional_iterator_tag, ::std::bidirectional_iterator_tag> {
+	using type = ::std::bidirectional_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::bidirectional_iterator_tag, ::std::random_access_iterator_tag> {
+	using type = ::std::bidirectional_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::random_access_iterator_tag, ::std::input_iterator_tag> {
+	using type = ::std::input_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::random_access_iterator_tag, ::std::forward_iterator_tag> {
+	using type = ::std::forward_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::random_access_iterator_tag, ::std::bidirectional_iterator_tag> {
+	using type = ::std::bidirectional_iterator_tag;
+};
+
+template <>
+struct min_iter_tag<::std::random_access_iterator_tag, ::std::random_access_iterator_tag> {
+	using type = ::std::random_access_iterator_tag;
+};
+
+
 } // iterator
 } // bliss
 #endif /* BLISS_ITERATORS_ITERATOR_UTILS_HPP */

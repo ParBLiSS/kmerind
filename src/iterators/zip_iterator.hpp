@@ -31,6 +31,8 @@
 
 #include <iostream>  // cout
 
+#include "iterators/iterator_utils.hpp"
+
 // TODO: tuple version that supports arbitrary number of base iterators,  via variadic templating.
 
 namespace bliss
@@ -53,7 +55,7 @@ namespace bliss
      *
      */
     template<typename FirstIter, typename SecondIter>
-    class ZipIterator :  public std::iterator<std::input_iterator_tag,
+    class ZipIterator :  public std::iterator<typename ::bliss::iterator::min_iter_tag<FirstIter, SecondIter>::type,
                                               std::pair<typename std::iterator_traits<FirstIter>::value_type,
                                                         typename std::iterator_traits<SecondIter>::value_type > >
     {
@@ -75,6 +77,8 @@ namespace bliss
 
         /// current value;
         mutable T val;
+
+        using iter_cat = typename ::bliss::iterator::min_iter_tag<FirstIter, SecondIter>::type;
 
 
       public:
@@ -195,6 +199,46 @@ namespace bliss
 //          this->operator*();
 //          return &val;
 //        }
+
+
+        // bidirectional
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::forward_iterator_tag>::value ||
+                std::is_same<IterCat, std::bidirectional_iterator_tag>::value ||
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        explicit ZipIterator() : iter1(), iter2() {
+        };
+
+
+        // bidirectional iterator
+        /**
+         * semantics of -- does not have a bound on the start side.
+         */
+        template <typename IterCat = iter_cat, typename = typename std::enable_if<
+                std::is_same<IterCat, std::bidirectional_iterator_tag>::value ||
+                std::is_same<IterCat, std::random_access_iterator_tag>::value, int >::type >
+        ZipIterator& operator--()
+        {
+        	--iter1;
+        	--iter2;
+        	return *this;
+        }
+
+        /**
+         * make a copy, then move it back 1.
+         */
+        template <typename IterCat = iter_cat,
+            typename = typename std::enable_if<
+              std::is_same<IterCat, std::bidirectional_iterator_tag>::value ||
+              std::is_same<IterCat, std::random_access_iterator_tag>::value, int>::type >
+        ZipIterator& operator--(int)
+        {
+          ZipIterator output(*this);
+
+          this->operator--();
+          return output;
+        }
+
 
         /// readonly accessor for first iterator
         FirstIter const & get_first_iterator() const {
