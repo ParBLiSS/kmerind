@@ -125,28 +125,33 @@ class SamplesortTest : public ::testing::TestWithParam<SamplesortTestInfo>
 
     virtual void TearDown() {
 
-      std::cout << "comm " << _comm.rank() <<  "data size = " << data.size() << " sorted size = " << sorted.size() << std::endl;
+      std::cout << "comm " << _comm.rank() <<  " data size = " << data.size() << " sorted size = " << sorted.size() << std::endl;
 
-      auto temp = mxx::gatherv(sorted, 0, _comm);
+      std::vector<T> temp;
+      mxx::gatherv(sorted, 0, _comm).swap(temp);
 
-      if (_comm.rank() == 0) std::cout << "comm " << _comm.rank() << " gold size = " << gold.size() << " temp size = " << temp.size() << std::endl;
+	bool same = true;
+      if (_comm.rank() == 0) {
+	std::cout << "comm " << _comm.rank() << " gold size = " << gold.size() << " temp size = " << temp.size() << std::endl;
 
-      // check sorted same as gold
-      EXPECT_EQ(temp.size(), gold.size());
-      bool same = true;
+	// check sorted same as gold
+//      EXPECT_EQ(temp.size(), gold.size());
+      same = (temp.size() == gold.size());
       for (size_t i = 0; i < temp.size(); ++i) {
           same &= (temp[i] == gold[i]);
 
-          if (temp[i] != gold[i]) {
-            std::cout << "comm " << _comm.rank() <<  " pos " << i << " sorted " << temp[i].first << "," << temp[i].second << "; gold " << gold[i].first << "," << gold[i].second << std::endl;
-            ASSERT_TRUE(false);
+          if ((temp[i] != gold[i]) && ((i < 10) || ( i > temp.size() - 10))) {
+            std::cout << "ERROR comm " << _comm.rank() <<  " pos " << i << " sorted " << temp[i].first << "," << temp[i].second << "; gold " << gold[i].first << "," << gold[i].second << std::endl;
+//            EXPECT_EQ(temp[i], gold[i]);
           }
 
         }
-        EXPECT_TRUE(same);
 
     }
 
+	same = ::mxx::all_of(same, _comm);
+        EXPECT_TRUE(same);
+	}
     ::mxx::comm _comm;
 
 

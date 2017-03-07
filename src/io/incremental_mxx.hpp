@@ -2529,8 +2529,11 @@ namespace imxx
       bool full_buffer = true;  // is a full buffer availabel for use?
       bool use_sort = (p > 2);
 
+#if defined(__GNUG__)
+	// if not gnu, then leave use_sort as is, since we can't really use k-way merge.
 #ifdef MXX_USE_GCC_MULTIWAY_MERGE
       use_sort &= (recv_n <= (size_t)p * (size_t)p);  // if merge is defined, then use merge if p = 2, or if have enough entries.
+#endif
 #endif
 
       V* buf = nullptr;
@@ -2541,16 +2544,22 @@ namespace imxx
         // not using sort, then let's check if we can alloc temp buffer
         std::tie(buf, buf_size) = std::get_temporary_buffer<V>(recv_n);
         full_buffer = (static_cast<size_t>(buf_size) >= recv_n);
-      }
+ 
+	// get_temporary_buffer does not seem to work correctly with more than 2 processses under clang.
+
+      std::cout << "rank " << comm.rank() << " SAMPLESORT allocated " << (full_buffer ? "full" : "partial") << " buffer. " << buf_size << "/" << 
+		recv_n << " override " << (full_buffer_override ? "full" : "partial") << std::endl;
+
+     }
 
 // for testing only.
       if (use_sort_override != 0) {
-    	  use_sort = use_sort_override == 1;
+    	  use_sort |= use_sort_override == 1;  // use merge only when allowed by compiler and data size and not overriden
 
     	  if (comm.rank() == 0) std::cout << "SAMPLESORT using " << (use_sort ? "sort" : "merge") << std::endl;
       }
       if (full_buffer_override != 0) {
-    	  full_buffer = full_buffer_override == 1;
+    	  full_buffer &= full_buffer_override == 1;  // can only override if there is full buffer.
 
     	  if (comm.rank() == 0) std::cout << "SAMPLESORT using " << (full_buffer ? "full" : "partial") << " buffer" << std::endl;
       }
@@ -2701,7 +2710,9 @@ namespace imxx
 
           BL_BENCH_REPORT_MPI_NAMED(imxx_samplesort_merge, "imxx_samplesort_merge", comm);
 
-
+#else
+	} else {
+	  throw ::std::logic_error("ERROR: specified multiway merge but is not using gnu compiler");	
 #endif
 
         }  // else p > 2, in the absense of MXX_USE_GCC_MULTIWAY_MERGE, would be using SORT and handled earlier.
