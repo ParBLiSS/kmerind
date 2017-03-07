@@ -3,13 +3,7 @@
 	url = https://bitbucket.org/AluruLab/googletest-patched.git
 [submodule "ext/mxx"]
 	path = ext/mxx
-	url = https://github.com/patflick/mxx.git
-[submodule "ext/sparsehash"]
-	path = ext/sparsehash
-	url = https://github.com/sparsehash/sparsehash
-[submodule "ext/tommyds"]
-	path = ext/tommyds
-	url = https://github.com/amadvance/tommyds.git
+	url = https://github.com/tcpan/mxx.git
 [submodule "ext/sparsehash-c11"]
 	path = ext/sparsehash-c11
 	url = https://github.com/sparsehash/sparsehash-c11.git
