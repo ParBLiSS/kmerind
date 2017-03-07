@@ -284,8 +284,8 @@ INSTANTIATE_TEST_CASE_P(Bliss, SamplesortTest, ::testing::Values(
     SamplesortTestInfo(0UL, false),   //  0, boundary case
     SamplesortTestInfo(0UL, true),   //  0, boundary case
 
-    SamplesortTestInfo((1UL <<  8), false),  // 1
-    SamplesortTestInfo((1UL <<  8), true)  // 1
+    SamplesortTestInfo((1UL <<  6), false),  // 1
+    SamplesortTestInfo((1UL <<  6), true)  // 1
 //    SamplesortTestInfo((1UL << 11), false),  // 1
 //    SamplesortTestInfo((1UL << 11), true),  // 1
 //    SamplesortTestInfo((1UL << 12), false),  // 1

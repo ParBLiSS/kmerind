@@ -3,6 +3,7 @@
 #include <random>
 #include <cstdint>
 
+#if 0
 #include <tommyds/tommyalloc.h>
 #include <tommyds/tommyalloc.c>
 #include <tommyds/tommyhashdyn.h>
@@ -11,7 +12,7 @@
 #include <tommyds/tommyhashlin.c>
 #include <tommyds/tommytrie.h>
 #include <tommyds/tommytrie.c>
-
+#endif
 
 #include "containers/unordered_vecmap.hpp"
 //#include "containers/hashed_vecmap.hpp"
@@ -674,7 +675,7 @@ void benchmark_densehash_full_multimap(size_t const count, size_t const query_fr
 
 
 
-
+#if 0
 
 template <typename DataType>
 struct tommy_obj {
@@ -995,7 +996,7 @@ void benchmark_tommytrie(size_t const count, size_t const query_frac, ::mxx::com
 
   BL_BENCH_REPORT_MPI_NAMED(map, "tommytrie", comm);
 }
-
+#endif
 
 //========== has problems with casting to and from void*
 // invalid conversion from ‘void*’ to ‘Word_t* {aka long unsigned int*}’ [-fpermissive]
@@ -1239,7 +1240,7 @@ int main(int argc, char** argv) {
   benchmark_densehash_full_multimap<FullKmer, size_t, true>(count, query_frac, comm);
   BL_BENCH_COLLECTIVE_END(test, "densehash_full_multimap_canonical", count, comm);
 
-
+#if 0
   BL_BENCH_START(test);
   benchmark_tommyhashdyn<Kmer, size_t>(count, query_frac, comm);
   BL_BENCH_COLLECTIVE_END(test, "tommyhashdyn", count, comm);
@@ -1252,7 +1253,7 @@ int main(int argc, char** argv) {
   BL_BENCH_START(test);
   benchmark_tommytrie<Kmer, size_t>(count, query_frac, comm);
   BL_BENCH_COLLECTIVE_END(test, "tommytrie", count, comm);
-
+#endif
   BL_BENCH_START(test);
   benchmark_unordered_vecmap<Kmer, size_t>(count, query_frac, comm);
   BL_BENCH_COLLECTIVE_END(test, "unordered_vecmap", count, comm);
