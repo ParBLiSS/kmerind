@@ -2550,6 +2550,7 @@ namespace bliss {
           MachineWord y = loadu<MachineWord>(rhs);
           return (x == y) ? 0 : ((x < y) ? -1 : 1);
       }
+
       template <typename MAX_SIMD_TYPE,
           typename WORD_TYPE, size_t len,
           typename std::enable_if<((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
@@ -2615,6 +2616,168 @@ namespace bliss {
         return 0;  // all equal.
       }
 
+      // WORD orders bit bitwise transforms should be same between input and output, just shifted
+      // positive shift increase value, so shift left.  negative shift shifts right. 0 shift returns original value, not sure if it's no-op.
+      template <typename MAX_SIMD_TYPE,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
+      BITS_INLINE bool bit_less(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
+
+//        printf("binary bit compare exact\n");
+        static_assert(MAX_SIMD_TYPE::SIMDVal < BIT_REV_SSSE3, "ERROR bit_compare does not support SSSE3 or AVX2");
+
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+          MachineWord x = loadu<MachineWord>(lhs);
+          MachineWord y = loadu<MachineWord>(rhs);
+          return (x < y);
+      }
+
+      template <typename MAX_SIMD_TYPE,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
+      BITS_INLINE bool bit_less(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
+
+        static_assert(MAX_SIMD_TYPE::SIMDVal < BIT_REV_SSSE3, "ERROR bit_compare does not support SSSE3 or AVX2");
+
+        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+
+        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+        MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+        MachineWord y = ::bliss::utils::bit_ops::zero<MachineWord>();
+        load_part<bytes, 0>(x, lhs);
+        load_part<bytes, 0>(y, rhs);
+
+
+//        MachineWord x = 0, y = 0;
+//        memcpy(&x, lhs, bytes);
+//        memcpy(&y, rhs, bytes);
+        return (x < y);
+      }
+
+      template <typename MAX_SIMD_TYPE,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)),
+              int>::type = 1>
+      BITS_INLINE bool bit_less(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
+
+        static_assert(MAX_SIMD_TYPE::SIMDVal < BIT_REV_SSSE3, "ERROR bit_compare does not support SSSE3 or AVX2");
+        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+
+        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
+        constexpr unsigned int nMachWord = bytes / sizeof(MachineWord);
+        constexpr unsigned int rem = bytes % sizeof(MachineWord);
+
+        // pointers.  from MSB to LSB.
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(lhs) + bytes;
+        uint8_t const * v = reinterpret_cast<uint8_t const *>(rhs) + bytes;
+
+        MachineWord x, y;
+
+        // no overlap
+        for (unsigned int i = 0; i < nMachWord; ++i) {
+          // enough bytes.  do an iteration
+            u -= sizeof(MachineWord);
+            v -= sizeof(MachineWord);
+
+          x = loadu<MachineWord>(u);
+          y = loadu<MachineWord>(v);
+
+          if (x < y) return true;
+        }
+
+        if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
+            x = loadu<MachineWord>(lhs);
+            y = loadu<MachineWord>(rhs);
+
+            if (x < y) return true;
+        }
+        return false;  // all equal.
+      }
+
+
+      // WORD orders bit bitwise transforms should be same between input and output, just shifted
+      // positive shift increase value, so shift left.  negative shift shifts right. 0 shift returns original value, not sure if it's no-op.
+      template <typename MAX_SIMD_TYPE,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<((sizeof(WORD_TYPE) * len) == sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
+      BITS_INLINE bool bit_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
+
+//        printf("binary bit compare exact\n");
+        static_assert(MAX_SIMD_TYPE::SIMDVal < BIT_REV_SSSE3, "ERROR bit_compare does not support SSSE3 or AVX2");
+
+          using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+          MachineWord x = loadu<MachineWord>(lhs);
+          MachineWord y = loadu<MachineWord>(rhs);
+          return (x == y);
+      }
+
+      template <typename MAX_SIMD_TYPE,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<((sizeof(WORD_TYPE) * len) < sizeof(typename MAX_SIMD_TYPE::MachineWord)), int>::type = 1>
+      BITS_INLINE bool bit_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
+
+        static_assert(MAX_SIMD_TYPE::SIMDVal < BIT_REV_SSSE3, "ERROR bit_compare does not support SSSE3 or AVX2");
+
+        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+
+        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+        MachineWord x = ::bliss::utils::bit_ops::zero<MachineWord>();
+        MachineWord y = ::bliss::utils::bit_ops::zero<MachineWord>();
+        load_part<bytes, 0>(x, lhs);
+        load_part<bytes, 0>(y, rhs);
+
+
+//        MachineWord x = 0, y = 0;
+//        memcpy(&x, lhs, bytes);
+//        memcpy(&y, rhs, bytes);
+        return (x == y);
+      }
+
+      template <typename MAX_SIMD_TYPE,
+          typename WORD_TYPE, size_t len,
+          typename std::enable_if<((sizeof(WORD_TYPE) * len) > sizeof(typename MAX_SIMD_TYPE::MachineWord)),
+              int>::type = 1>
+      BITS_INLINE bool bit_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
+
+        static_assert(MAX_SIMD_TYPE::SIMDVal < BIT_REV_SSSE3, "ERROR bit_compare does not support SSSE3 or AVX2");
+        using MachineWord = typename MAX_SIMD_TYPE::MachineWord;
+
+        constexpr size_t bytes = sizeof(WORD_TYPE) * len;
+
+        // should be at least 1 since shift < sizeof(word), and len * sizeof(word) > sizeof(machword
+        constexpr unsigned int nMachWord = bytes / sizeof(MachineWord);
+        constexpr unsigned int rem = bytes % sizeof(MachineWord);
+
+        // pointers.  from MSB to LSB.
+        uint8_t const * u = reinterpret_cast<uint8_t const *>(lhs) + bytes;
+        uint8_t const * v = reinterpret_cast<uint8_t const *>(rhs) + bytes;
+
+        MachineWord x, y;
+
+        // no overlap
+        for (unsigned int i = 0; i < nMachWord; ++i) {
+          // enough bytes.  do an iteration
+            u -= sizeof(MachineWord);
+            v -= sizeof(MachineWord);
+
+          x = loadu<MachineWord>(u);
+          y = loadu<MachineWord>(v);
+
+          if (x != y) return false;
+        }
+
+        if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
+            x = loadu<MachineWord>(lhs);
+            y = loadu<MachineWord>(rhs);
+
+            if (x != y) return false;
+        }
+        return true;  // all equal.
+      }
 
 
       //========================= reverse + unary transform =================
@@ -3370,32 +3533,32 @@ namespace bliss {
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
         using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-        return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) == 0;
+        return bliss::utils::bit_ops::bit_equal<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs);
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool less(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
         using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-        return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) < 0;
+        return bliss::utils::bit_ops::bit_less<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs);
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool greater(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) > 0;
+          return bliss::utils::bit_ops::bit_less<MAX_SIMD_TYPE, WORD_TYPE, len>(rhs, lhs);
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool not_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) != 0;
+          return !bliss::utils::bit_ops::bit_equal<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs);
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool less_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) <= 0;
+          return !bliss::utils::bit_ops::bit_less<MAX_SIMD_TYPE, WORD_TYPE, len>(rhs, lhs);
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool greater_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return bliss::utils::bit_ops::bit_compare<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs) >= 0;
+          return !bliss::utils::bit_ops::bit_less<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs);
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE int8_t compare(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
