@@ -249,15 +249,54 @@ namespace bliss
 
     /// copy constructor  - want result of iterator to be copiable here so no "explicit"
     Kmer(Kmer const& other) {
-      memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+    	if (nWords == 1) this->data[0] = other.data[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<const uint16_t*>(other.data)[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<const uint32_t*>(other.data)[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<const uint64_t*>(other.data)[0];
+    	else
+    		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
     };
   
     /// copy assignment operator
     Kmer& operator=(Kmer const &other) {
-      memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+    	if (nWords == 1) this->data[0] = other.data[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<const uint16_t*>(other.data)[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<const uint32_t*>(other.data)[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<const uint64_t*>(other.data)[0];
+    	else
+    		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
       return *this;
     }
 
+    /// copy constructor  - want result of iterator to be copiable here so no "explicit"
+    Kmer(Kmer && other) {
+    	if (nWords == 1) this->data[0] = other.data[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<uint16_t*>(other.data)[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<uint32_t*>(other.data)[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<uint64_t*>(other.data)[0];
+    	else
+    		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+    };
+
+    /// copy assignment operator
+    Kmer& operator=(Kmer && other) {
+    	if (nWords == 1) this->data[0] = other.data[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<uint16_t*>(other.data)[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<uint32_t*>(other.data)[0];
+    	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<uint64_t*>(other.data)[0];
+    	else
+    		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+      return *this;
+    }
+
+    void swap(Kmer & other) {
+    	if (nWords == 1) std::swap(this->data[0], other.data[0]);
+    	else if (nWords * sizeof(WORD_TYPE) == 2) std::iter_swap(reinterpret_cast<uint16_t*>(this->data), reinterpret_cast<uint16_t*>(other.data));
+    	else if (nWords * sizeof(WORD_TYPE) == 4) std::iter_swap(reinterpret_cast<uint32_t*>(this->data), reinterpret_cast<uint32_t*>(other.data));
+    	else if (nWords * sizeof(WORD_TYPE) == 8) std::iter_swap(reinterpret_cast<uint64_t*>(this->data), reinterpret_cast<uint64_t*>(other.data));
+    	else
+    		std::swap(this->data, other.data);
+    }
 
     /*
      * TODO:
@@ -1569,11 +1608,21 @@ namespace bliss
   struct is_kmer<::bliss::common::Kmer<K, Alphabet, WT> > : public std::true_type {};
 
 
-
+	template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE=WordType>
+	void swap(Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> & a,
+			  Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> & b) {
+		a.swap(b);
+	}
 
   } // namespace common
 } // namespace bliss
 
-
+namespace std {
+	template<unsigned int KMER_SIZE, typename ALPHABET, typename WORD_TYPE=WordType>
+	void swap(::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> & a,
+			::bliss::common::Kmer<KMER_SIZE, ALPHABET, WORD_TYPE> & b) {
+		a.swap(b);
+	}
+}
 
 #endif // BLISS_COMMON_KMER_H
