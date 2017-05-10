@@ -249,55 +249,72 @@ namespace bliss
 
     /// copy constructor  - want result of iterator to be copiable here so no "explicit"
     Kmer(Kmer const& other) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
     	if (nWords == 1) this->data[0] = other.data[0];
     	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<const uint16_t*>(other.data)[0];
     	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<const uint32_t*>(other.data)[0];
     	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<const uint64_t*>(other.data)[0];
     	else
     		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+#pragma GCC diagnostic pop
+
     };
   
     /// copy assignment operator
     Kmer& operator=(Kmer const &other) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
     	if (nWords == 1) this->data[0] = other.data[0];
     	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<const uint16_t*>(other.data)[0];
     	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<const uint32_t*>(other.data)[0];
     	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<const uint64_t*>(other.data)[0];
     	else
     		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+#pragma GCC diagnostic pop
+
       return *this;
     }
 
     /// copy constructor  - want result of iterator to be copiable here so no "explicit"
     Kmer(Kmer && other) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
     	if (nWords == 1) this->data[0] = other.data[0];
     	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<uint16_t*>(other.data)[0];
     	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<uint32_t*>(other.data)[0];
     	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<uint64_t*>(other.data)[0];
     	else
     		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+#pragma GCC diagnostic pop
+
     };
 
     /// copy assignment operator
     Kmer& operator=(Kmer && other) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
     	if (nWords == 1) this->data[0] = other.data[0];
     	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<uint16_t*>(other.data)[0];
     	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<uint32_t*>(other.data)[0];
     	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<uint64_t*>(other.data)[0];
     	else
     		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+#pragma GCC diagnostic pop
       return *this;
     }
 
     void swap(Kmer & other) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
     	if (nWords == 1) std::swap(this->data[0], other.data[0]);
     	else if (nWords * sizeof(WORD_TYPE) == 2) std::iter_swap(reinterpret_cast<uint16_t*>(this->data), reinterpret_cast<uint16_t*>(other.data));
     	else if (nWords * sizeof(WORD_TYPE) == 4) std::iter_swap(reinterpret_cast<uint32_t*>(this->data), reinterpret_cast<uint32_t*>(other.data));
     	else if (nWords * sizeof(WORD_TYPE) == 8) std::iter_swap(reinterpret_cast<uint64_t*>(this->data), reinterpret_cast<uint64_t*>(other.data));
     	else
     		std::swap(this->data, other.data);
+#pragma GCC diagnostic pop
     }
-
     /*
      * TODO:
      *  - fill and nextKmer each for unpadded streams
