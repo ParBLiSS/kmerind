@@ -245,7 +245,7 @@ typedef ::testing::Types<
 		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 2>, uint64_t >,   //  16  (__m128i)
 		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 3>, uint64_t >,   //  24  1.5 __m128i
 		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 4>, uint64_t >,   //  32  (__m256i)
-		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 5>, uint64_t >,   //  40  1.5 __m256i
+		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 5>, uint64_t >,   //  40  1.25 __m256i
 		::std::tuple<::bliss::utils::bit_ops::test::BitsParam< 8>, uint64_t >    //  64  (512 bits)
 > BitCompareFixedArrayTestTypes;
 INSTANTIATE_TYPED_TEST_CASE_P(Bliss, BitCompareFixedArrayTest, BitCompareFixedArrayTestTypes);

@@ -2685,16 +2685,17 @@ namespace bliss {
           x = loadu<MachineWord>(u);
           y = loadu<MachineWord>(v);
 
-          if (x < y) return true;
+          if (x != y) return (x < y);
         }
 
         if (rem > 0) {  // 0 < rem < sizeof(uint64_t)
             x = loadu<MachineWord>(lhs);
             y = loadu<MachineWord>(rhs);
 
-            if (x < y) return true;
+          return (x < y);
+        } else {
+          return false;  // all equal.
         }
-        return false;  // all equal.
       }
 
 
@@ -2774,9 +2775,10 @@ namespace bliss {
             x = loadu<MachineWord>(lhs);
             y = loadu<MachineWord>(rhs);
 
-            if (x != y) return false;
+            return (x == y);
+        } else {
+          return true;  // all equal.
         }
-        return true;  // all equal.
       }
 
 
@@ -3548,17 +3550,17 @@ namespace bliss {
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool not_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return !bliss::utils::bit_ops::bit_equal<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs);
+          return !(bliss::utils::bit_ops::bit_equal<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs));
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool less_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return !bliss::utils::bit_ops::bit_less<MAX_SIMD_TYPE, WORD_TYPE, len>(rhs, lhs);
+          return !(bliss::utils::bit_ops::bit_less<MAX_SIMD_TYPE, WORD_TYPE, len>(rhs, lhs));
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE bool greater_equal(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
           using MAX_SIMD_TYPE = BITREV_AUTO_AGGRESSIVE<(len * sizeof(WORD_TYPE)), BITREV_SWAR>;
-          return !bliss::utils::bit_ops::bit_less<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs);
+          return !(bliss::utils::bit_ops::bit_less<MAX_SIMD_TYPE, WORD_TYPE, len>(lhs, rhs));
       }
       template <typename WORD_TYPE, size_t len>
       BITS_INLINE int8_t compare(WORD_TYPE const (&lhs)[len], WORD_TYPE const (&rhs)[len]) {
