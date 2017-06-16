@@ -1333,7 +1333,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
             this->local_sort();
 
             auto end = ::std::partition(c.begin(), c.end(), [&pred](value_type const &x) {
-              return !pred(x.first);
+              return !pred(x);
             });
             c.erase(end, c.end());
 
