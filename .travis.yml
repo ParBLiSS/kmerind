@@ -251,25 +251,25 @@ script:
     - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_TEST_APPLICATIONS=ON -DENABLE_COVERAGE=OFF $SRC_DIR;
         else cmake -DBUILD_TEST_APPLICATIONS=ON -DENABLE_COVERAGE=ON $SRC_DIR; fi
     # build kmerind.  here so that if build fails, the tests are not run.
-    - make
+    - make -j 2
 
     # run tests.
-#    - ./test/test-mpi-bliss-io-distribute
-#    - ctest -E benchmark 
-#    - ./bin/testFASTA_load
-#    - mpiexec -np 4 ./bin/testFASTA_load
-#    - ./bin/testFASTQ_load
-#    - mpiexec -np 4 ./bin/testFASTQ_load
-#    - ./bin/testKmerIndex-fasta
-#    - mpiexec -np 4 ./bin/testKmerIndex-fasta
-#    - ./bin/testKmerIndex-fastq
-#    - mpiexec -np 4 ./bin/testKmerIndex-fastq
-#    - ./bin/test_de_bruijn_graph_construction
-#    - mpiexec -np 4 ./bin/test_de_bruijn_graph_construction
+    - ./test/test-mpi-bliss-io-distribute
+    - ctest -E benchmark 
+    - ./bin/testFASTA_load
+    - mpiexec -np 4 ./bin/testFASTA_load
+    - ./bin/testFASTQ_load
+    - mpiexec -np 4 ./bin/testFASTQ_load
+    - ./bin/testKmerIndex-fasta
+    - mpiexec -np 4 ./bin/testKmerIndex-fasta
+    - ./bin/testKmerIndex-fastq
+    - mpiexec -np 4 ./bin/testKmerIndex-fastq
+    - ./bin/test_de_bruijn_graph_construction
+    - mpiexec -np 4 ./bin/test_de_bruijn_graph_construction
 
 after_success:
   # only collect coverage if compiled with gcc
   #- if [ "$CXX" = "g++-4.8" ]; then codecov --comp ${SRC_DIR}/config/comp.txt --gcov-exec gcov-4.8; fi
   #- if [ "$CXX" = "g++-4.9" ]; then codecov --comp ${SRC_DIR}/config/comp.txt --gcov-exec gcov-4.9; fi
-#  - if [ "$CXX" = "g++-5" ]; then codecov --gcov-exec gcov-5; fi
+  - if [ "$CXX" = "g++-5" ]; then codecov --gcov-exec gcov-5; fi
 
