@@ -1,7 +1,7 @@
 # https://travis-ci.org/ParBLiSS/kmerind
 
 language: cpp
-
+dist: trusty
 sudo: false
 
 #compiler:
@@ -23,9 +23,9 @@ sudo: false
 #      - ubuntu-toolchain-r-test
 #    packages:
 #      - openmpi
-#    - llvm-toolchain-precise-3.5
-#    - llvm-toolchain-precise-3.6
-#    - llvm-toolchain-precise-3.7
+#    - llvm-toolchain-trusty-3.5
+#    - llvm-toolchain-trusty-3.6
+#    - llvm-toolchain-trusty-3.7
 
 
 # include specific compiler combinations combinations
@@ -58,12 +58,21 @@ matrix:
               - gcc-5
               - g++-5
         env: envCXX=g++-5 envCC=gcc-5 envMPI=openmpi18 CACHE_NAME=gcc5openmpi18
+      - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-6
+              - g++-6
+        env: envCXX=g++-6 envCC=gcc-6 envMPI=openmpi18 CACHE_NAME=gcc6openmpi18
       - compiler: clang
         addons:
           apt:
             sources:
               - ubuntu-toolchain-r-test
-              - llvm-toolchain-precise-3.5
+              - llvm-toolchain-trusty-3.5
             packages:
               - clang-3.5
         env: envCXX=clang++-3.5 envCC=clang-3.5 envMPI=openmpi18 CACHE_NAME=clang35openmpi18
@@ -72,7 +81,7 @@ matrix:
           apt:
             sources:
               - ubuntu-toolchain-r-test
-              - llvm-toolchain-precise-3.6
+              - llvm-toolchain-trusty-3.6
             packages:
               - clang-3.6
         env: envCXX=clang++-3.6 envCC=clang-3.6 envMPI=openmpi18 CACHE_NAME=clang36openmpi18
@@ -81,7 +90,7 @@ matrix:
           apt:
             sources:
               - ubuntu-toolchain-r-test
-              - llvm-toolchain-precise-3.7
+              - llvm-toolchain-trusty-3.7
             packages:
               - clang-3.7
         env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=openmpi18 CACHE_NAME=clang37openmpi18
@@ -90,10 +99,37 @@ matrix:
           apt:
             sources:
               - ubuntu-toolchain-r-test
-              - llvm-toolchain-precise-3.8
+              - llvm-toolchain-trusty-3.8
             packages:
               - clang-3.8
         env: envCXX=clang++-3.8 envCC=clang-3.8 envMPI=openmpi18 CACHE_NAME=clang38openmpi18
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-trusty-3.9
+            packages:
+              - clang-3.9
+        env: envCXX=clang++-3.9 envCC=clang-3.9 envMPI=openmpi18 CACHE_NAME=clang39openmpi18
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-trusty-4.0
+            packages:
+              - clang-4.0
+        env: envCXX=clang++-4.0 envCC=clang-4.0 envMPI=openmpi18 CACHE_NAME=clang40openmpi18
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-trusty
+            packages:
+              - clang-5.0
+        env: envCXX=clang++-5.0 envCC=clang-5.0 envMPI=openmpi18 CACHE_NAME=clang50openmpi18
       - compiler: gcc
         addons:
           apt:
@@ -121,12 +157,21 @@ matrix:
               - gcc-5
               - g++-5
         env: envCXX=g++-5 envCC=gcc-5 envMPI=mpich2 CACHE_NAME=gcc5mpich2
+      - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-6
+              - g++-6
+        env: envCXX=g++-6 envCC=gcc-6 envMPI=mpich2 CACHE_NAME=gcc6mpich2
       - compiler: clang
         addons:
           apt:
             sources:
               - ubuntu-toolchain-r-test
-              - llvm-toolchain-precise-3.5
+              - llvm-toolchain-trusty-3.5
             packages:
               - clang-3.5
         env: envCXX=clang++-3.5 envCC=clang-3.5 envMPI=mpich2 CACHE_NAME=clang35mpich2
@@ -135,7 +180,7 @@ matrix:
           apt:
             sources:
               - ubuntu-toolchain-r-test
-              - llvm-toolchain-precise-3.6
+              - llvm-toolchain-trusty-3.6
             packages:
               - clang-3.6
         env: envCXX=clang++-3.6 envCC=clang-3.6 envMPI=mpich2 CACHE_NAME=clang36mpich2
@@ -144,7 +189,7 @@ matrix:
           apt:
             sources:
               - ubuntu-toolchain-r-test
-              - llvm-toolchain-precise-3.7
+              - llvm-toolchain-trusty-3.7
             packages:
               - clang-3.7
         env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=mpich2 CACHE_NAME=clang37mpich2
@@ -153,10 +198,37 @@ matrix:
           apt:
             sources:
               - ubuntu-toolchain-r-test
-              - llvm-toolchain-precise-3.8
+              - llvm-toolchain-trusty-3.8
             packages:
               - clang-3.8
         env: envCXX=clang++-3.8 envCC=clang-3.8 envMPI=mpich2 CACHE_NAME=clang38mpich2
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-trusty-3.9
+            packages:
+              - clang-3.9
+        env: envCXX=clang++-3.9 envCC=clang-3.9 envMPI=mpich2 CACHE_NAME=clang39mpich2
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-trusty-4.0
+            packages:
+              - clang-4.0
+        env: envCXX=clang++-4.0 envCC=clang-4.0 envMPI=mpich2 CACHE_NAME=clang40mpich2
+      - compiler: clang
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+              - llvm-toolchain-trusty
+            packages:
+              - clang-5.0
+        env: envCXX=clang++-5.0 envCC=clang-5.0 envMPI=mpich2 CACHE_NAME=clang50mpich2
       - compiler: gcc
         addons:
           apt:
@@ -184,6 +256,15 @@ matrix:
               - gcc-5
               - g++-5
         env: envCXX=g++-5 envCC=gcc-5 envMPI=mpich3 CACHE_NAME=gcc5mpich3
+      - compiler: gcc
+        addons:
+          apt:
+            sources:
+              - ubuntu-toolchain-r-test
+            packages:
+              - gcc-6
+              - g++-6
+        env: envCXX=g++-6 envCC=gcc-6 envMPI=mpich3 CACHE_NAME=gcc6mpich3
       
 
 before_install:
@@ -193,9 +274,9 @@ before_install:
 #  apt:
 #    sources:
 #    - ubuntu-toolchain-r-test
-#    - llvm-toolchain-precise-3.5
-#    - llvm-toolchain-precise-3.6
-#    - llvm-toolchain-precise-3.7
+#    - llvm-toolchain-trusty-3.5
+#    - llvm-toolchain-trusty-3.6
+#    - llvm-toolchain-trusty-3.7
 #    packages:
 #    - gcc-4.8
 #    - g++-4.8
