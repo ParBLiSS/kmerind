@@ -1,4 +1,3 @@
-
 #!/bin/sh
 # source: mpi4py
 # https://github.com/mpi4py/mpi4py/blob/master/conf/travis/install-mpi.sh
@@ -17,7 +16,7 @@ case "$os" in
                     wget http://www.mpich.org/static/downloads/1.5/mpich2-1.5.tar.gz
                     tar -xzf mpich2-1.5.tar.gz
                     cd mpich2-1.5
-                    ./configure --prefix=$HOME/local/$MPI_IMPL --disable-fc --disable-f77 && make && make install
+                    ./configure --prefix=$HOME/local/$MPI_IMPL --disable-fc --disable-f77 && make && make install && make clean
                     cd ../../
                 else
                     echo 'Using cached MPICH2 v 1.5 directory';
@@ -33,7 +32,7 @@ case "$os" in
                     wget http://www.mpich.org/static/downloads/3.1.4/mpich-3.1.4.tar.gz
                     tar -xzf mpich-3.1.4.tar.gz
                     cd mpich-3.1.4
-                    ./configure --prefix=$HOME/local/$MPI_IMPL --disable-fortran && make && make install
+                    ./configure --prefix=$HOME/local/$MPI_IMPL --disable-fortran && make && make install && make clean
                     cd ../../
                 else
                     echo 'Using cached MPICH 3.1.4 directory';
@@ -45,7 +44,7 @@ case "$os" in
                     wget --no-check-certificate http://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.5.tar.bz2
                     tar -xjf openmpi-1.6.5.tar.bz2
                     cd openmpi-1.6.5
-                    ./configure --prefix=$HOME/local/$MPI_IMPL && make && make install
+                    ./configure --prefix=$HOME/local/$MPI_IMPL && make && make install && make clean
                     cd ../../
                 else
                     echo 'Using cached OpenMPI 1.6.5 directory';
@@ -57,7 +56,7 @@ case "$os" in
                     wget --no-check-certificate http://www.open-mpi.org/software/ompi/v1.8/downloads/openmpi-1.8.8.tar.bz2
                     tar -xjf openmpi-1.8.8.tar.bz2
                     cd openmpi-1.8.8
-                    ./configure --prefix=$HOME/local/$MPI_IMPL && make && make install
+                    ./configure --prefix=$HOME/local/$MPI_IMPL && make && make install && make clean
                     cd ../../
                     echo 'Using cached OpenMPI 1.8.8 directory';
                 fi

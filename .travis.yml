@@ -39,7 +39,7 @@ matrix:
             packages:
               - gcc-4.8
               - g++-4.8
-        env: envCXX=g++-4.8 envCC=gcc-4.8 envMPI=openmpi18
+        env: envCXX=g++-4.8 envCC=gcc-4.8 envMPI=openmpi18 CACHE_NAME=gcc48openmpi18
       - compiler: gcc
         addons:
           apt:
@@ -48,7 +48,7 @@ matrix:
             packages:
               - gcc-4.9
               - g++-4.9
-        env: envCXX=g++-4.9 envCC=gcc-4.9 envMPI=openmpi18
+        env: envCXX=g++-4.9 envCC=gcc-4.9 envMPI=openmpi18 CACHE_NAME=gcc49openmpi18
       - compiler: gcc
         addons:
           apt:
@@ -57,7 +57,7 @@ matrix:
             packages:
               - gcc-5
               - g++-5
-        env: envCXX=g++-5 envCC=gcc-5 envMPI=openmpi18
+        env: envCXX=g++-5 envCC=gcc-5 envMPI=openmpi18 CACHE_NAME=gcc5openmpi18
       - compiler: clang
         addons:
           apt:
@@ -66,7 +66,7 @@ matrix:
               - llvm-toolchain-precise-3.5
             packages:
               - clang-3.5
-        env: envCXX=clang++-3.5 envCC=clang-3.5 envMPI=openmpi18
+        env: envCXX=clang++-3.5 envCC=clang-3.5 envMPI=openmpi18 CACHE_NAME=clang35openmpi18
       - compiler: clang
         addons:
           apt:
@@ -75,7 +75,7 @@ matrix:
               - llvm-toolchain-precise-3.6
             packages:
               - clang-3.6
-        env: envCXX=clang++-3.6 envCC=clang-3.6 envMPI=openmpi18
+        env: envCXX=clang++-3.6 envCC=clang-3.6 envMPI=openmpi18 CACHE_NAME=clang36openmpi18
       - compiler: clang
         addons:
           apt:
@@ -84,7 +84,7 @@ matrix:
               - llvm-toolchain-precise-3.7
             packages:
               - clang-3.7
-        env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=openmpi18
+        env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=openmpi18 CACHE_NAME=clang37openmpi18
       - compiler: clang
         addons:
           apt:
@@ -93,7 +93,7 @@ matrix:
               - llvm-toolchain-precise-3.8
             packages:
               - clang-3.8
-        env: envCXX=clang++-3.8 envCC=clang-3.8 envMPI=openmpi18
+        env: envCXX=clang++-3.8 envCC=clang-3.8 envMPI=openmpi18 CACHE_NAME=clang38openmpi18
       - compiler: gcc
         addons:
           apt:
@@ -102,7 +102,7 @@ matrix:
             packages:
               - gcc-4.8
               - g++-4.8
-        env: envCXX=g++-4.8 envCC=gcc-4.8 envMPI=mpich2
+        env: envCXX=g++-4.8 envCC=gcc-4.8 envMPI=mpich2 CACHE_NAME=gcc48mpich2
       - compiler: gcc
         addons:
           apt:
@@ -111,7 +111,7 @@ matrix:
             packages:
               - gcc-4.9
               - g++-4.9
-        env: envCXX=g++-4.9 envCC=gcc-4.9 envMPI=mpich2
+        env: envCXX=g++-4.9 envCC=gcc-4.9 envMPI=mpich2 CACHE_NAME=gcc49mpich2
       - compiler: gcc
         addons:
           apt:
@@ -120,7 +120,7 @@ matrix:
             packages:
               - gcc-5
               - g++-5
-        env: envCXX=g++-5 envCC=gcc-5 envMPI=mpich2
+        env: envCXX=g++-5 envCC=gcc-5 envMPI=mpich2 CACHE_NAME=gcc5mpich2
       - compiler: clang
         addons:
           apt:
@@ -129,7 +129,7 @@ matrix:
               - llvm-toolchain-precise-3.5
             packages:
               - clang-3.5
-        env: envCXX=clang++-3.5 envCC=clang-3.5 envMPI=mpich2
+        env: envCXX=clang++-3.5 envCC=clang-3.5 envMPI=mpich2 CACHE_NAME=clang35mpich2
       - compiler: clang
         addons:
           apt:
@@ -138,7 +138,7 @@ matrix:
               - llvm-toolchain-precise-3.6
             packages:
               - clang-3.6
-        env: envCXX=clang++-3.6 envCC=clang-3.6 envMPI=mpich2
+        env: envCXX=clang++-3.6 envCC=clang-3.6 envMPI=mpich2 CACHE_NAME=clang36mpich2
       - compiler: clang
         addons:
           apt:
@@ -147,7 +147,7 @@ matrix:
               - llvm-toolchain-precise-3.7
             packages:
               - clang-3.7
-        env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=mpich2
+        env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=mpich2 CACHE_NAME=clang37mpich2
       - compiler: clang
         addons:
           apt:
@@ -156,7 +156,7 @@ matrix:
               - llvm-toolchain-precise-3.8
             packages:
               - clang-3.8
-        env: envCXX=clang++-3.8 envCC=clang-3.8 envMPI=mpich2
+        env: envCXX=clang++-3.8 envCC=clang-3.8 envMPI=mpich2 CACHE_NAME=clang38mpich2
       - compiler: gcc
         addons:
           apt:
@@ -165,7 +165,7 @@ matrix:
             packages:
               - gcc-4.8
               - g++-4.8
-        env: envCXX=g++-4.8 envCC=gcc-4.8 envMPI=mpich3
+        env: envCXX=g++-4.8 envCC=gcc-4.8 envMPI=mpich3 CACHE_NAME=gcc48mpich3
       - compiler: gcc
         addons:
           apt:
@@ -174,7 +174,7 @@ matrix:
             packages:
               - gcc-4.9
               - g++-4.9
-        env: envCXX=g++-4.9 envCC=gcc-4.9 envMPI=mpich3
+        env: envCXX=g++-4.9 envCC=gcc-4.9 envMPI=mpich3 CACHE_NAME=gcc49mpich3
       - compiler: gcc
         addons:
           apt:
@@ -183,7 +183,7 @@ matrix:
             packages:
               - gcc-5
               - g++-5
-        env: envCXX=g++-5 envCC=gcc-5 envMPI=mpich3
+        env: envCXX=g++-5 envCC=gcc-5 envMPI=mpich3 CACHE_NAME=gcc5mpich3
       
 
 before_install:
@@ -215,15 +215,16 @@ before_install:
 cache:
   directories:
     - $HOME/local
+  timeout: 600
 
 before_script:
     # check if gcc or clang
     - if [ "$CXX" = "clang++" ]; then export COMPILER="clang"; else export COMPILER="gnu"; fi
-#    # install MPI - only 1 configuration for each compiler does this
+    # install MPI - only 1 configuration for each compiler does this
     - export CXX="$envCXX" CC="$envCC" OMPI_CC="$envCC" OMPI_CXX="$envCXX" MPI="$envMPI"
     # install MPI
     - mkdir -p $HOME/local
-    - sh ./ext/mxx/conf/travis-install-mpi.sh $MPI
+    - sh ./conf/travis-install-mpi.sh $MPI
     - ls -r $HOME/local
     # set up MPI location
     - export PATH=$PATH:$HOME/local/$MPI/bin
@@ -237,20 +238,21 @@ before_script:
     #- cd ext/sparsehash
     #- ./configure CXXFLAGS=-std=c++11
     #- make
-    - cd $SRC_DIR
+    #- cd $SRC_DIR
     # prepare build kmerind
-    - mkdir build
-    - cd build
-    # first pass cmake
-    - if [ "$COMPILER" = "clang" ]; then cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=OFF -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF ../;
-        else cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=ON -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF ../; fi
-    # do it again else the gtests will not be built
-    - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_TEST_APPLICATIONS=ON -DENABLE_COVERAGE=OFF ../;
-        else cmake -DBUILD_TEST_APPLICATIONS=ON -DENABLE_COVERAGE=ON ../; fi
-    # build kmerind.  here so that if build fails, the tests are not run.
-#    - make
-
+    - mkdir -p $HOME/build
+    - cd $HOME/build
+  
 script:
+    # first pass cmake
+    - if [ "$COMPILER" = "clang" ]; then cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=OFF -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF $SRC_DIR;
+        else cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DLOG_ENGINE=PRINTF -DUSE_MPI=ON -DUSE_OPENMP=ON -DUSE_SIMD_IF_AVAILABLE=ON -DENABLE_BENCHMARKING=OFF $SRC_DIR; fi
+    # do it again else the gtests will not be built
+    - if [ "$COMPILER" = "clang" ]; then cmake -DBUILD_TEST_APPLICATIONS=ON -DENABLE_COVERAGE=OFF $SRC_DIR;
+        else cmake -DBUILD_TEST_APPLICATIONS=ON -DENABLE_COVERAGE=ON $SRC_DIR; fi
+    # build kmerind.  here so that if build fails, the tests are not run.
+    - make
+
     # run tests.
 #    - ./test/test-mpi-bliss-io-distribute
 #    - ctest -E benchmark 
