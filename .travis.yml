@@ -85,15 +85,15 @@ matrix:
             packages:
               - clang-3.6
         env: envCXX=clang++-3.6 envCC=clang-3.6 envMPI=openmpi18 CACHE_NAME=clang36openmpi18
-      - compiler: clang
-        addons:
-          apt:
-            sources:
-              - ubuntu-toolchain-r-test
-              - llvm-toolchain-trusty-3.7
-            packages:
-              - clang-3.7
-        env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=openmpi18 CACHE_NAME=clang37openmpi18
+#      - compiler: clang
+#        addons:
+#          apt:
+#            sources:
+#              - ubuntu-toolchain-r-test
+#              - llvm-toolchain-trusty-3.7  # not whitelisted.
+#            packages:
+#              - clang-3.7
+#        env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=openmpi18 CACHE_NAME=clang37openmpi18
       - compiler: clang
         addons:
           apt:
@@ -184,15 +184,15 @@ matrix:
             packages:
               - clang-3.6
         env: envCXX=clang++-3.6 envCC=clang-3.6 envMPI=mpich2 CACHE_NAME=clang36mpich2
-      - compiler: clang
-        addons:
-          apt:
-            sources:
-              - ubuntu-toolchain-r-test
-              - llvm-toolchain-trusty-3.7
-            packages:
-              - clang-3.7
-        env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=mpich2 CACHE_NAME=clang37mpich2
+#      - compiler: clang
+#        addons:
+#          apt:
+#            sources:
+#              - ubuntu-toolchain-r-test
+#              - llvm-toolchain-trusty-3.7 # not whitelisted
+#            packages:
+#              - clang-3.7
+#        env: envCXX=clang++-3.7 envCC=clang-3.7 envMPI=mpich2 CACHE_NAME=clang37mpich2
       - compiler: clang
         addons:
           apt:
