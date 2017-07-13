@@ -128,7 +128,6 @@ class BitReverseWordBenchmark : public ::testing::Test {
 #if BL_BENCHMARK == 1
 template <typename P>
 BL_TIMER_INIT(BitReverseWordBenchmark<P>::bitrev);
-//Timer BitReverseWordBenchmark<P>::bitrev_timer;
 #endif
 template <typename P>
 constexpr uint8_t BitReverseWordBenchmark<P>::bits;
@@ -251,7 +250,6 @@ class BitReverseRemainderBenchmark : public ::testing::Test {
 #if BL_BENCHMARK == 1
 template <typename P>
 BL_TIMER_INIT(BitReverseRemainderBenchmark<P>::bitrev);
-//Timer BitReverseRemainderBenchmark<P>::bitrev_timer;
 #endif
 template <typename P>
 constexpr uint8_t BitReverseRemainderBenchmark<P>::bits;
@@ -343,7 +341,6 @@ class BitReverseArrayBenchmark : public ::testing::Test {
 #if BL_BENCHMARK == 1
 template <typename P>
 BL_TIMER_INIT(BitReverseArrayBenchmark<P>::bitrev);
-//Timer BitReverseArrayBenchmark<P>::bitrev_timer;
 #endif
 template <typename P>
 constexpr uint8_t BitReverseArrayBenchmark<P>::bits;
@@ -433,7 +430,6 @@ class BitReverseFixedArrayBenchmark : public ::testing::Test {
 #if BL_BENCHMARK == 1
 template <typename P>
 BL_TIMER_INIT(BitReverseFixedArrayBenchmark<P>::bitrev);
-//Timer BitReverseFixedArrayBenchmark<P>::bitrev_timer;
 #endif
 template <typename P>
 constexpr uint8_t BitReverseFixedArrayBenchmark<P>::bits;
