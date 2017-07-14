@@ -46,7 +46,7 @@
  *
  */
 void clear_cache() {
-  size_t avail = MemUsage::get_usable_mem();
+  size_t avail = ::plog::MemUsage::get_usable_mem();
   size_t rem = avail;
 
   size_t minchunk = 1UL << 24;    // 16MB chunks
@@ -103,7 +103,7 @@ void clear_cache() {
 
     //    // check for available memory, every 64 MBs
     //    if ((i % 64) == 0) {
-    //      avail = MemUsage::get_usable_mem();
+    //      avail = ::plog::MemUsage::get_usable_mem();
     //      if (avail < (64 << 20)) break;   // less than 64MB available.
     //    }
     rem -= iter_cleared;
