@@ -27,7 +27,6 @@
 
 #include "bliss-logger_config.hpp"
 
-#if BL_BENCHMARK_TIME == 1
 
 #include <chrono>   // clock
 //#include <cstdio>   // printf
@@ -394,6 +393,7 @@ class Timer {
 
 } // end namespace plog
 
+#if BL_BENCHMARK_TIME == 1
 
 #define BL_TIMER_INIT(title)      ::plog::Timer title##_timer;
 #define BL_TIMER_RESET(title)     do { title##_timer.reset(); } while (0)

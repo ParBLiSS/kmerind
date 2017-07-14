@@ -32,7 +32,6 @@
 #include "bliss-logger_config.hpp"
 
 
-#if BL_BENCHMARK_MEM == 1
 
 #include <sys/resource.h>  // getrusage
 #include <sys/types.h>     // meminfo
@@ -399,6 +398,8 @@ class MemUsage {
 };
 
 } // end namespace plog
+
+#if BL_BENCHMARK_MEM == 1
 
 #define BL_MEMUSE_INIT(title)      ::plog::MemUsage title##_memusage;
 #define BL_MEMUSE_RESET(title)     do {  title##_memusage.reset(); } while (0)
