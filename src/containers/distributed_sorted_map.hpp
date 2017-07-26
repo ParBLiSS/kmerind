@@ -2216,6 +2216,84 @@ using SortedMapParams = ::dsc::DistributedMapParams<
         return Base::unique_size();
       }
 
+
+      /**
+       * @brief insert new elements in the distributed densehash_multimap.
+       * @param first
+       * @param last
+       */
+      template <typename V, typename Updater>
+      size_t update(std::vector<::std::pair<Key, V> >& input, bool sorted_input, Updater const & op ) {
+        // even if count is 0, still need to participate in mpi calls.  if (input.size() == 0) return;
+        BL_BENCH_INIT(update);
+
+        if (this->empty() || ::dsc::empty(input, this->comm)) {
+          BL_BENCH_REPORT_MPI_NAMED(update, "sortedmap:update", this->comm);
+          return 0;
+        }
+
+        BL_BENCH_START(update);
+        this->transform_input(input);
+        BL_BENCH_END(update, "transform_intput", input.size());
+
+        // communication part
+
+        if (this->comm.size() > 1) {
+//          // TODO: keep unique only is not needed - overhead is high.
+
+          // and distribute the data.
+          BL_BENCH_START(update);
+    //      ::dsc::distribute_bucketed(input, recv_counts, this->comm).swap(input);
+            std::vector<size_t> recv_counts;
+            std::vector<size_t> i2o;
+            std::vector<::std::pair<Key, V> > buffer;
+            ::imxx::distribute(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
+            input.swap(buffer);
+
+          BL_BENCH_END(update, "distribute", input.size());
+
+        }
+
+
+        BL_BENCH_START(update);
+        size_t count = 0;
+
+        for (auto iit = input.begin(); iit != input.end(); ++iit) {
+          auto k = iit->first;
+          auto iter = ::fsc::lower_bound<false>(this->c.begin(), this->c.end(), k, store_comp);
+          if (iter == this->c.end()) continue;
+
+          // update the entry
+          count += op((*iter).second, iit->second );
+        }
+
+        BL_BENCH_END(update, "update", count);
+
+        BL_BENCH_REPORT_MPI_NAMED(update, "sortedmap:update", this->comm);
+
+        return count;
+      }
+
+      template <typename Filter, typename Updater>
+      size_t update(Filter const & fop, Updater const & op ) {
+        BL_BENCH_INIT(update);
+
+        BL_BENCH_START(update);
+        size_t count = 0;
+
+        for (auto iter = this->c.begin(); iter != this->c.end(); ++iter) {
+          if (fop(*iter)) {
+            count += op((*iter).second);
+          }
+        }
+
+        BL_BENCH_END(update, "update", count);
+
+        BL_BENCH_REPORT_MPI_NAMED(update, "sortedmap:update", this->comm);
+
+        return count;
+      }
+
   };
 
 
