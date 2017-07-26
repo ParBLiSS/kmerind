@@ -1845,7 +1845,7 @@ namespace imxx
       BL_BENCH_START(scat_comp_gath_v);
       size_t s;
       auto it = in_buffer.begin();
-      for (size_t i = 0; i < _comm.size(); ++i) {
+      for (size_t i = 0; i < static_cast<size_t>(_comm.size()); ++i) {
     	  s = recv_counts[i];
 
           recv_counts[i] = op(it, it + s, emplacer);
