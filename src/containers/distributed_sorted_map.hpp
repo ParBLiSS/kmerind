@@ -2170,12 +2170,12 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
       virtual ~sorted_map() {};
 
-      // specialized here so that the local_find functor can be used.
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
-    		  Predicate const& pred = Predicate()) const {
-          return Base::find_overlap(find_element, keys, sorted_input, pred);
-      }
+//      // specialized here so that the local_find functor can be used.
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
+//    		  Predicate const& pred = Predicate()) const {
+//          return Base::find_overlap(find_element, keys, sorted_input, pred);
+//      }
       template <class Predicate = ::bliss::filter::TruePredicate>
       ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
                                                           Predicate const& pred = Predicate()) const {
@@ -2548,15 +2548,15 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
       //========= override find, so can pass in LocalFind object.
       template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find_overlap(::std::vector<Key>& keys, bool sorted_input = false,
+      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
     		  Predicate const& pred = Predicate()) const {
           return Base::find_overlap(find_element, keys, sorted_input, pred);
       }
-      template <class Predicate = ::bliss::filter::TruePredicate>
-      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
-                                                          Predicate const& pred = Predicate()) const {
-          return Base::find(find_element, keys, sorted_input, pred);
-      }
+//      template <class Predicate = ::bliss::filter::TruePredicate>
+//      ::std::vector<::std::pair<Key, T> > find(::std::vector<Key>& keys, bool sorted_input = false,
+//                                                          Predicate const& pred = Predicate()) const {
+//          return Base::find(find_element, keys, sorted_input, pred);
+//      }
 //      template <class Predicate = ::bliss::filter::TruePredicate>
 //      ::std::vector<::std::pair<Key, T> > find_collective(::std::vector<Key>& keys, bool sorted_input = false,
 //    		  Predicate const& pred = Predicate()) const {
