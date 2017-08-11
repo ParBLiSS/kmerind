@@ -2260,7 +2260,7 @@ using SortedMapParams = ::dsc::DistributedMapParams<
 
         for (auto iit = input.begin(); iit != input.end(); ++iit) {
           auto k = iit->first;
-          auto iter = ::fsc::lower_bound<false>(this->c.begin(), this->c.end(), k, store_comp);
+          auto iter = ::fsc::lower_bound<false>(this->c.begin(), this->c.end(), k, this->store_comp);
           if (iter == this->c.end()) continue;
 
           // update the entry
