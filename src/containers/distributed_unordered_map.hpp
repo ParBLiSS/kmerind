@@ -1834,16 +1834,10 @@ namespace dsc  // distributed std container
         }
 
 
-        typename Base::Base::Base::Base::InputTransform trans;
-
+        // transform input first.
         BL_BENCH_START(insert);
-        ::std::vector<::std::pair<Key, T> > temp;
-        temp.reserve(input.size());
-        ::fsc::back_emplace_iterator<::std::vector<::std::pair<Key, T> > > emplace_iter(temp);
-        ::std::transform(input.begin(), input.end(), emplace_iter, [&trans](Key const & x) {
-        	return ::std::make_pair(trans(x), T(1));
-        });
-        BL_BENCH_END(insert, "convert", input.size());
+        this->transform_input(input);
+        BL_BENCH_END(insert, "transform_input", input.size());
 
         // then send the raw k-mers.
         // communication part
@@ -1852,31 +1846,35 @@ namespace dsc  // distributed std container
           // first remove duplicates.  sort, then get unique, finally remove the rest.  may not be needed
           std::vector<size_t> recv_counts;
           std::vector<size_t> i2o;
-          std::vector<::std::pair<Key, T> > buffer;
+          std::vector< Key > buffer;
           ::imxx::distribute(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
           input.swap(buffer);
 
-//          auto recv_counts = ::dsc::distribute(input, this->key_to_rank, sorted_input, this->comm);
-//          BLISS_UNUSED(recv_counts);
           BL_BENCH_END(insert, "dist_data", input.size());
         }
 
 
-        //
-        //        // after communication, sort again to keep unique  - may not be needed
-        //        local_reduction(input, sorted_input);
+          size_t count = 0;
+          auto trans = [](Key const & x) {
+            return ::std::make_pair(x, T(1));
+          };
 
-        // local compute part.  called by the communicator.
-        BL_BENCH_START(insert);
-        size_t count = 0;
-        if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
-          count = this->Base::local_insert(temp.begin(), temp.end(), pred);
-        else
-          count = this->Base::local_insert(temp.begin(), temp.end());
+          BL_BENCH_START(insert);
+          // preallocate.  easy way out - estimate to be 1/2 of input.  then at the end, resize if significantly less.
+          //this->c.resize(input.size() / 2);
+          if (this->comm.rank() == 0)
+          std::cout << "rank " << this->comm.rank() <<
+            " BEFORE input=" << input.size() << " size=" << this->local_size() << " buckets=" << this->c.bucket_count() << std::endl;
+
+          // then insert all the rest,
+          auto local_start = ::bliss::iterator::make_transform_iterator(input.begin(), trans);
+          auto local_end = ::bliss::iterator::make_transform_iterator(input.end(), trans);
+          // insert
+          if (!::std::is_same<Predicate, ::bliss::filter::TruePredicate>::value)
+            count += this->Base::local_insert(local_start, local_end, pred);
+          else
+            count += this->Base::local_insert(local_start, local_end);
         BL_BENCH_END(insert, "local_insert", this->local_size());
-
-
-        ::std::vector<::std::pair<Key, T> >().swap(temp);  // clear the temp.
 
 
         BL_BENCH_REPORT_MPI_NAMED(insert, "count_hashmap:insert_key", this->comm);

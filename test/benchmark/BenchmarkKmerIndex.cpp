@@ -499,7 +499,7 @@ int main(int argc, char** argv) {
 
 
   {
-	  ::std::vector<typename IndexType::TupleType> temp;
+	  ::std::vector<typename IndexType::KmerParserType::value_type> temp;
 
 	  BL_BENCH_START(test);
 //	  if (reader_algo == 2)
