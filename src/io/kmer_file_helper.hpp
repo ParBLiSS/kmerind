@@ -180,6 +180,8 @@ struct KmerFileHelper {
 
     }
 
+    //std::cout << "number of sequences " << seqs << " number of total entries " << result.size() << " before insertion " << before << std::endl;
+
     return std::make_pair(seqs, result.size() - before);
   }
 
@@ -276,7 +278,9 @@ struct KmerFileHelper {
         if (partition.getRange().size() > 0) {
           read = read_block_old<KmerParser, SeqParser, SeqIterType>(partition, seq_parser, result);
         }
-        BL_BENCH_END(file, "read", read.second);
+//        std::cout << "parse_file_data_old: seqs " << read.first << " kmers " << read.second << std::endl;
+
+        BL_BENCH_END(file, "read_seqs", read.first);
         // std::cout << "Last: pos - kmer " << result.back() << std::endl;
       }
 
@@ -319,7 +323,7 @@ struct KmerFileHelper {
         if (partition.getRange().size() > 0) {
           read = read_block<KmerParser, SeqParser, SeqIterType>(partition, seq_parser, result);
         }
-        BL_BENCH_END(file, "read", read.second);
+        BL_BENCH_END(file, "read_seqs", read.first);
         // std::cout << "Last: pos - kmer " << result.back() << std::endl;
       }
 
@@ -368,7 +372,7 @@ struct KmerFileHelper {
         // not reusing the SeqParser in loader.  instead, reinitializing one.
         BL_BENCH_START(file);
         read = parse_file_data_old<KmerParser, SeqParser, SeqIterType>(partition, result);
-        BL_BENCH_END(file, "read", read.second);
+        BL_BENCH_END(file, "read_kmers", read.second);
         // std::cout << "Last: pos - kmer " << result.back() << std::endl;
       }
 
@@ -468,7 +472,7 @@ struct KmerFileHelper {
         if (partition.getRange().size() > 0) {
           read = read_block_old<KmerParser, SeqParser, SeqIterType>(partition, seq_parser, result);
         }
-        BL_BENCH_END(file, "read", read.first);
+        BL_BENCH_END(file, "read_seqs", read.first);
         // std::cout << "Last: pos - kmer " << result.back() << std::endl;
       }
 
@@ -514,7 +518,7 @@ struct KmerFileHelper {
         if (partition.getRange().size() > 0) {
           read = read_block<KmerParser, SeqParser, SeqIterType>(partition, seq_parser, result);
         }
-        BL_BENCH_END(file, "read", read.first);
+        BL_BENCH_END(file, "read_seqs", read.first);
         // std::cout << "Last: pos - kmer " << result.back() << std::endl;
       }
 
@@ -565,7 +569,7 @@ struct KmerFileHelper {
         // not reusing the SeqParser in loader.  instead, reinitializing one.
         BL_BENCH_START(file);
         read = parse_file_data_old<KmerParser, SeqParser, SeqIterType>(partition, result, _comm);
-        BL_BENCH_END(file, "read", read.first);
+        BL_BENCH_END(file, "read_kmers", read.second);
         // std::cout << "Last: pos - kmer " << result.back() << std::endl;
       }
 
