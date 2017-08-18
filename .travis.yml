@@ -121,15 +121,15 @@ matrix:
             packages:
               - clang-4.0
         env: envCXX=clang++-4.0 envCC=clang-4.0 envMPI=openmpi18 CACHE_NAME=clang40openmpi18
-      - compiler: clang
-        addons:
-          apt:
-            sources:
-              - ubuntu-toolchain-r-test
-              - llvm-toolchain-trusty
-            packages:
-              - clang-5.0
-        env: envCXX=clang++-5.0 envCC=clang-5.0 envMPI=openmpi18 CACHE_NAME=clang50openmpi18
+#      - compiler: clang
+#        addons:
+#          apt:
+#            sources:
+#              - ubuntu-toolchain-r-test
+#              - llvm-toolchain-trusty
+#            packages:
+#              - clang-5.0
+#        env: envCXX=clang++-5.0 envCC=clang-5.0 envMPI=openmpi18 CACHE_NAME=clang50openmpi18
       - compiler: gcc
         addons:
           apt:
@@ -220,15 +220,15 @@ matrix:
             packages:
               - clang-4.0
         env: envCXX=clang++-4.0 envCC=clang-4.0 envMPI=mpich2 CACHE_NAME=clang40mpich2
-      - compiler: clang
-        addons:
-          apt:
-            sources:
-              - ubuntu-toolchain-r-test
-              - llvm-toolchain-trusty
-            packages:
-              - clang-5.0
-        env: envCXX=clang++-5.0 envCC=clang-5.0 envMPI=mpich2 CACHE_NAME=clang50mpich2
+#      - compiler: clang
+#        addons:
+#          apt:
+#            sources:
+#              - ubuntu-toolchain-r-test
+#              - llvm-toolchain-trusty
+#            packages:
+#              - clang-5.0
+#        env: envCXX=clang++-5.0 envCC=clang-5.0 envMPI=mpich2 CACHE_NAME=clang50mpich2
       - compiler: gcc
         addons:
           apt:
