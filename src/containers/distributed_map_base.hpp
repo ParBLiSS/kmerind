@@ -284,6 +284,10 @@ namespace dsc
         std::transform(input.begin(), input.end(), output.begin(), InputTransform());
       }
 
+      template <typename IT, typename OT>
+      void transform_input(IT _begin, IT _end, OT output) const {
+        std::transform(_begin, _end, output, InputTransform());
+      }
   };
 
 }
