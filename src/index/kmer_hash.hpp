@@ -123,7 +123,7 @@
 //        // the remainder bits, if any, needs to be dealt with now.
 //        if (leftover > 0) {
 //          hp = 0;
-//          memcpy(&hp, kmer.getData() + tuples * sizeof(uint64_t), leftover);
+//          memcpy(&hp, reinterpret_cast<uint64_t *>(kmer.getData()) + tuples, leftover);
 //          hp = std::hash<uint64_t>()(hp);
 //          h ^= (hp << 1);
 //        }
@@ -163,6 +163,8 @@ namespace bliss {
           ::std::hash<size_t> op;
 
         public:
+          static constexpr uint8_t batch_size = 1;
+
           // if nBits is more than 32, then default prefix should be 32.
           static constexpr unsigned int default_init_value = 32U;
 
@@ -174,11 +176,11 @@ namespace bliss {
               size_t const * data = reinterpret_cast<size_t const*>(kmer.getData());
               size_t h = 0;
 
-			  // first deal with the remainder bits, if any.
-			  if (leftover > 0) {
-				memcpy(&h, kmer.getData() + tuples * sizeof(size_t), leftover);
-				h = op(h);
-			  }
+              // first deal with the remainder bits, if any.
+              if (leftover > 0) {
+                memcpy(&h, data + tuples, leftover);
+                h = op(h);
+              }
 
               size_t hp;
             // then compute the hash, from 64 bits of input at a time
@@ -209,6 +211,8 @@ namespace bliss {
         protected:
           unsigned int bits;
         public:
+          static constexpr uint8_t batch_size = 1;
+
           static constexpr unsigned int default_init_value = 24U;
           static constexpr unsigned int suffix_bits = (KMER::nBits > 64U) ? 64U : KMER::nBits;
 
@@ -241,6 +245,8 @@ namespace bliss {
           uint32_t seed;
 
         public:
+          static constexpr uint8_t batch_size = 1;
+
           static const unsigned int default_init_value = 24U;  // allow 16M processors.  but it's ignored here.
 
           murmur(const unsigned int prefix_bits = default_init_value, uint32_t const & _seed = 42 ) : seed(_seed) {};
@@ -280,6 +286,8 @@ namespace bliss {
           size_t shift;
 
         public:
+          static constexpr uint8_t batch_size = 1;
+
           static const unsigned int default_init_value = 24U;   // this allows 16M processors.
 
           farm(const unsigned int prefix_bits = default_init_value) : shift(64U - std::min(prefix_bits, 64U)) {
