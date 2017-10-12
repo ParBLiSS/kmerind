@@ -627,7 +627,7 @@ namespace dsc  // distributed std container
               return v + x.second;
             });
             //          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-            //            count += it->second;
+            //            count += (*it).second;
             //          }
             BL_BENCH_END(find, "local_count", count);
 
@@ -1022,7 +1022,7 @@ namespace dsc  // distributed std container
 //              return v + x.second;
 //            });
 //            //          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-//            //            count += it->second;
+//            //            count += (*it).second;
 //            //          }
 //            BL_BENCH_END(find, "local_count", count);
 //
@@ -2521,7 +2521,7 @@ namespace dsc  // distributed std container
           auto result = temp.insert(*it);
           if (!(result.second)) {
             // failed insertion - means an entry is already there, so reduce
-            result.first->second = r(result.first->second, it->second);
+            result.first->second = r(result.first->second, (*it).second);
           }
         }
         BL_BENCH_END(reduce_tuple, "reduce", temp.size());

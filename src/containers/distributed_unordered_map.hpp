@@ -535,7 +535,7 @@ namespace dsc  // distributed std container
               return v + x.second;
             });
             //          for (auto it = count_results.begin(), max = count_results.end(); it != max; ++it) {
-            //            count += it->second;
+            //            count += (*it).second;
             //          }
             BL_BENCH_END(find, "local_count", count);
 
@@ -1522,7 +1522,7 @@ namespace dsc  // distributed std container
           typename Base::template UniqueKeySetUtilityType<Key> unique_set(this->c.size());
           auto max = this->c.end();
           for (auto it = this->c.begin(); it != max; ++it) {
-            unique_set.emplace(it->first);
+            unique_set.emplace((*it).first);
           }
           local_unique_count = unique_set.size();
 
@@ -1607,9 +1607,9 @@ namespace dsc  // distributed std container
           this->local_reserve(before + ::std::distance(first, last));
 
           for (auto it = first; it != last; ++it) {
-            if (this->c.find(it->first) == this->c.end()) this->c.emplace(*it);
+            if (this->c.find((*it).first) == this->c.end()) this->c.emplace(*it);
             else
-              this->c.at(it->first) = r(this->c.at(it->first), it->second);
+              this->c.at((*it).first) = r(this->c.at((*it).first), (*it).second);
           }
 
           if (this->c.size() != before) this->local_changed = true;
@@ -1630,9 +1630,9 @@ namespace dsc  // distributed std container
 
           for (auto it = first; it != last; ++it) {
             if (pred(*it)) {
-              if (this->c.find(it->first) == this->c.end()) this->c.emplace(*it);
+              if (this->c.find((*it).first) == this->c.end()) this->c.emplace(*it);
               else
-                this->c.at(it->first) = r(this->c.at(it->first), it->second);
+                this->c.at((*it).first) = r(this->c.at((*it).first), (*it).second);
             }
           }
 
@@ -1660,8 +1660,8 @@ namespace dsc  // distributed std container
         T v;
         auto end = input.end();
         for (auto it = input.begin(); it != end; ++it) {
-          k = it->first;
-          v = it->second;
+          k = (*it).first;
+          v = (*it).second;
           if (temp.find(k) == temp.end()) temp.emplace(k, v);  // don't rely on initialization to set T to 0.
           else temp.at(k) = r(temp.at(k), v);
         }

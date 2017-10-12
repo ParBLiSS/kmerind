@@ -103,8 +103,13 @@ namespace dsc
 	  template <typename K>
 	  using DistTransform = DistTrans<K>;
 
-	  using DistributionTransformedFunction = DistTransFunc<Key, DistFunc, DistTrans>;
-	  using DistributionTransformedEqual = ::fsc::TransformedComparator<Key, DistEqual, DistTrans>;
+	  template <typename K>
+	  using DistTransFuncTemplate = DistTransFunc<K, DistFunc, DistTrans>;
+	  template <typename K>
+	  using DistTransEqualTemplate = ::fsc::TransformedComparator<K, DistEqual, DistTrans>;
+
+	  using DistributionTransformedFunction = DistTransFuncTemplate<Key>;
+	  using DistributionTransformedEqual = DistTransEqualTemplate<Key>;
 
 	  template <typename K>
 	  using StorageFunction = StoreFunc<K>;
@@ -114,8 +119,14 @@ namespace dsc
 	  template <typename K>
 	  using StorageEqual = StoreEqual<K>;
 
-	  using StorageTransformedFunction = StoreTransFunc<Key, StoreFunc, StoreTrans>;
-	  using StorageTransformedEqual = ::fsc::TransformedComparator<Key, StoreEqual, StoreTrans>;
+	  template <typename K>
+	  using StoreTransFuncTemplate = StoreTransFunc<K, StoreFunc, StoreTrans>;
+	  template <typename K>
+	  using StoreTransEqualTemplate = ::fsc::TransformedComparator<K, StoreEqual, StoreTrans>;
+
+
+	  using StorageTransformedFunction = StoreTransFuncTemplate<Key>;
+	  using StorageTransformedEqual = StoreTransEqualTemplate<Key>;
   };
 
   template <typename Key,

@@ -199,7 +199,8 @@ namespace bliss {
           }
 
       };
-
+      template<typename KMER, bool Prefix>
+      constexpr uint8_t cpp_std<KMER, Prefix>::batch_size;
 
       /**
        * @brief  Kmer hash, returns the least significant NumBits directly as identity hash.
@@ -229,6 +230,8 @@ namespace bliss {
               return kmer.getSuffix(suffix_bits);
           }
       };
+      template<typename KMER, bool Prefix>
+      constexpr uint8_t identity<KMER, Prefix>::batch_size;
 
       /**
        * @brief Kmer specialization for MurmurHash.  generated hash is 128 bit.
@@ -271,6 +274,8 @@ namespace bliss {
           }
 
       };
+      template<typename KMER, bool Prefix>
+      constexpr uint8_t murmur<KMER, Prefix>::batch_size;
 
       /**
        * @brief  Kmer hash, returns the least significant NumBits from murmur hash.
@@ -302,6 +307,8 @@ namespace bliss {
           }
 
       };
+      template<typename KMER, bool Prefix>
+      constexpr uint8_t farm<KMER, Prefix>::batch_size;
 
 
       namespace sparsehash {

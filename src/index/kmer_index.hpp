@@ -129,7 +129,8 @@ public:
 //	std::vector<TupleType> find_overlap(std::vector<KmerType> &query) const {
 //		return map.find_overlap(query);
 //	}
-	std::vector<TupleType> find(std::vector<KmerType> &query) const {
+	auto find(std::vector<KmerType> &query) const
+		-> decltype(::std::declval<MapType>().find(::std::declval<std::vector<KmerType> &>())) {
 		return map.find(query);
 	}
 //	std::vector<TupleType> find_collective(std::vector<KmerType> &query) const {
@@ -138,7 +139,8 @@ public:
 //  std::vector<TupleType> find_sendrecv(std::vector<KmerType> &query) const {
 //    return map.find_sendrecv(query);
 //  }
-	std::vector< std::pair<KmerType, size_t> > count(std::vector<KmerType> &query) const {
+	auto count(std::vector<KmerType> &query) const
+	-> decltype(::std::declval<MapType>().count(::std::declval<std::vector<KmerType> &>())){
 		return map.count(query);
 	}
 
@@ -152,7 +154,8 @@ public:
 //		return map.find_overlap(query, false, pred);
 //	}
 	template <typename Predicate>
-	std::vector<TupleType> find_if(std::vector<KmerType> &query, Predicate const &pred) const {
+	auto find_if(std::vector<KmerType> &query, Predicate const &pred) const
+	-> decltype(::std::declval<MapType>().find(::std::declval<std::vector<KmerType> &>())) {
 		return map.find(query, false, pred);
 	}
 //	template <typename Predicate>
@@ -169,7 +172,8 @@ public:
 	}
 
 	template <typename Predicate>
-	std::vector<std::pair<KmerType, size_t> > count_if(std::vector<KmerType> &query, Predicate const &pred) const {
+	auto count_if(std::vector<KmerType> &query, Predicate const &pred) const
+	-> decltype(::std::declval<MapType>().find(::std::declval<std::vector<KmerType> &>())) {
 		return map.count(query, false, pred);
 	}
 
