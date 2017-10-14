@@ -280,8 +280,9 @@ namespace bliss {
       /**
        * @brief  Kmer hash, returns the least significant NumBits from murmur hash.
        * @note   since the number of buckets is not known ahead of time, can't have nbit be a type
-       *
-       * @tparam Prefix:  to get prefix,
+       *		IMPORTANT: upper and lower halves of the hash values are not independent, when farm hash is used with a given seed.
+       *		therefore, different seed must be applied.  to adhere to existing api, we generate a different seed for "prefix" version.
+       * @tparam Prefix:
        */
       template <typename KMER, bool Prefix = false>
       class farm {
@@ -289,21 +290,22 @@ namespace bliss {
         protected:
           static constexpr unsigned int nBytes = (KMER::nBits + 7) / 8;
           size_t shift;
+          uint32_t seed;
 
         public:
           static constexpr uint8_t batch_size = 1;
 
           static const unsigned int default_init_value = 24U;   // this allows 16M processors.
 
-          farm(const unsigned int prefix_bits = default_init_value) : shift(64U - std::min(prefix_bits, 64U)) {
+          farm(const unsigned int prefix_bits = default_init_value, uint32_t const & _seed = 42 ) : shift(64U - std::min(prefix_bits, 64U)), seed(_seed)  {
           };
 
           /// operator to compute hash.  64 bit again.
           inline uint64_t operator()(const KMER & kmer) const {
             if (Prefix)
-              return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes) >> shift;
+              return ::util::Hash64WithSeed(reinterpret_cast<const char*>(kmer.getData()), nBytes, (seed << 1) - 1);
             else
-              return ::util::Hash(reinterpret_cast<const char*>(kmer.getData()), nBytes);
+              return ::util::Hash64WithSeed(reinterpret_cast<const char*>(kmer.getData()), nBytes, seed);
           }
 
       };
