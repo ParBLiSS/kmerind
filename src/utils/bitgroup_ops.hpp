@@ -1641,29 +1641,19 @@ namespace bliss {
           static_assert(BIT_GROUP_SIZE < 256, "ERROR: BIT_GROUP_SIZE is greater than number of bits in __m256i");
           static_assert((BIT_GROUP_SIZE & (BIT_GROUP_SIZE - 1)) == 0, "ERROR: BIT_GROUP_SIZE is has to be powers of 2");
 
-          const __m256i rev_idx_lane8;
-          const __m256i rev_idx_lane16;
-          const __m256i rev_idx32;
-          const __m256i _mask_lo;
-          const __m256i lut1_lo;
-          const __m256i lut1_hi;
-          const __m256i lut2_lo;
-          const __m256i lut2_hi;
+          static const __m256i rev_idx_lane8;
+          static const __m256i rev_idx_lane16;
+          static const __m256i rev_idx32;
+          static const __m256i _mask_lo;
+          static const __m256i lut1_lo;
+          static const __m256i lut1_hi;
+          static const __m256i lut2_lo;
+          static const __m256i lut2_hi;
           /// lookup table for reversing bits in a byte in groups of 4 - no need, just use the mask_lo and shift operator.
           static constexpr unsigned int bitsPerGroup = BIT_GROUP_SIZE;
           static constexpr unsigned char simd_type = BIT_REV_AVX2;
 
-          bitgroup_ops() :
-            rev_idx_lane8( _mm256_setr_epi32(0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203)),
-            rev_idx_lane16(_mm256_setr_epi32(0x0D0C0F0E, 0x09080B0A, 0x05040706, 0x01000302, 0x0D0C0F0E, 0x09080B0A, 0x05040706, 0x01000302)),
-            rev_idx32(     _mm256_setr_epi32(0x00000007, 0x00000006, 0x00000005, 0x00000004, 0x00000003, 0x00000002, 0x00000001, 0x00000000)),
-            _mask_lo(      _mm256_setr_epi32(0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F)),
-            lut1_lo(       _mm256_setr_epi32(0x0c040800, 0x0e060a02, 0x0d050901, 0x0f070b03, 0x0c040800, 0x0e060a02, 0x0d050901, 0x0f070b03)),
-            lut1_hi(       _mm256_setr_epi32(0xc0408000, 0xe060a020, 0xd0509010, 0xf070b030, 0xc0408000, 0xe060a020, 0xd0509010, 0xf070b030)),
-            lut2_lo(       _mm256_setr_epi32(0x0c080400, 0x0d090501, 0x0e0a0602, 0x0f0b0703, 0x0c080400, 0x0d090501, 0x0e0a0602, 0x0f0b0703)),
-            lut2_hi(       _mm256_setr_epi32(0xc0804000, 0xd0905010, 0xe0a06020, 0xf0b07030, 0xc0804000, 0xd0905010, 0xe0a06020, 0xf0b07030))
-            {
-          }
+          bitgroup_ops() {}
 
           static ::std::string toString(__m256i const & v) {
             uint8_t BLISS_ALIGNED_ARRAY(tmp, 32, 32);
@@ -1854,11 +1844,18 @@ namespace bliss {
 
 
       };
-
+template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::rev_idx_lane8 =  _mm256_setr_epi32(0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203);
+template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::rev_idx_lane16 = _mm256_setr_epi32(0x0D0C0F0E, 0x09080B0A, 0x05040706, 0x01000302, 0x0D0C0F0E, 0x09080B0A, 0x05040706, 0x01000302);
+template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::rev_idx32 =      _mm256_setr_epi32(0x00000007, 0x00000006, 0x00000005, 0x00000004, 0x00000003, 0x00000002, 0x00000001, 0x00000000);
+template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::_mask_lo =       _mm256_setr_epi32(0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F, 0x0F0F0F0F);
+template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::lut1_lo = _mm256_setr_epi32(0x0c040800, 0x0e060a02, 0x0d050901, 0x0f070b03, 0x0c040800, 0x0e060a02, 0x0d050901, 0x0f070b03);
+template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::lut1_hi = _mm256_setr_epi32(0xc0408000, 0xe060a020, 0xd0509010, 0xf070b030, 0xc0408000, 0xe060a020, 0xd0509010, 0xf070b030);
+template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::lut2_lo = _mm256_setr_epi32(0x0c080400, 0x0d090501, 0x0e0a0602, 0x0f0b0703, 0x0c080400, 0x0d090501, 0x0e0a0602, 0x0f0b0703);
+template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT_GROUP_SIZE, BIT_REV_AVX2, POW2>::lut2_hi = _mm256_setr_epi32(0xc0804000, 0xd0905010, 0xe0a06020, 0xf0b07030, 0xc0804000, 0xd0905010, 0xe0a06020, 0xf0b07030);
 
       /// partial template specialization for SSSE3 based bit reverse.  this is defined only for bit_group_sizes that are 1, 2, 4, and 8 (actually powers of 2 up to 128bit)
       template <bool POW2>
-      struct bitgroup_ops<3, BIT_REV_AVX2, POW2> {
+      struct bitgroup_ops<3, BIT_REV_AVX2, POW2> { 
 
           /// lookup table for reversing bits in a byte in groups of 4 - no need, just use the mask_lo and shift operator.
           static constexpr unsigned int bitsPerGroup = 3;
@@ -1871,16 +1868,12 @@ namespace bliss {
 
           bitgroup_ops<1, BIT_REV_AVX2, true> bit_rev_1;
 
-          const __m256i mask3lo;
-          const __m256i mask3mid;
-          const __m256i mask3hi;
+          static const __m256i mask3lo;
+          static const __m256i mask3mid;
+          static const __m256i mask3hi;
 
 
-          bitgroup_ops() :
-            mask3lo( _mm256_setr_epi32(0x49249249, 0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249, 0x92492492)),
-            mask3mid(_mm256_setr_epi32(0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924)),
-            mask3hi( _mm256_setr_epi32(0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249))
-          {}
+          bitgroup_ops() {}
 
 
           static ::std::string toString(__m256i const & v) {
@@ -1942,7 +1935,7 @@ namespace bliss {
             out[len-1] |= last;
 
             // maskmoveu is very slow.  why?
-			//_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));        // SSE2
+			     //_mm_maskmoveu_si128(mword, *simd_store_mask, reinterpret_cast<char*>(result.data));        // SSE2
 
             // return remainder.
             return ((len << 3) - bit_offset) % 3;
@@ -2001,9 +1994,13 @@ namespace bliss {
 
 
       };
-
-      template <bool POW2>
-      constexpr uint8_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask_all, 64, 32);
+      template <bool POW2> const __m256i bitgroup_ops<3, BIT_REV_AVX2, POW2>::mask3lo  = 
+        _mm256_setr_epi32(0x49249249, 0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249, 0x92492492);
+      template <bool POW2> const __m256i bitgroup_ops<3, BIT_REV_AVX2, POW2>::mask3mid = 
+        _mm256_setr_epi32(0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924);
+      template <bool POW2> const __m256i bitgroup_ops<3, BIT_REV_AVX2, POW2>::mask3hi  =
+        _mm256_setr_epi32(0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249, 0x92492492, 0x24924924, 0x49249249);
+      template <bool POW2> constexpr uint8_t bitgroup_ops<3, BIT_REV_AVX2, POW2>::BLISS_ALIGNED_ARRAY(mask_all, 64, 32);
 
 
 
