@@ -1062,14 +1062,21 @@ namespace dsc  // distributed std container
         c.clear();
       }
 
+
+
+    public:
       /// reserve space.  n is the local container size.  this allows different processes to individually adjust its own size.
       virtual void local_reserve( size_t n) {
         c.resize(n); 
       }
 
+      virtual size_t local_capacity() noexcept {
+    	  return c.bucket_count();
+      }
+      virtual float get_max_load_factor() noexcept {
+    	  return c.get_max_load_factor();
+      }
 
-
-    public:
 
       virtual ~densehash_map_base() {};
 

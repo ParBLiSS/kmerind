@@ -489,6 +489,9 @@ protected:
     virtual ~densehash_map() {};
 
 
+    float get_max_load_factor() const {
+    	return lower_map.max_load_factor();
+    }
 
     iterator begin() {
       return iterator(std::vector<container_range> { container_range{lower_map.begin(), lower_map.end()},
@@ -978,6 +981,9 @@ class densehash_map<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator, fals
 
     virtual ~densehash_map() {};
 
+    float get_max_load_factor() const {
+    	return map.max_load_factor();
+    }
 
     iterator begin() {
       return map.begin();
@@ -1807,6 +1813,10 @@ class densehash_multimap {
       return s;
     }
 
+    float get_max_load_factor() const {
+    	return lower_map.max_load_factor();
+    }
+
 
     size_type unique_size() const {
       return lower_map.size() + upper_map.size();
@@ -2126,6 +2136,10 @@ class densehash_multimap<Key, T, SpecialKeys, Transform, Hash, Equal, Allocator,
 
     bool empty() const {
       return map.empty();
+    }
+
+    float get_max_load_factor() const {
+    	return map.max_load_factor();
     }
 
     size_type size() const {
