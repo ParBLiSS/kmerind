@@ -180,7 +180,7 @@ namespace io
         * @param startOffset offset for the beginning of the data in question
         * @param endOffset   offset for the end of the data in question
         */
-       void handleError(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) throw (bliss::io::IOException) {
+       void handleError(const std::string& errType, const Iterator &start, const Iterator &end, const size_t& startOffset, const size_t& endOffset) {
          std::stringstream ss;
 //#ifdef USE_MPI
 //         int rank = 0;
