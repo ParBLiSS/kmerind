@@ -141,7 +141,7 @@ namespace bliss
         type& operator=(const type& other)
         {
           ranges = other.ranges;
-          curr_iter_pos(other.curr_iter_pos);
+          curr_iter_pos = other.curr_iter_pos;
           // move curr forward the same distance as other.curr - other.starts[curr_iter_pos]
           curr = ranges[curr_iter_pos].first;
           for (auto it = other.ranges[curr_iter_pos].first;
