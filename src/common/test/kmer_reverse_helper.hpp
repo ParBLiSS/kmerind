@@ -25,6 +25,12 @@
 #ifndef BLISS_COMMON_TEST_KMER_REV_HELPER_H
 #define BLISS_COMMON_TEST_KMER_REV_HELPER_H
 
+#if defined __GNUC__ && __GNUC__>=6
+// disable __m128i and __m256i ignored attribute warning in gcc
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wignored-attributes"
+#endif
+
 // C std lib includes:
 #include <cstdlib>
 
@@ -1062,5 +1068,9 @@ namespace bliss
 } // namespace bliss
 
 
+#if defined __GNUC__ && __GNUC__>=6
+// disable __m128i and __m256i ignored attribute warning in gcc
+  #pragma GCC diagnostic pop
+#endif
 
 #endif // BLISS_COMMON_KMER_H

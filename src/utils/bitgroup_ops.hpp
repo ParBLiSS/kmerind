@@ -56,6 +56,12 @@
 #include <x86intrin.h>   // all intrinsics.  will be enabled based on compiler flag such as __SSSE3__ internally.
 #endif
 
+#if defined __GNUC__ && __GNUC__>=6
+// disable __m128i and __m256i ignored attribute warning in gcc
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wignored-attributes"
+#endif
+
 // needed by clang else it does not know where to get the bswap function.  however, conflicts with farmhash.cc
 //#include <byteswap.h>
 
@@ -3573,6 +3579,10 @@ template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT
 
 
 
+#if defined __GNUC__ && __GNUC__>=6
+// disable __m128i and __m256i ignored attribute warning in gcc
+  #pragma GCC diagnostic pop
+#endif
 
 
 

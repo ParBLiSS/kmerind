@@ -69,7 +69,7 @@ namespace bliss
         BaseAlphabetChar(const CharType& c) : data_value(c) {}
 
         /// default constructor
-        BaseAlphabetChar() {}
+        BaseAlphabetChar() : data_value(0) {}
 
       };
     
