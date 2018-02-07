@@ -58,7 +58,7 @@ constexpr T getMostSignificantBitsMask(const BitSizeType nBits)
   static_assert(std::is_integral<T>::value && !std::is_signed<T>::value, "getBitMask only accepts primitive, unsigned integral type.");
 
   //conditional because clang optimized seems to have trouble with bitshifting entire word.
-  return (static_cast<size_t>(nBits) == sizeof(T) * 8UL) ? std::numeric_limits<T>::max() : (std::numeric_limits<T>::max() << (std::numeric_limits<T>::digits - nBits));
+  return (static_cast<size_t>(nBits) == sizeof(T) << 3UL) ? std::numeric_limits<T>::max() : (std::numeric_limits<T>::max() << (std::numeric_limits<T>::digits - nBits));
   //return static_cast<T>((static_cast<T>(0x1) << nBits) - static_cast<T>(1));
 }
 
