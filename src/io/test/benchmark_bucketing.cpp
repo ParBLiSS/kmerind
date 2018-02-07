@@ -357,7 +357,7 @@ TEST_P(BucketBenchmark, inplace_unpermute)
 
 
 INSTANTIATE_TEST_CASE_P(Bliss, BucketBenchmark, ::testing::Values(
-    BucketBenchmarkInfo((1UL << 26), 1UL << 16, 0, (1UL << 26))  // 1, full
+    BucketBenchmarkInfo((1UL << 22), 1UL << 16, 0, (1UL << 22))  // 1, full
 
 ));
 

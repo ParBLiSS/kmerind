@@ -65,7 +65,7 @@ class KmerReverseBenchmark : public ::testing::Test {
 
     static bliss::common::test::KmerReverseHelper<T> helper;
 
-    static constexpr size_t iterations = 1000000;
+    static constexpr size_t iterations = 200000;
 
     static std::vector<T> kmers;
     std::vector<T> outputs;

@@ -49,7 +49,7 @@ template <typename T>
 class KmerOpsBenchmark : public ::testing::Test {
   protected:
 
-    static constexpr size_t iterations = 1000000;
+    static constexpr size_t iterations = 200000;
 
     static std::vector<T> kmers;
     static std::vector<T> kmers2;

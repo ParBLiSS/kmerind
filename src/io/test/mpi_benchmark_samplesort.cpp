@@ -246,8 +246,8 @@ TEST_P(SamplesortBenchmark, mxx_samplesort)
 
 INSTANTIATE_TEST_CASE_P(Bliss, SamplesortBenchmark, ::testing::Values(
     // base cases
-	    SamplesortBenchmarkInfo((1UL << 24), false),  // 1
-	    SamplesortBenchmarkInfo((1UL << 24), true)  // 1
+	    SamplesortBenchmarkInfo((1UL << 22), false),  // 1
+	    SamplesortBenchmarkInfo((1UL << 22), true)  // 1
 
 ));
 

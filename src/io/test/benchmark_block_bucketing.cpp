@@ -289,7 +289,7 @@ TEST_P(BlockBucketBenchmark, inplace_unpermute)
 
 
 INSTANTIATE_TEST_CASE_P(Bliss, BlockBucketBenchmark, ::testing::Values(
-    BlockBucketBenchmarkInfo((1UL << 26), 1UL << 16, (1UL <<  8))  // 1, full
+    BlockBucketBenchmarkInfo((1UL << 22), 1UL << 16, (1UL <<  8))  // 1, full
 ));
 
 

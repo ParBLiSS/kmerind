@@ -487,8 +487,8 @@ TEST(BitReverseInFixedByteArrayBenchmark, rev_byte)
 
     BitReverseBenchmarkHelper<bitsPerGroup> helper;
 
-    constexpr size_t iters = 400000000;
-    constexpr size_t s = 4000000;
+    constexpr size_t iters = 10000000;
+    constexpr size_t s = 1000000;
 
     uint8_t data[s];
 

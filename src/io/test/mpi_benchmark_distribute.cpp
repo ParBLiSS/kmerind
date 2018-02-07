@@ -238,7 +238,7 @@ TEST_P(A2ADistributeBenchmark, block_roundtrip_inplace)
 
 INSTANTIATE_TEST_CASE_P(Bliss, A2ADistributeBenchmark, ::testing::Values(
     // base cases
-    A2ADistributeBenchmarkInfo((1UL << 24), 0UL, (1UL <<  24), 0UL, (1UL <<  8))  // 8
+    A2ADistributeBenchmarkInfo((1UL << 22), 0UL, (1UL <<  22), 0UL, (1UL <<  8))  // 8
 
 
 ));
@@ -584,7 +584,7 @@ TEST_P(DistributeBenchmark, scatter_compute_gather)
 INSTANTIATE_TEST_CASE_P(Bliss, DistributeBenchmark, ::testing::Values(
 
 //    DistributeBenchmarkInfo((1UL << 24), 0),   // 3
-    DistributeBenchmarkInfo((1UL << 24), 1)   // 3
+    DistributeBenchmarkInfo((1UL << 22), 1)   // 3
 
 ));
 
@@ -870,7 +870,7 @@ TEST_P(Distribute2PartBenchmark, scatter_compute_gather_lowmem)
 INSTANTIATE_TEST_CASE_P(Bliss, Distribute2PartBenchmark, ::testing::Values(
 
 //    Distribute2PartBenchmarkInfo((1UL << 24), 0),   // 3
-    Distribute2PartBenchmarkInfo((1UL << 24), 1)   // 3
+    Distribute2PartBenchmarkInfo((1UL << 22), 1)   // 3
 
 ));
 
