@@ -48,7 +48,7 @@
 #include <sstream>  // stringstream
 #include <cstdint>       // uint8_t
 
-#include <atomic>    // for ensuring memory ordering.
+//#include <atomic>    // for ensuring memory ordering.
 
 #include "utils/logging.h"
 #include "bliss-config.hpp"
@@ -87,7 +87,7 @@
 #define _bliss_abs(x)  ((x < 0) ? -x : x)
 
 // TODO: reverse_groups vs reverse_in_group
-#define MEM_ORDER ::std::memory_order_seq_cst
+//#define MEM_ORDER ::std::memory_order_seq_cst
 
 namespace bliss {
 
@@ -2220,8 +2220,6 @@ template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT
           typename std::enable_if<(BIT_SHIFT == 0), int>::type = 1>
       BITS_INLINE void shift_transform(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len], OP const & op) {
 //    	  printf("0 shift transform by %d\n", BIT_SHIFT);
-
-    	  std::atomic_thread_fence(std::memory_order_seq_cst);
     	  //  		  std::cout << "in x: "; print(in); std::cout << std::endl;
     	  bit_transform<MAX_SIMD_TYPE, WORD_TYPE, len>(out, in, op);
 //          std::cout << "shifted x: "; print(out); std::cout << std::endl;

@@ -40,6 +40,7 @@
 #include <stack>
 #include <cstring>  // memset, memcpy
 #include <iomanip>  // setfill, setw, for std::cout
+#include <atomic>
 
 
 // own includes
@@ -858,6 +859,8 @@ namespace bliss
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::bit_xor<SIMD, WORD_TYPE, nWords>(data, data, rhs.data);
+      // synchronization fence to ensure self modification (data) is visible to subsequent operations, particularly for clear linux's cflags.
+      std::atomic_thread_fence(std::memory_order_relaxed);
     	do_sanitize();
       return *this;
     }
@@ -887,6 +890,8 @@ namespace bliss
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::bit_and<SIMD, WORD_TYPE, nWords>(data, data, rhs.data);
+      // synchronization fence to ensure self modification (data) is visible to subsequent operations, particularly for clear linux's cflags.
+      std::atomic_thread_fence(std::memory_order_relaxed);
     	do_sanitize();
       return *this;
     }
@@ -917,6 +922,8 @@ namespace bliss
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::bit_or<SIMD, WORD_TYPE, nWords>(data, data, rhs.data);
+      // synchronization fence to ensure self modification (data) is visible to subsequent operations, particularly for clear linux's cflags.
+      std::atomic_thread_fence(std::memory_order_relaxed);
     	do_sanitize();
       return *this;
     }
@@ -982,6 +989,8 @@ namespace bliss
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::left_shift<SIMD, shift, WORD_TYPE, nWords>(data, data);
+      // synchronization fence to ensure self modification (data) is visible to subsequent operations, particularly for clear linux's cflags.
+      std::atomic_thread_fence(std::memory_order_relaxed);
     	do_sanitize();
     }
     template <uint16_t shift = bitsPerChar>
@@ -1036,6 +1045,8 @@ namespace bliss
     {
     	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
     	::bliss::utils::bit_ops::right_shift<SIMD, shift, WORD_TYPE, nWords>(data, data);
+      // synchronization fence to ensure self modification (data) is visible to subsequent operations, particularly for clear linux's cflags.
+      std::atomic_thread_fence(std::memory_order_relaxed);
     }
     template <uint16_t shift = bitsPerChar>
     KMER_INLINE void right_shift_bits(Kmer const & src)
@@ -1226,23 +1237,28 @@ namespace bliss
     KMER_INLINE void setBitsAtPos(WType w, int bitPos, unsigned int numBits) {
       // get the value masked.
       WORD_TYPE charVal = static_cast<WORD_TYPE>(w) & getLeastSignificantBitsMask<WORD_TYPE>(numBits);
-  
+      WORD_TYPE mask = getLeastSignificantBitsMask<WORD_TYPE>(numBits);
+
       // determine which word in kmer it needs to go to
       unsigned int wordId = bitPos / bitstream::bitsPerWord;
       unsigned int offsetInWord = bitPos % bitstream::bitsPerWord;  // offset is where the LSB of the char will sit, in bit coordinate.
   
       if (offsetInWord >= (bitstream::bitsPerWord - numBits)) {
         // if split between words, deal with it.
+        data[wordId] &= ~(mask << offsetInWord);
         data[wordId] |= charVal << offsetInWord;   // the lower bits of the charVal
   
         // the number of lowerbits consumed is (bitstream::bitsPerWord - offsetInWord)
         // so right shift those many places and what remains goes into the next word.
-        if (wordId < nWords - 1) data[wordId + 1] |= charVal >> (bitstream::bitsPerWord - offsetInWord);
-  
+        if (wordId < nWords - 1) {
+          data[wordId + 1] &= ~(mask >> (bitstream::bitsPerWord - offsetInWord));
+          data[wordId + 1] |= charVal >> (bitstream::bitsPerWord - offsetInWord);
+        }
   
       } else {
         // else insert into the specific word.
-        data[wordId] |= charVal << offsetInWord;
+        data[wordId] &= ~(mask << offsetInWord);
+        data[wordId] |= (charVal << offsetInWord);
       }
   
     }
@@ -1273,7 +1289,7 @@ namespace bliss
       // left shift k-mer
       // TODO: replace by single shift operation
       this->template right_shift_bits<shift>();
-  
+
       // add character to least significant end (requires least shifting)
       data[nWords - 1] |= (static_cast<WORD_TYPE>(w) &
           getLeastSignificantBitsMask<WORD_TYPE>(shift)) << (bitstream::invPadBits - shift);
