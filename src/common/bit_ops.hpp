@@ -45,7 +45,7 @@ constexpr T getLeastSignificantBitsMask(const BitSizeType nBits)
   // negation convert Tmax << nBits to int or long int by zero padding, (e.g. 0x0000FFF0 for 16 bit, nBits = 4), then negate.
   // (0xFFFF000F).  this results in an int larger than T.   that and inlining results in 'integer conversion resulted in truncation'.
   // use static_cast to truncate it explicitly.
-  return (static_cast<size_t>(nBits) == sizeof(T) * 8UL) ? std::numeric_limits<T>::max() : static_cast<T>(~(std::numeric_limits<T>::max() << nBits));
+  return (static_cast<size_t>(nBits) == sizeof(T) << 3UL) ? std::numeric_limits<T>::max() : static_cast<T>(~(std::numeric_limits<T>::max() << nBits));
   //return static_cast<T>((static_cast<T>(0x1) << nBits) - static_cast<T>(1));
 }
 
