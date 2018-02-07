@@ -25,7 +25,6 @@
 #define BLISS_UTILS_GENERATOR_H
 
 // C++ STL includes[
-#include <string>
 #include <random>
 #include <algorithm>
 #include <functional>
@@ -43,10 +42,10 @@ namespace utils
  *                    used to generate the random characters of the string.
  * @returns           A random string of length `length`.
  */
-std::string random_string(const std::size_t length, const std::function<char(void)> generator)
+std::vector<unsigned char> random_string(const std::size_t length, const std::function<char(void)> generator)
 {
   // create string of size `length`
-  std::string result;
+  std::vector<unsigned char> result;
   result.resize(length);
 
   // fill with random characters
@@ -63,14 +62,14 @@ std::string random_string(const std::size_t length, const std::function<char(voi
  * @param chars   The characters to be used in the generated string.
  * @returns       A random string of length `length`.
  */
-std::string random_string(const std::size_t length, const std::vector<char>& chars)
+std::vector<unsigned char> random_string(const std::size_t length, const std::vector<unsigned char>& alphabet)
 {
   // get random engine
   std::default_random_engine generator;
-  std::uniform_int_distribution<std::size_t> distribution(0, chars.size() - 1);
+  std::uniform_int_distribution<std::size_t> distribution(0, alphabet.size() - 1);
 
   // call the random string generator with our distribution
-  return random_string(length, [&](){return chars[distribution(generator)];});
+  return random_string(length, [&](){return alphabet[distribution(generator)];});
 }
 
 /**
@@ -79,9 +78,9 @@ std::string random_string(const std::size_t length, const std::vector<char>& cha
  * @param length  The length of the generated random DNA string.
  * @returns       The random DNA string of length `length`.
  */
-std::string random_dna(const std::size_t length)
+std::vector<unsigned char> random_dna(const std::size_t length)
 {
-  std::vector<char> dna_chars = {'A','C','G','T'};
+  std::vector<unsigned char> dna_chars = {'A','C','G','T'};
   return random_string(length, dna_chars);
 }
 

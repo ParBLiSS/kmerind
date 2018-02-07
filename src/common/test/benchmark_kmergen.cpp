@@ -31,7 +31,7 @@
 TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
 {
   // generate a random piece of DNA
-  std::string dna = bliss::utils::random_dna(100000000);
+  std::vector<unsigned char> dna = bliss::utils::random_dna(100000000);
 
   auto start = std::chrono::high_resolution_clock::now();
   // first step: translate (in place)
@@ -41,7 +41,7 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
   BL_INFO( "Duration of translation: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() << "ms" );
 
   // define a packing iterator to wrap around the string's iterators
-  typedef bliss::common::PackingIterator<std::string::iterator, bliss::common::AlphabetTraits<bliss::common::DNA>::getBitsPerChar()> packit_t;
+  typedef bliss::common::PackingIterator<std::vector<unsigned char>::iterator, bliss::common::AlphabetTraits<bliss::common::DNA>::getBitsPerChar()> packit_t;
   packit_t packIt(dna.begin(), dna.end());
   packit_t packItEnd(dna.end());
 
@@ -71,8 +71,8 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
   typedef bliss::common::PackedKmerGenerationIterator< packit_t, Kmer > kmer_gen_it_t;
 
   kmer_gen_it_t kmerGenIt(packIt);
-  kmer_gen_it_t kmerGenEnd(packIt, dna.length());
-  std::size_t nKmers = dna.length() - 35 + 1;
+  kmer_gen_it_t kmerGenEnd(packIt, dna.size());
+  std::size_t nKmers = dna.size() - 35 + 1;
 
   /* benchmark packing + kmer generation */
   std::array<Kmer, 1000> kmer_arr;
@@ -96,11 +96,11 @@ TEST(Benchmark_KmerGeneration, BenchmarkKmer1)
    *  Direct k-mer construction (no prior packing)  *
    **************************************************/
 
-  typedef bliss::common::KmerGenerationIterator<std::string::iterator, Kmer> kmer_char_gen_it_t;
+  typedef bliss::common::KmerGenerationIterator<std::vector<unsigned char>::iterator, Kmer> kmer_char_gen_it_t;
 
   kmer_char_gen_it_t kmerGenIt2(dna.begin(), true);
   kmer_char_gen_it_t kmerGenEnd2(dna.end(), false);
-  nKmers = dna.length() - 35 + 1;
+  nKmers = dna.size() - 35 + 1;
 
 
   /* benchmark kmer generation */
