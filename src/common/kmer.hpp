@@ -413,6 +413,7 @@ namespace bliss
       // add to lsb iteratively, one packed word at a time
       for (size_t i = 0; i < KMER_SIZE; ++i, bitPos -= bitsPerChar)
       {
+        std::atomic_thread_fence(std::memory_order_consume);
         // TODO: set multiple chars at the same time.
         setBitsAtPos(static_cast<input_word_type>(*begin >> offset), bitPos, bitsPerChar);
   
@@ -505,6 +506,8 @@ namespace bliss
       // add to lsb iteratively, one packed word at a time
       for (unsigned int i = 0; i < KMER_SIZE; ++i, bitPos += bitsPerChar)
       {
+        std::atomic_thread_fence(std::memory_order_consume);
+
         setBitsAtPos(static_cast<input_word_type>(*begin >> offset), bitPos, bitsPerChar);
   
         // don't move iterator during last iteration if that option is set
@@ -549,7 +552,8 @@ namespace bliss
   
       unsigned int bitPos = bitstream::nBits - bitsPerChar;
       for (size_t i = 0; i < KMER_SIZE; ++i, bitPos -= bitsPerChar) {
-  
+        std::atomic_thread_fence(std::memory_order_consume);
+
         setBitsAtPos(static_cast<input_word_type>(*begin), bitPos, bitsPerChar);
   
         // don't move iterator during last iteration if that option is set
@@ -578,7 +582,8 @@ namespace bliss
   
       unsigned int bitPos = 0;
       for (unsigned int i = 0; i < KMER_SIZE; ++i, bitPos += bitsPerChar) {
-  
+        std::atomic_thread_fence(std::memory_order_consume);
+
         setBitsAtPos(static_cast<input_word_type>(*begin), bitPos, bitsPerChar);
   
         // don't move iterator during last iteration if that option is set
@@ -1365,6 +1370,8 @@ namespace bliss
       // add character to least significant end (requires least shifting)
       *data |= static_cast<WORD_TYPE>(w) &
           getLeastSignificantBitsMask<WORD_TYPE>(shift);
+
+      std::atomic_thread_fence(std::memory_order_relaxed);
     }
 
     /**
@@ -1381,6 +1388,8 @@ namespace bliss
       // add character to least significant end (requires least shifting)
       data[nWords - 1] |= (static_cast<WORD_TYPE>(w) &
           getLeastSignificantBitsMask<WORD_TYPE>(shift)) << (bitstream::invPadBits - shift);
+
+      std::atomic_thread_fence(std::memory_order_relaxed);
     }
   
     /**
@@ -1391,6 +1400,8 @@ namespace bliss
     {
       // TODO use templated helper struct for <0> template specialization
       data[nWords-1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::invPadBits);
+
+      std::atomic_thread_fence(std::memory_order_relaxed);
     }
 
     /**
@@ -1401,6 +1412,8 @@ namespace bliss
       //std::fill(data, data + nWords, static_cast<WORD_TYPE>(0));
       if (nWords > 1) memset(data, 0, nAllocBytes);
       else data[0] = 0;
+      std::atomic_thread_fence(std::memory_order_relaxed);
+
     }
   
     /**
@@ -1448,6 +1461,8 @@ namespace bliss
       // set all others to 0
 //      std::fill(data, data+word_shift, static_cast<WORD_TYPE>(0));
       memset(data, 0, word_shift * sizeof(WORD_TYPE));
+      std::atomic_thread_fence(std::memory_order_relaxed);
+
     }
   
     /**
@@ -1493,6 +1508,8 @@ namespace bliss
       // set all others to 0
 //      std::fill(data + (nWords - word_shift), data + nWords, static_cast<WORD_TYPE>(0));
       memset(data + (nWords - word_shift), 0, word_shift * sizeof(WORD_TYPE));
+      std::atomic_thread_fence(std::memory_order_relaxed);
+
     }
   
 
