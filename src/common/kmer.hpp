@@ -1271,12 +1271,12 @@ namespace bliss
   /// set numChars characters (from Alphabet) at position charPos.  pos 0 is LSB.  Note that numChars should not be more than can fit in WType.
   template <typename WType>
   KMER_INLINE void setCharsAtPos(WType w, unsigned int charPos, unsigned int numChars) {
-    setBitsAtPos(w, charPos * bitstream::bitsPerChar, numChars * bitstream::bitsPerChar);
+    setBitsAtPos(w, charPos * bitsPerChar, numChars * bitsPerChar);
   }
 
   /// get numChars characters (packed) at position charPos.  pos 0 is LSB (most recently added).  numChars must fit in WType
-  KMER_INLINE WORD_TYPE getCharsAtPos(unsigned int charPos, unsigned int numChars) { 
-    return getBitsAtPos<WORD_TYPE>(charPos * bitstream::bitsPerChar, numChars * bitstream::bitsPerChar);
+  KMER_INLINE WORD_TYPE getCharsAtPos(unsigned int charPos, unsigned int numChars) const { 
+    return getBitsAtPos<WORD_TYPE>(charPos * bitsPerChar, numChars * bitsPerChar);
   }
 
   // compare two k-mers for equality only at positions that are masked.
@@ -1325,7 +1325,7 @@ namespace bliss
 
     /// for setting the bits at a particular position.
     template<typename WType, unsigned int bitsInW = (sizeof(WType) << 3) >
-    KMER_INLINE WType getBitsAtPos(unsigned int bitPos, unsigned int numBits) {
+    KMER_INLINE WType getBitsAtPos(unsigned int bitPos, unsigned int numBits) const {
       // error checking
       assert((numBits <= bitsInW) && "ERROR: getBitsAtPos numBits too large for return type.");
       assert((bitPos < nBits) && "ERROR: getBitsAtPos bitPos too large.");
@@ -1337,7 +1337,7 @@ namespace bliss
       // determine which word in kmer it needs to go to
       unsigned int byteId = (bitPos >> 3);
       unsigned int offsetInByte = bitPos & 0x7;  // offset is where the LSB of the char will sit, in bit coordinate.
-      WType* d = reinterpret_cast<WType *>(reinterpret_cast<unsigned char *>(data) + byteId);
+      WType const * d = reinterpret_cast<WType const *>(reinterpret_cast<unsigned char const *>(data) + byteId);
       charVal = static_cast<WType>((*d) >> offsetInByte);
 
       // if split between words, deal with it.
