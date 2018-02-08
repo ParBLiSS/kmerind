@@ -143,14 +143,20 @@ namespace bliss
     /// The padding traits of an unpadded stream (i.e. the padding for the very
     /// last word)
     typedef UnpaddedStreamTraits<WORD_TYPE, nBits> bitstream;
-  
+
+    static constexpr unsigned int LogWordBits = Log2(bitstream::bitsPerWord);
+    static constexpr unsigned int charsPerWord = bitstream::bitsPerWord / bitsPerChar;
+
    public:
     /// The number of stored words inside the Kmer
     static constexpr unsigned int nWords = bitstream::nWords;
     static constexpr unsigned int nBytes = bitstream::nBytes;
   
    private:
-  
+
+    /// number of allocated bytes
+    static constexpr unsigned int nAllocBytes = nWords * bitstream::bytesPerWord;
+
     /*
      * last character offsets (and whether or not it is split accord storage
      * words)
@@ -158,12 +164,12 @@ namespace bliss
     /// Offset to the very last character in the k-mer
     static constexpr unsigned int lastCharOffset = nBits - bitsPerChar;
     /// Whether or not the last character is split across storage words
-    static constexpr bool lastCharIsSplit = (lastCharOffset < ((nWords-1)*sizeof(WORD_TYPE) << 3));
+    static constexpr bool lastCharIsSplit = (lastCharOffset < ((nWords-1) * bitstream::bitsPerWord));
     /// The offset to the very last character by word boundary
-    static constexpr unsigned int lastCharWordOffset = lastCharOffset & ((sizeof(WORD_TYPE) << 3) - 1);
+    static constexpr unsigned int lastCharWordOffset = lastCharOffset & (bitstream::bitsPerWord - 1);
     /// In case the last character is split: the number of bits of the last
     /// character in the previous from last word.
-    static constexpr unsigned int leftSplitSize = sizeof(WORD_TYPE)*8 - lastCharWordOffset;
+    static constexpr unsigned int leftSplitSize = bitstream::bitsPerWord - lastCharWordOffset;
 
     using MACH_WORD_TYPE = size_t;
 
@@ -234,7 +240,7 @@ namespace bliss
       memcpy(this->data, input, bytes);
 
       //
-      constexpr unsigned int padding = nWords * sizeof(WORD_TYPE) - bytes;
+      constexpr unsigned int padding = nAllocBytes - bytes;
       memset(reinterpret_cast<unsigned char*>(this->data) + bytes, 0, padding);
 
     }
@@ -253,11 +259,11 @@ namespace bliss
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
     	if (nWords == 1) this->data[0] = other.data[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<const uint16_t*>(other.data)[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<const uint32_t*>(other.data)[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<const uint64_t*>(other.data)[0];
+    	else if (nAllocBytes == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<const uint16_t*>(other.data)[0];
+    	else if (nAllocBytes == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<const uint32_t*>(other.data)[0];
+    	else if (nAllocBytes == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<const uint64_t*>(other.data)[0];
     	else
-    		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+    		memcpy(this->data, other.data, nAllocBytes);
 #pragma GCC diagnostic pop
 
     };
@@ -267,11 +273,11 @@ namespace bliss
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
     	if (nWords == 1) this->data[0] = other.data[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<const uint16_t*>(other.data)[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<const uint32_t*>(other.data)[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<const uint64_t*>(other.data)[0];
+    	else if (nAllocBytes == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<const uint16_t*>(other.data)[0];
+    	else if (nAllocBytes == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<const uint32_t*>(other.data)[0];
+    	else if (nAllocBytes == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<const uint64_t*>(other.data)[0];
     	else
-    		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+    		memcpy(this->data, other.data, nAllocBytes);
 #pragma GCC diagnostic pop
 
       return *this;
@@ -282,11 +288,11 @@ namespace bliss
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
     	if (nWords == 1) this->data[0] = other.data[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<uint16_t*>(other.data)[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<uint32_t*>(other.data)[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<uint64_t*>(other.data)[0];
+    	else if (nAllocBytes == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<uint16_t*>(other.data)[0];
+    	else if (nAllocBytes == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<uint32_t*>(other.data)[0];
+    	else if (nAllocBytes == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<uint64_t*>(other.data)[0];
     	else
-    		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+    		memcpy(this->data, other.data, nAllocBytes);
 #pragma GCC diagnostic pop
 
     };
@@ -296,11 +302,11 @@ namespace bliss
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
     	if (nWords == 1) this->data[0] = other.data[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<uint16_t*>(other.data)[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<uint32_t*>(other.data)[0];
-    	else if (nWords * sizeof(WORD_TYPE) == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<uint64_t*>(other.data)[0];
+    	else if (nAllocBytes == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<uint16_t*>(other.data)[0];
+    	else if (nAllocBytes == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<uint32_t*>(other.data)[0];
+    	else if (nAllocBytes == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<uint64_t*>(other.data)[0];
     	else
-    		memcpy(this->data, other.data, nWords * sizeof(WORD_TYPE));
+    		memcpy(this->data, other.data, nAllocBytes);
 #pragma GCC diagnostic pop
       return *this;
     }
@@ -309,9 +315,9 @@ namespace bliss
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
     	if (nWords == 1) std::swap(this->data[0], other.data[0]);
-    	else if (nWords * sizeof(WORD_TYPE) == 2) std::iter_swap(reinterpret_cast<uint16_t*>(this->data), reinterpret_cast<uint16_t*>(other.data));
-    	else if (nWords * sizeof(WORD_TYPE) == 4) std::iter_swap(reinterpret_cast<uint32_t*>(this->data), reinterpret_cast<uint32_t*>(other.data));
-    	else if (nWords * sizeof(WORD_TYPE) == 8) std::iter_swap(reinterpret_cast<uint64_t*>(this->data), reinterpret_cast<uint64_t*>(other.data));
+    	else if (nAllocBytes == 2) std::iter_swap(reinterpret_cast<uint16_t*>(this->data), reinterpret_cast<uint16_t*>(other.data));
+    	else if (nAllocBytes == 4) std::iter_swap(reinterpret_cast<uint32_t*>(this->data), reinterpret_cast<uint32_t*>(other.data));
+    	else if (nAllocBytes == 8) std::iter_swap(reinterpret_cast<uint64_t*>(this->data), reinterpret_cast<uint64_t*>(other.data));
     	else
     		std::swap(this->data, other.data);
 #pragma GCC diagnostic pop
@@ -402,15 +408,16 @@ namespace bliss
       // clear k-mer
       this->do_clear();
   
-      int bitPos = bitstream::nBits - bitsPerChar;
+      unsigned int bitPos = bitstream::nBits - bitsPerChar;
   
       // add to lsb iteratively, one packed word at a time
       for (size_t i = 0; i < KMER_SIZE; ++i, bitPos -= bitsPerChar)
       {
-        setBitsAtPos(*begin >> offset, bitPos, bitsPerChar);
+        // TODO: set multiple chars at the same time.
+        setBitsAtPos(static_cast<input_word_type>(*begin >> offset), bitPos, bitsPerChar);
   
         // don't move iterator during last iteration if that option is set
-        if (i == (KMER_SIZE - 1) && stop_on_last) continue;
+        if ((i == (KMER_SIZE - 1)) && stop_on_last) continue;
   
         // increase offset
         offset += bitsPerChar;
@@ -494,11 +501,11 @@ namespace bliss
       this->do_clear();
   
       // TODO:  can copy directly from stream into kmer, IF data types are same.
-      int bitPos = 0;
+      unsigned int bitPos = 0;
       // add to lsb iteratively, one packed word at a time
       for (unsigned int i = 0; i < KMER_SIZE; ++i, bitPos += bitsPerChar)
       {
-        setBitsAtPos(*begin >> offset, bitPos, bitsPerChar);
+        setBitsAtPos(static_cast<input_word_type>(*begin >> offset), bitPos, bitsPerChar);
   
         // don't move iterator during last iteration if that option is set
         if (i == (KMER_SIZE - 1) && stop_on_last) continue;
@@ -533,16 +540,17 @@ namespace bliss
     template <typename InputIterator>
     void fillFromChars(InputIterator& begin, bool stop_on_last = false)
     {
-  
+      typedef typename std::iterator_traits<InputIterator>::value_type input_word_type;
+
       // clear k-mer
       this->do_clear();
   
       // directly put the char where it needs to go.
   
-      int bitPos = bitstream::nBits - bitsPerChar;
+      unsigned int bitPos = bitstream::nBits - bitsPerChar;
       for (size_t i = 0; i < KMER_SIZE; ++i, bitPos -= bitsPerChar) {
   
-        setBitsAtPos(*begin, bitPos, bitsPerChar);
+        setBitsAtPos(static_cast<input_word_type>(*begin), bitPos, bitsPerChar);
   
         // don't move iterator during last iteration if that option is set
         if (i == (KMER_SIZE - 1) && stop_on_last) continue;
@@ -561,16 +569,17 @@ namespace bliss
     template <typename InputIterator>
     void fillReverseFromChars(InputIterator& begin, bool stop_on_last = false)
     {
-  
+      typedef typename std::iterator_traits<InputIterator>::value_type input_word_type;
+
       // clear k-mer
       this->do_clear();
   
       // directly put the char where it needs to go.
   
-      int bitPos = 0;
+      unsigned int bitPos = 0;
       for (unsigned int i = 0; i < KMER_SIZE; ++i, bitPos += bitsPerChar) {
   
-        setBitsAtPos(*begin, bitPos, bitsPerChar);
+        setBitsAtPos(static_cast<input_word_type>(*begin), bitPos, bitsPerChar);
   
         // don't move iterator during last iteration if that option is set
         if (i == (KMER_SIZE - 1) && stop_on_last) continue;
@@ -625,7 +634,7 @@ namespace bliss
         offset -= input_data_bits;
       }
   
-      nextFromWordInternal(*begin >> offset);
+      nextFromWordInternal(static_cast<input_word_type>(*begin >> offset));
   
       // set unused bits to 0
       do_sanitize();
@@ -684,7 +693,7 @@ namespace bliss
         offset -= input_data_bits;
       }
   
-      nextReverseFromWordInternal(*begin >> offset);
+      nextReverseFromWordInternal(static_cast<input_word_type>(*begin >> offset));
   
       // set unused bits to 0
       do_sanitize();
@@ -857,7 +866,7 @@ namespace bliss
      */
     KMER_INLINE Kmer& operator^=(const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
     	::bliss::utils::bit_ops::bit_xor<SIMD, WORD_TYPE, nWords>(data, data, rhs.data);
       // synchronization fence to ensure self modification (data) is visible to subsequent operations, particularly for clear linux's cflags.
       std::atomic_thread_fence(std::memory_order_relaxed);
@@ -870,7 +879,7 @@ namespace bliss
     KMER_INLINE Kmer operator^(const Kmer& rhs) const
     {
       Kmer result(false);
-		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
 		::bliss::utils::bit_ops::bit_xor<SIMD, WORD_TYPE, nWords>(result.data, data, rhs.data);
 		result.do_sanitize();
       return result;
@@ -878,7 +887,7 @@ namespace bliss
 
     KMER_INLINE void bit_xor(const Kmer& lhs, const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
     	::bliss::utils::bit_ops::bit_xor<SIMD, WORD_TYPE, nWords>(data, lhs.data, rhs.data);
     	do_sanitize();
     }
@@ -888,7 +897,7 @@ namespace bliss
      */
     KMER_INLINE Kmer& operator&=(const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
     	::bliss::utils::bit_ops::bit_and<SIMD, WORD_TYPE, nWords>(data, data, rhs.data);
       // synchronization fence to ensure self modification (data) is visible to subsequent operations, particularly for clear linux's cflags.
       std::atomic_thread_fence(std::memory_order_relaxed);
@@ -901,7 +910,7 @@ namespace bliss
     KMER_INLINE Kmer operator&(const Kmer& rhs) const
     {
       Kmer result = *this;
-		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
 		::bliss::utils::bit_ops::bit_and<SIMD, WORD_TYPE, nWords>(result.data, data, rhs.data);
 		result.do_sanitize();
       return result;
@@ -909,7 +918,7 @@ namespace bliss
 
     KMER_INLINE void bit_and(const Kmer& lhs, const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
     	::bliss::utils::bit_ops::bit_and<SIMD, WORD_TYPE, nWords>(data, lhs.data, rhs.data);
     	do_sanitize();
     }
@@ -920,7 +929,7 @@ namespace bliss
      */
     KMER_INLINE Kmer& operator|=(const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
     	::bliss::utils::bit_ops::bit_or<SIMD, WORD_TYPE, nWords>(data, data, rhs.data);
       // synchronization fence to ensure self modification (data) is visible to subsequent operations, particularly for clear linux's cflags.
       std::atomic_thread_fence(std::memory_order_relaxed);
@@ -933,7 +942,7 @@ namespace bliss
     KMER_INLINE Kmer operator|(const Kmer& rhs) const
     {
       Kmer result(false);
-		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+		using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
 		::bliss::utils::bit_ops::bit_or<SIMD, WORD_TYPE, nWords>(result.data, data, rhs.data);
 		result.do_sanitize();
       return result;
@@ -941,7 +950,7 @@ namespace bliss
 
     KMER_INLINE void bit_or(const Kmer& lhs, const Kmer& rhs)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
     	::bliss::utils::bit_ops::bit_or<SIMD, WORD_TYPE, nWords>(data, lhs.data, rhs.data);
     	do_sanitize();
     }
@@ -987,16 +996,16 @@ namespace bliss
     template <uint16_t shift = bitsPerChar>
     KMER_INLINE void left_shift_bits()
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
     	::bliss::utils::bit_ops::left_shift<SIMD, shift, WORD_TYPE, nWords>(data, data);
       // synchronization fence to ensure self modification (data) is visible to subsequent operations, particularly for clear linux's cflags.
       std::atomic_thread_fence(std::memory_order_relaxed);
     	do_sanitize();
     }
     template <uint16_t shift = bitsPerChar>
-    KMER_INLINE void left_shift_bits(Kmer const & src)
+    KMER_INLINE void left_shift_bits_copy(Kmer const & src)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
     	::bliss::utils::bit_ops::left_shift<SIMD, shift, WORD_TYPE, nWords>(data, src.data);
     	do_sanitize();
     }
@@ -1043,15 +1052,15 @@ namespace bliss
     template <uint16_t shift = bitsPerChar>
     KMER_INLINE void right_shift_bits()
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
     	::bliss::utils::bit_ops::right_shift<SIMD, shift, WORD_TYPE, nWords>(data, data);
       // synchronization fence to ensure self modification (data) is visible to subsequent operations, particularly for clear linux's cflags.
       std::atomic_thread_fence(std::memory_order_relaxed);
     }
     template <uint16_t shift = bitsPerChar>
-    KMER_INLINE void right_shift_bits(Kmer const & src)
+    KMER_INLINE void right_shift_bits_copy(Kmer const & src)
     {
-    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<(nWords * sizeof(WORD_TYPE))>;
+    	using SIMD = ::bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
     	::bliss::utils::bit_ops::right_shift<SIMD, shift, WORD_TYPE, nWords>(data, src.data);
     }
   
@@ -1077,6 +1086,21 @@ namespace bliss
       do_reverse(*this, dest);
     }
 
+    /// reverse and shift by characters.  + means left shift, - means right shift.
+    KMER_INLINE Kmer reverse_shift(int left_shift) const
+    {
+      // only needs to know the bitsPerChar info.
+      Kmer result(false);
+      do_reverse(*this, result, left_shift);
+      return result;
+    }
+
+    /// reverse and shift by characters.  + means left shift, - means right shift.
+    KMER_INLINE void reverse_shift(Kmer & dest, int left_shift) const
+    {
+      // only needs to know the bitsPerChar info.
+      do_reverse(*this, dest, left_shift);
+    }
 
     /**
      * @brief Returns a reverse complement of a k-mer.
@@ -1095,6 +1119,19 @@ namespace bliss
     KMER_INLINE void reverse_complement(Kmer & dest) const
     {
       do_reverse_complement<ALPHABET>(*this, dest);
+    }
+
+    /// reverse and shift by characters.  + means left shift, - means right shift.
+    KMER_INLINE Kmer reverse_complement_shift(int left_shift) const
+    {
+      Kmer result(false);
+      do_reverse_complement<ALPHABET>(*this, result, left_shift);
+      return result;
+    }
+    /// reverse and shift by characters.  + means left shift, - means right shift.
+    KMER_INLINE void reverse_complement_shift(Kmer & dest, int left_shift) const
+    {
+      do_reverse_complement<ALPHABET>(*this, dest, left_shift);
     }
   
 
@@ -1136,7 +1173,7 @@ namespace bliss
       Kmer cpy(*this);
 
       std::stack<size_t> elementsInReverse;
-      size_t forBitMask = (1 << bitsPerChar) - 1;
+      size_t forBitMask = (1UL << bitsPerChar) - 1UL;
 
 
       for (unsigned int i = 0; i < size; ++i)
@@ -1201,16 +1238,16 @@ namespace bliss
     }
   
     uint64_t getSuffix(const unsigned int NumBits = 64) const {
-      if ((sizeof(WORD_TYPE) << 3) >= NumBits || bitstream::nWords == 1) {
+      if (bitstream::bitsPerWord >= NumBits || bitstream::nWords == 1) {
         // kmer composes of 1+ words that are larger or equal to 64 bits, or a single word.
         return static_cast<uint64_t>(data[0]) & getLeastSignificantBitsMask<uint64_t>(NumBits);
   
   
       } else {
         // kmer has multiple small words. compose it.
-        const size_t nwords = static_cast<size_t>(bitstream::nWords) <= ((NumBits + (sizeof(WORD_TYPE) << 3) - 1) / (sizeof(WORD_TYPE) << 3) ) ?
+        const size_t nwords = static_cast<size_t>(bitstream::nWords) <= ((NumBits + bitstream::bitsPerWord - 1) >> LogWordBits ) ?
             static_cast<size_t>(bitstream::nWords) :
-            ((NumBits + (sizeof(WORD_TYPE) << 3) - 1) / (sizeof(WORD_TYPE) << 3) );
+            ((NumBits + bitstream::bitsPerWord - 1) >> LogWordBits );
         uint64_t result = 0;
         for (int64_t i = nwords - 1; i >= 0; --i) {
   
@@ -1220,7 +1257,7 @@ namespace bliss
           // so we artificially insert a conditional that caps WORD_TYPE size to 7
           // of word type will never go above 7 (actually 4) at runtime (caught by branch earlier)
           // and most of this code will be optimized out as well during compilation.
-          result <<= ((sizeof(WORD_TYPE) > 7 ? 7 : sizeof(WORD_TYPE)) << 3);
+          result <<= ( (sizeof(WORD_TYPE) > 7 ? 7 : sizeof(WORD_TYPE)) << 3 );
           result |= data[i];
         }
         return result;
@@ -1230,39 +1267,90 @@ namespace bliss
     KMER_INLINE void sanitize() {
       do_sanitize();
     }
-  
-  protected:
-  
-    template<typename WType>
-    KMER_INLINE void setBitsAtPos(WType w, int bitPos, unsigned int numBits) {
-      // get the value masked.
-      WORD_TYPE charVal = static_cast<WORD_TYPE>(w) & getLeastSignificantBitsMask<WORD_TYPE>(numBits);
-      WORD_TYPE mask = getLeastSignificantBitsMask<WORD_TYPE>(numBits);
 
-      // determine which word in kmer it needs to go to
-      unsigned int wordId = bitPos / bitstream::bitsPerWord;
-      unsigned int offsetInWord = bitPos % bitstream::bitsPerWord;  // offset is where the LSB of the char will sit, in bit coordinate.
-  
-      if (offsetInWord >= (bitstream::bitsPerWord - numBits)) {
-        // if split between words, deal with it.
-        data[wordId] &= ~(mask << offsetInWord);
-        data[wordId] |= charVal << offsetInWord;   // the lower bits of the charVal
-  
-        // the number of lowerbits consumed is (bitstream::bitsPerWord - offsetInWord)
-        // so right shift those many places and what remains goes into the next word.
-        if (wordId < nWords - 1) {
-          data[wordId + 1] &= ~(mask >> (bitstream::bitsPerWord - offsetInWord));
-          data[wordId + 1] |= charVal >> (bitstream::bitsPerWord - offsetInWord);
-        }
-  
-      } else {
-        // else insert into the specific word.
-        data[wordId] &= ~(mask << offsetInWord);
-        data[wordId] |= (charVal << offsetInWord);
-      }
-  
+  /// set numChars characters (from Alphabet) at position charPos.  pos 0 is LSB.  Note that numChars should not be more than can fit in WType.
+  template <typename WType>
+  KMER_INLINE void setCharsAtPos(WType w, unsigned int charPos, unsigned int numChars) {
+    setBitsAtPos(w, charPos * bitstream::bitsPerChar, numChars * bitstream::bitsPerChar);
+  }
+
+  /// get numChars characters (packed) at position charPos.  pos 0 is LSB (most recently added).  numChars must fit in WType
+  KMER_INLINE WORD_TYPE getCharsAtPos(unsigned int charPos, unsigned int numChars) { 
+    return getBitsAtPos<WORD_TYPE>(charPos * bitstream::bitsPerChar, numChars * bitstream::bitsPerChar);
+  }
+
+  // compare two k-mers for equality only at positions that are masked.
+  KMER_INLINE bool masked_equal(Kmer const & other, Kmer const & mask) {
+    bool eq = true;
+    for (unsigned int i = 0; i < nWords; ++i) {
+      eq &= (((data[i] ^ other.data[i]) & mask.data[i]) == 0);  // xor to check equality, and to mask out unneeded part.  if equal, then 0.
     }
+    return eq;
+  }
+
+  protected:
+
+    /// for setting the bits at a particular position.
+    template<typename WType, unsigned int bitsInW = (sizeof(WType) << 3) >
+    KMER_INLINE void setBitsAtPos(WType w, unsigned int bitPos, unsigned int numBits) {
+      // error checking
+      assert((numBits <= bitsInW) && "ERROR: getBitsAtPos numBits too large for return type.");
+      assert((bitPos < nBits) && "ERROR: getBitsAtPos bitPos too large.");
+      assert(((bitPos + numBits) <= nBits) && "ERROR: getBitsAtPos bitPos+numBits too large.");
+
+      // get the value masked.
+      WType mask = getLeastSignificantBitsMask<WType>(numBits);
+      w &= mask;  // clean the extra bits.
+      
+      // determine which word in kmer it needs to go to
+      unsigned int byteId = bitPos >> 3;
+      unsigned int offsetInByte = bitPos & 0x7;  // offset is where the LSB of the char will sit, in bit coordinate.
+      WType * d = reinterpret_cast<WType *>(reinterpret_cast<unsigned char *>(data) + byteId);
+
+      // insert into the specific word.
+      *d = (*d & ~(static_cast<WType>(mask << offsetInByte)))   // need to REPLACE the bits.
+               |  (static_cast<WType>(w << offsetInByte));
+
+      // if split between words, deal with it.
+      // the number of lowerbits consumed is (bitstream::bitsPerWord - offsetInWord)
+      // so right shift those many places and what remains goes into the next word.
+      if ((offsetInByte + numBits) > bitsInW) {
+        *(d+1) = (*(d+1) & ~(static_cast<WType>(mask >> (bitsInW - offsetInByte))))   // need to REPLACE the bits.
+                         | (static_cast<WType>(w >> (bitsInW - offsetInByte)));
+      }
+
+      // with clear linux cflags, this is needed to ensure that changes are visible.
+      std::atomic_thread_fence(std::memory_order_relaxed);  
+    }
+
+    /// for setting the bits at a particular position.
+    template<typename WType, unsigned int bitsInW = (sizeof(WType) << 3) >
+    KMER_INLINE WType getBitsAtPos(unsigned int bitPos, unsigned int numBits) {
+      // error checking
+      assert((numBits <= bitsInW) && "ERROR: getBitsAtPos numBits too large for return type.");
+      assert((bitPos < nBits) && "ERROR: getBitsAtPos bitPos too large.");
+      assert(((bitPos + numBits) <= nBits) && "ERROR: getBitsAtPos bitPos+numBits too large.");
+      
+      // get the value masked.
+      WType charVal;
   
+      // determine which word in kmer it needs to go to
+      unsigned int byteId = (bitPos >> 3);
+      unsigned int offsetInByte = bitPos & 0x7;  // offset is where the LSB of the char will sit, in bit coordinate.
+      WType* d = reinterpret_cast<WType *>(reinterpret_cast<unsigned char *>(data) + byteId);
+      charVal = static_cast<WType>((*d) >> offsetInByte);
+
+      // if split between words, deal with it.
+      // the number of lowerbits consumed is (bitstream::bitsPerWord - offsetInWord)
+      // so right shift those many places and what remains goes into the next word.
+      if ((offsetInByte + numBits) > bitsInW) {
+        charVal |= static_cast<WType>((*(d+1) << (bitsInW - offsetInByte)));
+      }
+
+      return charVal & getLeastSignificantBitsMask<WType>(numBits);
+    }
+
+
     /**
      * @brief internal method to add one more character to the kmer at the LSB side
      * @param c     character to add.
@@ -1311,7 +1399,7 @@ namespace bliss
     KMER_INLINE void do_clear()
     {
       //std::fill(data, data + nWords, static_cast<WORD_TYPE>(0));
-      if (nWords > 1) memset(data, 0, nWords * sizeof(WORD_TYPE));
+      if (nWords > 1) memset(data, 0, nAllocBytes);
       else data[0] = 0;
     }
   
@@ -1325,8 +1413,8 @@ namespace bliss
     KMER_INLINE void do_left_shift(size_t const & shift)
     {
       // inspired by STL bitset implementation
-      const int64_t word_shift = shift / (sizeof(WORD_TYPE) << 3);
-      const size_t offset = shift & ((sizeof(WORD_TYPE) << 3) - 1);
+      const int64_t word_shift = shift >> LogWordBits;
+      const size_t offset = shift & (bitstream::bitsPerWord - 1);
   
       // all shifted away.
       if (word_shift >= nWords) {
@@ -1344,7 +1432,7 @@ namespace bliss
       }
       else
       {
-        const size_t inv_offset = sizeof(WORD_TYPE)*8 - offset;
+        const size_t inv_offset = bitstream::bitsPerWord - offset;
         WORD_TYPE t = data[nWords - 1 - word_shift];
         WORD_TYPE t1;
 
@@ -1372,8 +1460,8 @@ namespace bliss
     KMER_INLINE void do_right_shift(size_t const & shift)
     {
       // inspired by STL bitset implementation
-      const size_t word_shift = shift / (sizeof(WORD_TYPE) << 3);
-      const size_t offset = shift & ((sizeof(WORD_TYPE) << 3) - 1);
+      const size_t word_shift = shift >> LogWordBits;
+      const size_t offset = shift & (bitstream::bitsPerWord - 1);
   
       // all shifted away.
       if (word_shift >= nWords) {
@@ -1391,7 +1479,7 @@ namespace bliss
       }
       else
       {
-        const size_t inv_offset = sizeof(WORD_TYPE)*8 - offset;
+        const size_t inv_offset = bitstream::bitsPerWord - offset;
         WORD_TYPE t = data[word_shift];
         WORD_TYPE t1;
         for (size_t i = 1; i < nWords - word_shift; ++i)
@@ -1419,14 +1507,14 @@ namespace bliss
 //    {
 //
 //      // choose based on performance.  AVX is faster >256 bit, below it SWAR is faster.
-//      if (nWords * sizeof(WORD_TYPE) >= 16)
+//      if (nAllocBytes >= 16)
 //        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
-//      else if (nWords * sizeof(WORD_TYPE) >= 12)
+//      else if (nAllocBytes >= 12)
 //        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
 //      else
 //        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
 //
-//      result.do_right_shift(nWords * (sizeof(WORD_TYPE) << 3) - nBits);
+//      result.do_right_shift((nWords << LogWordBits) - nBits);
 //
 //    }
 //
@@ -1439,29 +1527,70 @@ namespace bliss
 //      Kmer result(false);
 //
 //      // choose based on performance.  AVX is faster >256 bit (and fallback to SSSE3 is okay), below 256 SWAR is faster.
-//      if (nWords * sizeof(WORD_TYPE) > 32)
+//      if (nAllocBytes > 32)
 //        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_AVX2>(result.data, src.data);
-////      else if (nWords * sizeof(WORD_TYPE) > 16)
+////      else if (nAllocBytes > 16)
 ////        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SSSE3>(result.data, src.data);
 //      else
 //        ::bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SWAR>(result.data, src.data);
 //
-//      result.do_right_shift(nWords * (sizeof(WORD_TYPE) << 3) - nBits);
+//      result.do_right_shift((nWords << LogWordBits) - nBits);
 //
 //      return result;
 //    }
-    KMER_INLINE void do_reverse(Kmer const & src, Kmer & result) const
+
+    /// reverse the bits and shift at the same time.  + means left shift, - means right shift (MSB has index K-1)
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<::std::is_same<A, DNA>::value ||
+                                  ::std::is_same<A, RNA>::value ||
+                                  ::std::is_same<A, DNA16>::value, int>::type = 0>
+    KMER_INLINE void do_reverse(Kmer const & src, Kmer & result, int left_shift = 0) const
     {
 
-      constexpr size_t bytes = nWords * sizeof(WORD_TYPE);
+      constexpr size_t bytes = nAllocBytes;
+
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
+
+      if (left_shift == 0) {
+        bliss::utils::bit_ops::reverse<bitsPerChar,
+                                      SIMDType,
+                                      bitstream::padBits,   // right shift field.
+                                      WORD_TYPE, nWords
+          >(result.data, src.data);
+      } else {
+        int nslli = left_shift * bitsPerChar;
+
+        bliss::utils::bit_ops::reverse<bitsPerChar,
+                                      SIMDType,
+                                      0,   // right shift field.
+                                      WORD_TYPE, nWords
+          >(result.data, src.data);
+        if (static_cast<int>(bitstream::padBits) > nslli)  // positive right shift.  do reverse.
+          result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli );
+        else if (static_cast<int>(bitstream::padBits) < nslli)   // negative right shift, so left shift.  do as seperate step
+          result.do_left_shift(nslli - static_cast<int>(bitstream::padBits) );
+      }
+    }
+    template <typename A = ALPHABET,
+        typename ::std::enable_if<::std::is_same<A, DNA6>::value ||
+                                  ::std::is_same<A, RNA6>::value, int>::type = 0>
+    KMER_INLINE void do_reverse(Kmer const & src, Kmer & result, int left_shift = 0) const
+    {
+
+      constexpr size_t bytes = nAllocBytes;
 
       using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
 
       bliss::utils::bit_ops::reverse<bitsPerChar,
-                                     SIMDType,
-                                     ((bytes << 3) - nBits),
-                                     WORD_TYPE, nWords
+                                    SIMDType,
+                                    bitstream::padBits,   // right shift field.
+                                    WORD_TYPE, nWords
         >(result.data, src.data);
+
+      if (left_shift < 0)  // negative means right shift.  do reverse.
+        result.do_right_shift( -(left_shift * bitsPerChar ));
+      else if (left_shift > 0)   // positive == left shift
+        result.do_left_shift(left_shift * bitsPerChar );
 
     }
 
@@ -1469,46 +1598,101 @@ namespace bliss
     template <typename A = ALPHABET,
         typename ::std::enable_if<::std::is_same<A, DNA>::value ||
                                   ::std::is_same<A, RNA>::value, int>::type = 0>
-    KMER_INLINE void do_reverse_complement(Kmer const& src, Kmer & result) const
+    KMER_INLINE void do_reverse_complement(Kmer const& src, Kmer & result, int left_shift = 0) const
     {
       // repeat code from do_reverse to avoid separate do_sanitize.
 
       // DNA and RNA complement is via negation.
-      constexpr size_t bytes = nWords * sizeof(WORD_TYPE);
+      constexpr size_t bytes = nAllocBytes;
 
       using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
   	  ::bliss::utils::bit_ops::bitgroup_ops<bitsPerChar, SIMDType::SIMDVal> op;
 
-      bliss::utils::bit_ops::reverse_transform<SIMDType,
-                                     ((bytes << 3) - nBits), 0,
-                                     WORD_TYPE, nWords
-        >(result.data, src.data,
-        		[&op](typename SIMDType::MachineWord const & src){
-    	  return bliss::utils::bit_ops::bit_not(op.reverse(src));
-      });
+      if (left_shift == 0) {
+        bliss::utils::bit_ops::reverse_transform<SIMDType,
+                                      bitstream::padBits,   // right shift field.
+                                      0,
+                                      WORD_TYPE, nWords
+          >(result.data, src.data,
+              [&op](typename SIMDType::MachineWord const & src){
+          return bliss::utils::bit_ops::bit_not(op.reverse(src));
+        });
+      } else {
+        int nslli = left_shift * bitsPerChar;
 
+        bliss::utils::bit_ops::reverse_transform<SIMDType,
+                                      0,  // right shift field.
+                                      0,
+                                      WORD_TYPE, nWords
+          >(result.data, src.data,
+              [&op](typename SIMDType::MachineWord const & src){
+          return bliss::utils::bit_ops::bit_not(op.reverse(src));
+        });
+
+        if (static_cast<int>(bitstream::padBits) > nslli)  // positive right shift.  do reverse.
+          result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli );
+        else if (static_cast<int>(bitstream::padBits) < nslli)   // negative right shift, so left shift.  do as seperate step
+          result.do_left_shift(nslli - static_cast<int>(bitstream::padBits) );
+      }
     }
 
-    /// reverse complement of kmer.  specialzied for DNA5/DNA6/RNA5/RNA6/DNA16, where the complement is the bitwise reverse.
+    /// reverse complement of kmer.  specialzied for DNA5/DNA6/RNA5/RNA6, where the complement is the bitwise reverse.
     template <typename A = ALPHABET,
         typename ::std::enable_if<::std::is_same<A, DNA6>::value ||
-                                  ::std::is_same<A, RNA6>::value ||
-                                  ::std::is_same<A, DNA16>::value, int>::type = 0>
-    KMER_INLINE void do_reverse_complement(Kmer const& src, Kmer & result) const
+                                  ::std::is_same<A, RNA6>::value, int>::type = 0>
+    KMER_INLINE void do_reverse_complement(Kmer const& src, Kmer & result, int left_shift = 0) const
     {
       // DNA6, RNA6, and DNA16 use 1 bit reverse.   DNA5 and RNA5 are aliased to DNA6 and RNA6
 
-      constexpr size_t bytes = nWords * sizeof(WORD_TYPE);
+      constexpr size_t bytes = nAllocBytes;
 
       using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
 
       // reverse 1 bit groups
       bliss::utils::bit_ops::reverse<1,
-                                     SIMDType,
-                                     ((bytes << 3) - nBits),
-                                     WORD_TYPE, nWords
+                                    SIMDType,
+                                    bitstream::padBits,   // right shift field.
+                                    WORD_TYPE, nWords
         >(result.data, src.data);
 
+
+      if (left_shift < 0)  // negative means right shift.  do reverse.
+        result.do_right_shift( -(left_shift * bitsPerChar ));
+      else if (left_shift > 0)   // positive == left shift
+        result.do_left_shift(left_shift * bitsPerChar );
+
+    }
+        template <typename A = ALPHABET,
+        typename ::std::enable_if<::std::is_same<A, DNA16>::value, int>::type = 0>
+    KMER_INLINE void do_reverse_complement(Kmer const& src, Kmer & result, int left_shift = 0) const
+    {
+      // DNA6, RNA6, and DNA16 use 1 bit reverse.   DNA5 and RNA5 are aliased to DNA6 and RNA6
+
+      constexpr size_t bytes = nAllocBytes;
+
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
+
+      // reverse 1 bit groups
+      if (left_shift == 0) {
+        bliss::utils::bit_ops::reverse<1,
+                                     SIMDType,
+                                      bitstream::padBits,   // right shift field.
+                                     WORD_TYPE, nWords
+          >(result.data, src.data);
+      } else {
+        int nslli = left_shift * bitsPerChar;
+
+        bliss::utils::bit_ops::reverse<1,
+                                     SIMDType,
+                                      0,   // right shift field.
+                                     WORD_TYPE, nWords
+          >(result.data, src.data);
+
+        if (static_cast<int>(bitstream::padBits) > nslli)  // positive right shift.  do reverse.
+          result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli );
+        else if (static_cast<int>(bitstream::padBits) < nslli)   // negative right shift, so left shift.  do as seperate step
+          result.do_left_shift(nslli - static_cast<int>(bitstream::padBits) );
+      }
 
     }
 
@@ -1520,15 +1704,16 @@ namespace bliss
                                     ::std::is_same<A, DNA6>::value ||
                                     ::std::is_same<A, RNA6>::value ||
                                     ::std::is_same<A, DNA16>::value) &&
-                                     (((sizeof(WORD_TYPE) << 3) % bitsPerChar) != 0), int>::type = 0>
-    KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result) const
+                                     ((bitstream::bitsPerWord % bitsPerChar) != 0), int>::type = 0>
+    KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result, int left_shift = 0) const
     {
       static_assert(!(::std::is_same<A, DNA>::value ||
           ::std::is_same<A, RNA>::value ||
           ::std::is_same<A, DNA6>::value ||
           ::std::is_same<A, RNA6>::value ||
           ::std::is_same<A, DNA16>::value) &&
-           ((sizeof(WORD_TYPE) << 3) % bitsPerChar != 0), "do reverse complement is not defined for alphabet with size != 2, 3, 4 and word type not a multiple of bits Per char.");
+           (bitstream::bitsPerWord % bitsPerChar != 0), 
+            "do reverse complement is not defined for alphabet with size != 2, 3, 4 and word type not a multiple of bits Per char.");
     }
 
 
@@ -1538,18 +1723,18 @@ namespace bliss
                                     ::std::is_same<A, DNA6>::value ||
                                     ::std::is_same<A, RNA6>::value ||
                                     ::std::is_same<A, DNA16>::value) &&
-                                     (((sizeof(WORD_TYPE) << 3) % bitsPerChar) == 0) &&
-                                     ((sizeof(WORD_TYPE) << 3) > bitsPerChar), int>::type = 0>
-    KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result) const
+                                     ((bitstream::bitsPerWord % bitsPerChar) == 0) &&
+                                     (bitstream::bitsPerWord > bitsPerChar), int>::type = 0>
+    KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result, int left_shift = 0) const
     {
 
       /* Linear (inefficient) reverse:  because we don't have a specialization that supports TO_COMPLEMENT.  do word by word..*/
+      // PROB MORE EFFICIENT TO BYTE REVERSE AND THEN DO SHIFT ALL AT ONCE.
 
       // get lower most bits from the temp copy and push them into the lower bits
       // of this
       WORD_TYPE tmp, tmp2, tmp3;
 //      ::std::cout << ::std::hex;
-      unsigned int charsPerWord = (sizeof(WORD_TYPE) << 3) / bitsPerChar;
       constexpr WORD_TYPE mask = getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar);
 
       // complement all, then reverse.
@@ -1572,7 +1757,11 @@ namespace bliss
 
       // now reverse the whole thing sequentially.
 //      bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SEQ>(result.getDataRef(), comp.getData(), nWords);
-      result.template right_shift_bits<(nWords * sizeof(WORD_TYPE) << 3) - nBits>();  // shift by remainder/padding.
+      int nslli = (left_shift * bitsPerChar);
+      if (static_cast<int>(bitstream::padBits) > nslli)
+        result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli);  // shift by remainder/padding.
+      else if (static_cast<int>(bitstream::padBits) < nslli)
+        result.do_left_shift(nslli - static_cast<int>(bitstream::padBits));;  // shift by remainder/padding.
 
       // result already was 0 to begin with, so no need to sanitize
 
@@ -1584,9 +1773,9 @@ namespace bliss
                                     ::std::is_same<A, DNA6>::value ||
                                     ::std::is_same<A, RNA6>::value ||
                                     ::std::is_same<A, DNA16>::value) &&
-                                     (((sizeof(WORD_TYPE) << 3) % bitsPerChar) == 0) &&
-                                     ((sizeof(WORD_TYPE) << 3) == bitsPerChar), int>::type = 0>
-    KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result) const
+                                     ((bitstream::bitsPerWord % bitsPerChar) == 0) &&
+                                     (bitstream::bitsPerWord == bitsPerChar), int>::type = 0>
+    KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result, int left_shift = 0) const
     {
 
       // shuffle words.
@@ -1598,8 +1787,12 @@ namespace bliss
       }
 
       // now reverse the whole thing sequentially.
-      result.template right_shift_bits<(nWords * sizeof(WORD_TYPE) << 3) - nBits>();  // shift by remainder/padding.
-
+      int nslli = (left_shift * bitsPerChar);
+      if (static_cast<int>(bitstream::padBits) > nslli)
+        result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli);  // shift by remainder/padding.
+      else if (static_cast<int>(bitstream::padBits) < nslli)
+        result.do_left_shift(nslli - static_cast<int>(bitstream::padBits));;  // shift by remainder/padding.
+      
       // result already was 0 to begin with, so no need to sanitize
     }
 
