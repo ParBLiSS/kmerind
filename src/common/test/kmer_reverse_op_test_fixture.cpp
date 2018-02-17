@@ -102,7 +102,6 @@ class KmerReverseOpTest : public ::testing::Test {
     	}
     };
 
-
     template <typename SIMDType, typename TT = T,
         typename ::std::enable_if<::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA16>::value ||
         ::std::is_same<typename TT::KmerAlphabet, ::bliss::common::DNA>::value ||
@@ -226,7 +225,6 @@ class KmerReverseOpTest : public ::testing::Test {
 
     }
 
-
 };
 
 
@@ -292,5 +290,6 @@ TYPED_TEST_P(KmerReverseOpTest, revcomp_auto)
 }
 
 
-REGISTER_TYPED_TEST_CASE_P(KmerReverseOpTest, reverse_swar, reverse_ssse3, reverse_avx2, reverse_auto, revcomp_swar, revcomp_ssse3, revcomp_avx2, revcomp_auto);
+
+REGISTER_TYPED_TEST_CASE_P(KmerReverseOpTest,  reverse_swar, reverse_ssse3, reverse_avx2, reverse_auto, revcomp_swar, revcomp_ssse3, revcomp_avx2, revcomp_auto);
 

@@ -1285,10 +1285,49 @@ namespace bliss
   }
 
   // compare two k-mers for equality only at positions that are masked.
-  KMER_INLINE bool masked_equal(Kmer const & other, Kmer const & mask) {
+  KMER_INLINE bool masked_equal(Kmer const & other, Kmer const & mask) const {
+    // using SIMD_TYPE = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
+
+    // Kmer temp;
+    // bliss::utils::bit_ops::bit_transform<SIMD_TYPE>(temp.data, data, other.data,
+    //   [](typename SIMD_TYPE::MachineWord const & l,
+    //       typename SIMD_TYPE::MachineWord const & r ) { return bliss::utils::bit_ops::bit_xor(l, r); });
+    // Kmer res;
+    // bliss::utils::bit_ops::bit_transform<SIMD_TYPE>(res.data, temp.data, mask.data,
+    //   [](typename SIMD_TYPE::MachineWord const & l,
+    //       typename SIMD_TYPE::MachineWord const & r ) { return bliss::utils::bit_ops::bit_and(l, r); });
+
     bool eq = true;
     for (unsigned int i = 0; i < nWords; ++i) {
       eq &= (((data[i] ^ other.data[i]) & mask.data[i]) == 0);  // xor to check equality, and to mask out unneeded part.  if equal, then 0.
+    }
+    return eq;
+  }
+  /// masked equal comparison for most significant K-1 characters.  assume bitsPerChar is smaller than word size.
+  KMER_INLINE bool masked_equal_MSK_1(Kmer const & other) const {
+    assert((bitstream::bitsPerWord > bitsPerChar) && "bits per char should be larger than bits per word.");
+	if (nBits == bitsPerChar) return true;
+    constexpr WORD_TYPE mask = ~(getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar));
+
+    bool eq = (((data[0] ^ other.data[0]) & mask) == 0);
+    for (unsigned int i = 1; i < nWords; ++i) {
+      eq &= (data[i] == other.data[i]); 
+    }
+    return eq;
+  }
+  /// masked equal comparison for least significant K-1 characters.
+  KMER_INLINE bool masked_equal_LSK_1(Kmer const & other) const {
+    assert((bitstream::bitsPerWord > bitsPerChar) && "bits per char should be larger than bits per word.");
+	if (nBits == bitsPerChar) return true;
+    constexpr unsigned int bits = (nBits - bitsPerChar);
+    constexpr int nw = (bits + bitstream::bitsPerWord - 1) / bitstream::bitsPerWord - 1;
+    constexpr unsigned int pad_bits = ((nw + 1) * bitstream::bitsPerWord - bits) % bitstream::bitsPerWord; 
+
+    constexpr WORD_TYPE mask = static_cast<WORD_TYPE>(~(0)) >> pad_bits;
+
+    bool eq = (((data[nw] ^ other.data[nw]) & mask) == 0);
+    for (int i = 0; i < nw; ++i) {
+      eq &= (data[i] == other.data[i]);  // xor to check equality, and to mask out unneeded part.  if equal, then 0.
     }
     return eq;
   }
@@ -1564,9 +1603,8 @@ namespace bliss
     KMER_INLINE void do_reverse(Kmer const & src, Kmer & result, int left_shift = 0) const
     {
 
-      constexpr size_t bytes = nAllocBytes;
-
-      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
+      int nslli = left_shift * bitsPerChar;
 
       if (left_shift == 0) {
         bliss::utils::bit_ops::reverse<bitsPerChar,
@@ -1574,40 +1612,94 @@ namespace bliss
                                       bitstream::padBits,   // right shift field.
                                       WORD_TYPE, nWords
           >(result.data, src.data);
-      } else {
-        int nslli = left_shift * bitsPerChar;
+      } else if (left_shift == -1) {
+        bliss::utils::bit_ops::reverse<bitsPerChar,
+                                      SIMDType,
+                                      (bitstream::padBits + bitsPerChar),   // right shift field.
+                                      WORD_TYPE, nWords
+          >(result.data, src.data);
+      } else if (left_shift == 1) {
+        
+	if (bitsPerChar == bitstream::padBits) {
+          bliss::utils::bit_ops::reverse<bitsPerChar,
+                                      SIMDType,
+                                      0,   // right shift field.
+                                      WORD_TYPE, nWords
+          >(result.data, src.data);
+	  result.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
 
+	} else {
+
+	  Kmer temp;
+          bliss::utils::bit_ops::reverse<bitsPerChar,
+                                      SIMDType,
+                                      0,   // right shift field.
+                                      WORD_TYPE, nWords
+          >(temp.data, src.data);
+	  temp.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
+
+          if (bitstream::padBits > bitsPerChar)  // positive right shift.  do reverse.
+            bliss::utils::bit_ops::right_shift<SIMDType, (bitstream::padBits - bitsPerChar)>(result.data, temp.data);
+          else if (bitstream::padBits < bitsPerChar)   // negative right shift, so left shift.  do as seperate step
+            bliss::utils::bit_ops::left_shift<SIMDType, (bitsPerChar - bitstream::padBits)>(result.data, temp.data);
+	}
+	result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
+      } else {
+        
         bliss::utils::bit_ops::reverse<bitsPerChar,
                                       SIMDType,
                                       0,   // right shift field.
                                       WORD_TYPE, nWords
           >(result.data, src.data);
-        if (static_cast<int>(bitstream::padBits) > nslli)  // positive right shift.  do reverse.
-          result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli );
-        else if (static_cast<int>(bitstream::padBits) < nslli)   // negative right shift, so left shift.  do as seperate step
-          result.do_left_shift(nslli - static_cast<int>(bitstream::padBits) );
+	result.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
+
+          if (static_cast<int>(bitstream::padBits) > nslli)  // positive right shift.  do reverse.
+            result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli );
+          else if (static_cast<int>(bitstream::padBits) < nslli)   // negative right shift, so left shift.  do as seperate step
+            result.do_left_shift(nslli - static_cast<int>(bitstream::padBits) );
+
+	result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
       }
     }
+
     template <typename A = ALPHABET,
         typename ::std::enable_if<::std::is_same<A, DNA6>::value ||
                                   ::std::is_same<A, RNA6>::value, int>::type = 0>
     KMER_INLINE void do_reverse(Kmer const & src, Kmer & result, int left_shift = 0) const
     {
 
-      constexpr size_t bytes = nAllocBytes;
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
+      if ((left_shift == -1) || (left_shift == 1)) {
+        Kmer temp;
 
-      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
+        // do this way because reverse needs to have padBits that completely fills the rest of space.
+        bliss::utils::bit_ops::reverse<bitsPerChar,
+                                      SIMDType,
+                                      bitstream::padBits,   // right shift field.
+                                      WORD_TYPE, nWords
+          >(temp.data, src.data);
 
-      bliss::utils::bit_ops::reverse<bitsPerChar,
-                                    SIMDType,
-                                    bitstream::padBits,   // right shift field.
-                                    WORD_TYPE, nWords
-        >(result.data, src.data);
+        if (left_shift == -1)   // right shift
+          bliss::utils::bit_ops::right_shift<SIMDType, bitsPerChar>(result.data, temp.data);
+        else  {
+          bliss::utils::bit_ops::left_shift<SIMDType, bitsPerChar>(result.data, temp.data);
+	  result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
+        }
+      } else {  // not 1 and -1
 
-      if (left_shift < 0)  // negative means right shift.  do reverse.
-        result.do_right_shift( -(left_shift * bitsPerChar ));
-      else if (left_shift > 0)   // positive == left shift
-        result.do_left_shift(left_shift * bitsPerChar );
+        // do this way because reverse needs to have padBits that completely fills the rest of space.
+        bliss::utils::bit_ops::reverse<bitsPerChar,
+                                      SIMDType,
+                                      bitstream::padBits,   // right shift field.
+                                      WORD_TYPE, nWords
+          >(result.data, src.data);
+
+        if (left_shift < 0)  // negative means right shift.  do reverse.
+          result.do_right_shift( -(left_shift * bitsPerChar ));
+        else if (left_shift > 0)   // positive == left shift
+          result.do_left_shift(left_shift * bitsPerChar );
+	result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
+      }
 
     }
 
@@ -1620,9 +1712,7 @@ namespace bliss
       // repeat code from do_reverse to avoid separate do_sanitize.
 
       // DNA and RNA complement is via negation.
-      constexpr size_t bytes = nAllocBytes;
-
-      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
   	  ::bliss::utils::bit_ops::bitgroup_ops<bitsPerChar, SIMDType::SIMDVal> op;
 
       if (left_shift == 0) {
@@ -1634,6 +1724,48 @@ namespace bliss
               [&op](typename SIMDType::MachineWord const & src){
           return bliss::utils::bit_ops::bit_not(op.reverse(src));
         });
+      } else if (left_shift == -1) {  // right shift
+        bliss::utils::bit_ops::reverse_transform<SIMDType,
+                                      bitstream::padBits + bitsPerChar,   // right shift field.
+                                      0,
+                                      WORD_TYPE, nWords
+          >(result.data, src.data,
+              [&op](typename SIMDType::MachineWord const & src){
+          return bliss::utils::bit_ops::bit_not(op.reverse(src));
+        });
+      } else if (left_shift == 1) {  // left shift
+        if (bitsPerChar == bitstream::padBits) {
+          bliss::utils::bit_ops::reverse_transform<SIMDType,
+                                      0,   // right shift field.
+                                      0,
+                                      WORD_TYPE, nWords
+            >(result.data, src.data,
+                [&op](typename SIMDType::MachineWord const & src){
+            return bliss::utils::bit_ops::bit_not(op.reverse(src));
+          });
+	  result.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
+
+
+	} else {
+
+  	  Kmer temp;
+          bliss::utils::bit_ops::reverse_transform<SIMDType,
+                                      0,   // right shift field.
+                                      0,
+                                      WORD_TYPE, nWords
+            >(temp.data, src.data,
+                [&op](typename SIMDType::MachineWord const & src){
+            return bliss::utils::bit_ops::bit_not(op.reverse(src));
+          });
+	  temp.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
+
+          if (bitstream::padBits > bitsPerChar)  // positive right shift.  do reverse.
+            bliss::utils::bit_ops::right_shift<SIMDType, (bitstream::padBits - bitsPerChar)>(result.data, temp.data);
+          else if (bitstream::padBits < bitsPerChar)   // negative right shift, so left shift.  do as seperate step
+            bliss::utils::bit_ops::left_shift<SIMDType, (bitsPerChar - bitstream::padBits)>(result.data, temp.data);
+	}
+
+	result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
       } else {
         int nslli = left_shift * bitsPerChar;
 
@@ -1645,11 +1777,13 @@ namespace bliss
               [&op](typename SIMDType::MachineWord const & src){
           return bliss::utils::bit_ops::bit_not(op.reverse(src));
         });
+	result.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
 
         if (static_cast<int>(bitstream::padBits) > nslli)  // positive right shift.  do reverse.
           result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli );
         else if (static_cast<int>(bitstream::padBits) < nslli)   // negative right shift, so left shift.  do as seperate step
           result.do_left_shift(nslli - static_cast<int>(bitstream::padBits) );
+	result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
       }
     }
 
@@ -1661,33 +1795,47 @@ namespace bliss
     {
       // DNA6, RNA6, and DNA16 use 1 bit reverse.   DNA5 and RNA5 are aliased to DNA6 and RNA6
 
-      constexpr size_t bytes = nAllocBytes;
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
 
-      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
+      if ((left_shift == -1) || (left_shift == 1)) {
+        Kmer temp;
 
-      // reverse 1 bit groups
-      bliss::utils::bit_ops::reverse<1,
-                                    SIMDType,
-                                    bitstream::padBits,   // right shift field.
-                                    WORD_TYPE, nWords
-        >(result.data, src.data);
+        // do this way because reverse needs to have padBits that completely fills the rest of space.
+        bliss::utils::bit_ops::reverse<1,
+                                      SIMDType,
+                                      bitstream::padBits,   // right shift field.
+                                      WORD_TYPE, nWords
+          >(temp.data, src.data);
 
+        if (left_shift == -1)   // right shift
+          bliss::utils::bit_ops::right_shift<SIMDType, bitsPerChar>(result.data, temp.data);
+        else { 
+          bliss::utils::bit_ops::left_shift<SIMDType, bitsPerChar>(result.data, temp.data);
+	  result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
+        }
+      } else {  // not 1 and -1
 
-      if (left_shift < 0)  // negative means right shift.  do reverse.
-        result.do_right_shift( -(left_shift * bitsPerChar ));
-      else if (left_shift > 0)   // positive == left shift
-        result.do_left_shift(left_shift * bitsPerChar );
+        // reverse 1 bit groups
+        bliss::utils::bit_ops::reverse<1,
+                                      SIMDType,
+                                      bitstream::padBits,   // right shift field.
+                                      WORD_TYPE, nWords
+          >(result.data, src.data);
 
+        if (left_shift < 0)  // negative means right shift.  do reverse.
+          result.do_right_shift( -(left_shift * bitsPerChar ));
+        else if (left_shift > 0)   // positive == left shift
+          result.do_left_shift(left_shift * bitsPerChar );
+	result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
+      }
     }
-        template <typename A = ALPHABET,
-        typename ::std::enable_if<::std::is_same<A, DNA16>::value, int>::type = 0>
+    
+    template <typename A = ALPHABET,
+    typename ::std::enable_if<::std::is_same<A, DNA16>::value, int>::type = 0>
     KMER_INLINE void do_reverse_complement(Kmer const& src, Kmer & result, int left_shift = 0) const
     {
       // DNA6, RNA6, and DNA16 use 1 bit reverse.   DNA5 and RNA5 are aliased to DNA6 and RNA6
-
-      constexpr size_t bytes = nAllocBytes;
-
-      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<bytes>;
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
 
       // reverse 1 bit groups
       if (left_shift == 0) {
@@ -1696,6 +1844,38 @@ namespace bliss
                                       bitstream::padBits,   // right shift field.
                                      WORD_TYPE, nWords
           >(result.data, src.data);
+      } else if (left_shift == -1) {
+        bliss::utils::bit_ops::reverse<1,
+                                      SIMDType,
+                                      (bitstream::padBits + bitsPerChar),   // right shift field.
+                                      WORD_TYPE, nWords
+          >(result.data, src.data);
+      } else if (left_shift == 1) {
+	if (bitsPerChar == bitstream::padBits) {
+	        bliss::utils::bit_ops::reverse<1,
+                                      SIMDType,
+                                      0,   // right shift field.
+                                      WORD_TYPE, nWords
+          >(result.data, src.data);
+	result.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
+
+	} else {
+
+        Kmer temp;
+        bliss::utils::bit_ops::reverse<1,
+                                      SIMDType,
+                                      0,   // right shift field.
+                                      WORD_TYPE, nWords
+          >(temp.data, src.data);
+	temp.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
+
+          if (bitstream::padBits > bitsPerChar)  // positive right shift.  do reverse.
+            bliss::utils::bit_ops::right_shift<SIMDType, (bitstream::padBits - bitsPerChar)>(result.data, temp.data);
+          else if (bitstream::padBits < bitsPerChar)    // negative right shift, so left shift.  do as seperate step
+            bliss::utils::bit_ops::left_shift<SIMDType, (bitsPerChar - bitstream::padBits)>(result.data, temp.data);
+	}
+	  result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
+	
       } else {
         int nslli = left_shift * bitsPerChar;
 
@@ -1704,11 +1884,13 @@ namespace bliss
                                       0,   // right shift field.
                                      WORD_TYPE, nWords
           >(result.data, src.data);
+	result.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
 
         if (static_cast<int>(bitstream::padBits) > nslli)  // positive right shift.  do reverse.
           result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli );
         else if (static_cast<int>(bitstream::padBits) < nslli)   // negative right shift, so left shift.  do as seperate step
           result.do_left_shift(nslli - static_cast<int>(bitstream::padBits) );
+	result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
       }
 
     }
@@ -1745,6 +1927,7 @@ namespace bliss
     KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result, int left_shift = 0) const
     {
 
+      using SIMDType = bliss::utils::bit_ops::BITREV_AUTO_AGGRESSIVE<nAllocBytes>;
       /* Linear (inefficient) reverse:  because we don't have a specialization that supports TO_COMPLEMENT.  do word by word..*/
       // PROB MORE EFFICIENT TO BYTE REVERSE AND THEN DO SHIFT ALL AT ONCE.
 
@@ -1754,32 +1937,57 @@ namespace bliss
 //      ::std::cout << ::std::hex;
       constexpr WORD_TYPE mask = getLeastSignificantBitsMask<WORD_TYPE>(bitsPerChar);
 
-      // complement all, then reverse.
-      for (unsigned int i = 0; i < nWords; ++i)
-      {
-        tmp = src.data[i];
-        tmp3 = 0;
+        Kmer temp;
+        // complement all, then reverse.
+        for (unsigned int i = 0; i < nWords; ++i)
+        {
+          tmp = src.data[i];
+          tmp3 = 0;
 
-        for (unsigned int j = 0; j < charsPerWord; ++j) {
-          tmp3 <<= bitsPerChar;
-          tmp2 = tmp & mask;  // get the character
-          tmp >>= bitsPerChar;
-          tmp2 = static_cast<WORD_TYPE>(ALPHABET::to_complement(tmp2));  // get the complement of the character
+          for (unsigned int j = 0; j < charsPerWord; ++j) {
+            tmp3 <<= bitsPerChar;
+            tmp2 = tmp & mask;  // get the character
+            tmp >>= bitsPerChar;
+            tmp2 = static_cast<WORD_TYPE>(ALPHABET::to_complement(tmp2));  // get the complement of the character
 
-          tmp3 |= tmp2;  // replace the char
+            tmp3 |= tmp2;  // replace the char
+          }
+
+          temp.data[nWords - 1 - i] = tmp3;  // replace the word
         }
+	temp.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits));
 
-        result.data[nWords - 1 - i] = tmp3;  // replace the word
+	// so far, rev comp with no shift.
+	if (left_shift == 0) {
+          bliss::utils::bit_ops::right_shift<SIMDType, bitstream::padBits>(result.data, temp.data);
+		
+	} else if (left_shift == -1) {
+          bliss::utils::bit_ops::right_shift<SIMDType, bitstream::padBits + bitsPerChar>(result.data, temp.data);
+
+	} else if (left_shift == 1) {
+
+		if (bitstream::padBits == bitsPerChar) {
+			memcpy(result.data, temp.data, nWords);
+		} else if (bitstream::padBits > bitsPerChar) {
+          		bliss::utils::bit_ops::right_shift<SIMDType, bitstream::padBits - bitsPerChar>(result.data, temp.data);
+			
+		} else { // bitsPerChar more than padBits
+          		bliss::utils::bit_ops::left_shift<SIMDType, bitsPerChar - bitstream::padBits>(result.data, temp.data);
+			
+		}
+		result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
+	} else {
+
+			memcpy(result.data, temp.data, nWords);
+        // now reverse the whole thing sequentially.
+  //      bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SEQ>(result.getDataRef(), comp.getData(), nWords);
+        int nslli = (left_shift * bitsPerChar);
+        if (static_cast<int>(bitstream::padBits) > nslli)
+          result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli);  // shift by remainder/padding.
+        else if (static_cast<int>(bitstream::padBits) < nslli)
+          result.do_left_shift(nslli - static_cast<int>(bitstream::padBits));;  // shift by remainder/padding.
+	result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
       }
-
-      // now reverse the whole thing sequentially.
-//      bliss::utils::bit_ops::reverse<bitsPerChar, ::bliss::utils::bit_ops::BIT_REV_SEQ>(result.getDataRef(), comp.getData(), nWords);
-      int nslli = (left_shift * bitsPerChar);
-      if (static_cast<int>(bitstream::padBits) > nslli)
-        result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli);  // shift by remainder/padding.
-      else if (static_cast<int>(bitstream::padBits) < nslli)
-        result.do_left_shift(nslli - static_cast<int>(bitstream::padBits));;  // shift by remainder/padding.
-
       // result already was 0 to begin with, so no need to sanitize
 
     }
@@ -1790,7 +1998,6 @@ namespace bliss
                                     ::std::is_same<A, DNA6>::value ||
                                     ::std::is_same<A, RNA6>::value ||
                                     ::std::is_same<A, DNA16>::value) &&
-                                     ((bitstream::bitsPerWord % bitsPerChar) == 0) &&
                                      (bitstream::bitsPerWord == bitsPerChar), int>::type = 0>
     KMER_INLINE void do_reverse_complement(Kmer const & src, Kmer & result, int left_shift = 0) const
     {
@@ -1798,18 +2005,27 @@ namespace bliss
       // shuffle words.
 
       // complement all, then reverse.
-      for (unsigned int i = 0; i < nWords; ++i)
-      {
-        result.data[nWords - 1 - i] = static_cast<WORD_TYPE>(ALPHABET::to_complement(src.data[i]));  // replace the word
-      }
 
-      // now reverse the whole thing sequentially.
-      int nslli = (left_shift * bitsPerChar);
-      if (static_cast<int>(bitstream::padBits) > nslli)
-        result.do_right_shift(static_cast<int>(bitstream::padBits) - nslli);  // shift by remainder/padding.
-      else if (static_cast<int>(bitstream::padBits) < nslli)
-        result.do_left_shift(nslli - static_cast<int>(bitstream::padBits));;  // shift by remainder/padding.
-      
+      if (left_shift > 0) {
+        for (unsigned int i = left_shift; i < nWords; ++i)
+        {
+          result.data[nWords - 1 - i + left_shift] = static_cast<WORD_TYPE>(ALPHABET::to_complement(src.data[i]));  // replace the word
+        }
+	memset(result.data, 0, left_shift * sizeof(WORD_TYPE)); 
+
+      } else if (left_shift < 0) {
+        for (unsigned int i = -left_shift; i < nWords; ++i)
+        {
+          result.data[nWords - 1 - i] = static_cast<WORD_TYPE>(ALPHABET::to_complement(src.data[i + left_shift]));  // replace the word
+        }
+	memset(result.data + (nWords + left_shift) , 0, (-left_shift) * sizeof(WORD_TYPE)); 
+
+      } else {
+        for (unsigned int i = 0; i < nWords; ++i)
+        {
+          result.data[nWords - 1 - i] = static_cast<WORD_TYPE>(ALPHABET::to_complement(src.data[i]));  // replace the word
+        }
+      }
       // result already was 0 to begin with, so no need to sanitize
     }
 
