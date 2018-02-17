@@ -3521,7 +3521,7 @@ template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT
       BITS_INLINE void left_shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
 //    	  printf("left shifting by %u\n", BIT_SHIFT);
     	  using SIMD_TYPE = BITREV_AUTO_CONSERVATIVE<(len * sizeof(WORD_TYPE)), MAX_SIMD_TYPE>;
-    	  bliss::utils::bit_ops::shift_transform<SIMD_TYPE, BIT_SHIFT, WORD_TYPE, len>(out, in,
+    	  bliss::utils::bit_ops::shift_transform<SIMD_TYPE, static_cast<int16_t>(BIT_SHIFT), WORD_TYPE, len>(out, in,
           [](typename SIMD_TYPE::MachineWord const & src) { return src; });
     	  }
       template <typename MAX_SIMD_TYPE, uint16_t BIT_SHIFT, typename WORD_TYPE, size_t len> //,
@@ -3529,7 +3529,7 @@ template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT
       BITS_INLINE void right_shift(WORD_TYPE (&out)[len], WORD_TYPE (&in)[len]) {
 //    	  printf("right shifting %lu x %lu byte words by %u\n", len, sizeof(WORD_TYPE), BIT_SHIFT);
     	  using SIMD_TYPE = BITREV_AUTO_CONSERVATIVE<(len * sizeof(WORD_TYPE)), MAX_SIMD_TYPE>;
-        bliss::utils::bit_ops::shift_transform<SIMD_TYPE, (0 - (static_cast<int16_t>(BIT_SHIFT))), WORD_TYPE, len>(out, in,
+        bliss::utils::bit_ops::shift_transform<SIMD_TYPE, static_cast<int16_t>(0 - (static_cast<int16_t>(BIT_SHIFT))), WORD_TYPE, len>(out, in,
           [](typename SIMD_TYPE::MachineWord const & src) { return src; });
         }
 

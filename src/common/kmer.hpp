@@ -1639,9 +1639,9 @@ namespace bliss
 	  temp.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
 
           if (bitstream::padBits > bitsPerChar)  // positive right shift.  do reverse.
-            bliss::utils::bit_ops::right_shift<SIMDType, (bitstream::padBits - bitsPerChar)>(result.data, temp.data);
+            bliss::utils::bit_ops::right_shift<SIMDType, static_cast<uint16_t>(bitstream::padBits - bitsPerChar), WORD_TYPE, nWords>(result.data, temp.data);
           else if (bitstream::padBits < bitsPerChar)   // negative right shift, so left shift.  do as seperate step
-            bliss::utils::bit_ops::left_shift<SIMDType, (bitsPerChar - bitstream::padBits)>(result.data, temp.data);
+            bliss::utils::bit_ops::left_shift<SIMDType, static_cast<uint16_t>(bitsPerChar - bitstream::padBits), WORD_TYPE, nWords>(result.data, temp.data);
 	}
 	result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
       } else {
@@ -1680,9 +1680,9 @@ namespace bliss
           >(temp.data, src.data);
 
         if (left_shift == -1)   // right shift
-          bliss::utils::bit_ops::right_shift<SIMDType, bitsPerChar>(result.data, temp.data);
+          bliss::utils::bit_ops::right_shift<SIMDType, bitsPerChar, WORD_TYPE, nWords>(result.data, temp.data);
         else  {
-          bliss::utils::bit_ops::left_shift<SIMDType, bitsPerChar>(result.data, temp.data);
+          bliss::utils::bit_ops::left_shift<SIMDType, bitsPerChar, WORD_TYPE, nWords>(result.data, temp.data);
 	  result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
         }
       } else {  // not 1 and -1
@@ -1760,9 +1760,9 @@ namespace bliss
 	  temp.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
 
           if (bitstream::padBits > bitsPerChar)  // positive right shift.  do reverse.
-            bliss::utils::bit_ops::right_shift<SIMDType, (bitstream::padBits - bitsPerChar)>(result.data, temp.data);
+            bliss::utils::bit_ops::right_shift<SIMDType, static_cast<uint16_t>(bitstream::padBits - bitsPerChar), WORD_TYPE, nWords>(result.data, temp.data);
           else if (bitstream::padBits < bitsPerChar)   // negative right shift, so left shift.  do as seperate step
-            bliss::utils::bit_ops::left_shift<SIMDType, (bitsPerChar - bitstream::padBits)>(result.data, temp.data);
+            bliss::utils::bit_ops::left_shift<SIMDType, static_cast<uint16_t>(bitsPerChar - bitstream::padBits), WORD_TYPE, nWords>(result.data, temp.data);
 	}
 
 	result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
@@ -1808,9 +1808,9 @@ namespace bliss
           >(temp.data, src.data);
 
         if (left_shift == -1)   // right shift
-          bliss::utils::bit_ops::right_shift<SIMDType, bitsPerChar>(result.data, temp.data);
+          bliss::utils::bit_ops::right_shift<SIMDType, bitsPerChar, WORD_TYPE, nWords>(result.data, temp.data);
         else { 
-          bliss::utils::bit_ops::left_shift<SIMDType, bitsPerChar>(result.data, temp.data);
+          bliss::utils::bit_ops::left_shift<SIMDType, bitsPerChar, WORD_TYPE, nWords>(result.data, temp.data);
 	  result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
         }
       } else {  // not 1 and -1
@@ -1870,9 +1870,9 @@ namespace bliss
 	temp.data[0] &= ~(getLeastSignificantBitsMask<WORD_TYPE>(bitstream::padBits)); // clear the pad bits that would have been shifted.
 
           if (bitstream::padBits > bitsPerChar)  // positive right shift.  do reverse.
-            bliss::utils::bit_ops::right_shift<SIMDType, (bitstream::padBits - bitsPerChar)>(result.data, temp.data);
+            bliss::utils::bit_ops::right_shift<SIMDType, static_cast<uint16_t>(bitstream::padBits - bitsPerChar), WORD_TYPE, nWords>(result.data, temp.data);
           else if (bitstream::padBits < bitsPerChar)    // negative right shift, so left shift.  do as seperate step
-            bliss::utils::bit_ops::left_shift<SIMDType, (bitsPerChar - bitstream::padBits)>(result.data, temp.data);
+            bliss::utils::bit_ops::left_shift<SIMDType, static_cast<uint16_t>(bitsPerChar - bitstream::padBits), WORD_TYPE, nWords>(result.data, temp.data);
 	}
 	  result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
 	
@@ -1959,20 +1959,20 @@ namespace bliss
 
 	// so far, rev comp with no shift.
 	if (left_shift == 0) {
-          bliss::utils::bit_ops::right_shift<SIMDType, bitstream::padBits>(result.data, temp.data);
+          bliss::utils::bit_ops::right_shift<SIMDType, bitstream::padBits, WORD_TYPE, nWords>(result.data, temp.data);
 		
 	} else if (left_shift == -1) {
-          bliss::utils::bit_ops::right_shift<SIMDType, bitstream::padBits + bitsPerChar>(result.data, temp.data);
+          bliss::utils::bit_ops::right_shift<SIMDType, static_cast<uint16_t>(bitstream::padBits + bitsPerChar), WORD_TYPE, nWords>(result.data, temp.data);
 
 	} else if (left_shift == 1) {
 
 		if (bitstream::padBits == bitsPerChar) {
 			memcpy(result.data, temp.data, nWords);
 		} else if (bitstream::padBits > bitsPerChar) {
-          		bliss::utils::bit_ops::right_shift<SIMDType, bitstream::padBits - bitsPerChar>(result.data, temp.data);
+          		bliss::utils::bit_ops::right_shift<SIMDType, static_cast<uint16_t>(bitstream::padBits - bitsPerChar), WORD_TYPE, nWords>(result.data, temp.data);
 			
 		} else { // bitsPerChar more than padBits
-          		bliss::utils::bit_ops::left_shift<SIMDType, bitsPerChar - bitstream::padBits>(result.data, temp.data);
+          		bliss::utils::bit_ops::left_shift<SIMDType, static_cast<uint16_t>(bitsPerChar - bitstream::padBits), WORD_TYPE, nWords>(result.data, temp.data);
 			
 		}
 		result.data[nWords - 1] &= getLeastSignificantBitsMask<WORD_TYPE>(bitstream::bitsPerWord - bitstream::padBits);
