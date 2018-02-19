@@ -1364,7 +1364,7 @@ namespace bliss
       }
 
       // with clear linux cflags, this is needed to ensure that changes are visible.
-      std::atomic_thread_fence(std::memory_order_relaxed);  
+      std::atomic_thread_fence(std::memory_order_consume);  
     }
 
     /// for setting the bits at a particular position.
