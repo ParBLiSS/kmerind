@@ -1999,7 +1999,7 @@ namespace dsc  // distributed std container
 			  ::imxx::distribute(input, this->key_to_rank, recv_counts, i2o, buffer, this->comm);
 			  input.swap(buffer);
 
-			BL_BENCH_END(update, "distribute", input.size());
+			BL_BENCH_END(update, "distribute_(localcnt)", recv_counts[this->comm.rank()]);
 
         }
 
