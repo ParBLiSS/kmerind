@@ -1338,9 +1338,9 @@ namespace bliss
     template<typename WType, unsigned int bitsInW = (sizeof(WType) << 3) >
     KMER_INLINE void setBitsAtPos(WType w, unsigned int bitPos, unsigned int numBits) {
       // error checking
-      assert((numBits <= bitsInW) && "ERROR: getBitsAtPos numBits too large for return type.");
-      assert((bitPos < nBits) && "ERROR: getBitsAtPos bitPos too large.");
-      assert(((bitPos + numBits) <= nBits) && "ERROR: getBitsAtPos bitPos+numBits too large.");
+      assert((numBits <= bitsInW) && "ERROR: setBitsAtPos numBits too large for return type.");
+      assert((bitPos < nBits) && "ERROR: setBitsAtPos bitPos too large.");
+      assert(((bitPos + numBits) <= nBits) && "ERROR: setBitsAtPos bitPos+numBits too large.");
 
       // get the value masked.
       WType mask = getLeastSignificantBitsMask<WType>(numBits);
@@ -1349,19 +1349,30 @@ namespace bliss
       // determine which word in kmer it needs to go to
       unsigned int byteId = bitPos >> 3;
       unsigned int offsetInByte = bitPos & 0x7;  // offset is where the LSB of the char will sit, in bit coordinate.
-      WType * d = reinterpret_cast<WType *>(reinterpret_cast<unsigned char *>(data) + byteId);
+      unsigned int maxBytes = std::min(nAllocBytes, (bitPos + numBits + 7) >> 3) - byteId;
+      WType charVal[2];
+      memset(charVal, 0, sizeof(WType) * 2);
+      memcpy(charVal, reinterpret_cast<unsigned char const *>(data) + byteId, maxBytes);
+	// copy out, modify, then copy in.
+	
+	
+      //WType * d = reinterpret_cast<WType *>(reinterpret_cast<unsigned char *>(data) + byteId);
 
       // insert into the specific word.
-      *d = (*d & ~(static_cast<WType>(mask << offsetInByte)))   // need to REPLACE the bits.
-               |  (static_cast<WType>(w << offsetInByte));
+      charVal[0] = (charVal[0] & ~(static_cast<WType>(mask << offsetInByte)))   // need to REPLACE the bits.
+               		 	|  (static_cast<WType>(w << offsetInByte));
 
       // if split between words, deal with it.
       // the number of lowerbits consumed is (bitstream::bitsPerWord - offsetInWord)
       // so right shift those many places and what remains goes into the next word.
       if ((offsetInByte + numBits) > bitsInW) {
-        *(d+1) = (*(d+1) & ~(static_cast<WType>(mask >> (bitsInW - offsetInByte))))   // need to REPLACE the bits.
+
+        charVal[1] = (charVal[1] & ~(static_cast<WType>(mask >> (bitsInW - offsetInByte))))   // need to REPLACE the bits.
                          | (static_cast<WType>(w >> (bitsInW - offsetInByte)));
       }
+
+	// now write back.
+	memcpy(reinterpret_cast<unsigned char *>(data) + byteId, charVal, maxBytes);
 
       // with clear linux cflags, this is needed to ensure that changes are visible.
       std::atomic_thread_fence(std::memory_order_consume);  
@@ -1375,23 +1386,28 @@ namespace bliss
       assert((bitPos < nBits) && "ERROR: getBitsAtPos bitPos too large.");
       assert(((bitPos + numBits) <= nBits) && "ERROR: getBitsAtPos bitPos+numBits too large.");
       
-      // get the value masked.
-      WType charVal;
+      // get the value masked.  (2, incase we need to shift.
+      WType charVal[2];
+      memset(charVal, 0, sizeof(WType) * 2);
   
       // determine which word in kmer it needs to go to
       unsigned int byteId = (bitPos >> 3);
       unsigned int offsetInByte = bitPos & 0x7;  // offset is where the LSB of the char will sit, in bit coordinate.
-      WType const * d = reinterpret_cast<WType const *>(reinterpret_cast<unsigned char const *>(data) + byteId);
-      charVal = static_cast<WType>((*d) >> offsetInByte);
+      unsigned int maxBytes = std::min(nAllocBytes, (bitPos + numBits + 7) >> 3) - byteId;
+      memcpy(charVal, reinterpret_cast<unsigned char const *>(data) + byteId, maxBytes);	
+	charVal[0] >>= offsetInByte;
+//	 WType const * d = reinterpret_cast<WType const *>(reinterpret_cast<unsigned char const *>(data) + byteId);
+//      charVal = static_cast<WType>((*d) >> offsetInByte);
+//
 
       // if split between words, deal with it.
       // the number of lowerbits consumed is (bitstream::bitsPerWord - offsetInWord)
       // so right shift those many places and what remains goes into the next word.
       if ((offsetInByte + numBits) > bitsInW) {
-        charVal |= static_cast<WType>((*(d+1) << (bitsInW - offsetInByte)));
+        charVal[0] |= charVal[1] << (bitsInW - offsetInByte);
       }
 
-      return charVal & getLeastSignificantBitsMask<WType>(numBits);
+      return charVal[0] & getLeastSignificantBitsMask<WType>(numBits);
     }
 
 
