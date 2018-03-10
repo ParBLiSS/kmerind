@@ -1349,7 +1349,7 @@ namespace bliss
       // determine which word in kmer it needs to go to
       unsigned int byteId = bitPos >> 3;
       unsigned int offsetInByte = bitPos & 0x7;  // offset is where the LSB of the char will sit, in bit coordinate.
-      unsigned int maxBytes = std::min(nAllocBytes, (bitPos + numBits + 7) >> 3) - byteId;
+      unsigned int maxBytes = std::min(nWords * bitstream::bytesPerWord, (bitPos + numBits + 7) >> 3) - byteId;
       WType charVal[2];
       memset(charVal, 0, sizeof(WType) * 2);
       memcpy(charVal, reinterpret_cast<unsigned char const *>(data) + byteId, maxBytes);
@@ -1393,7 +1393,7 @@ namespace bliss
       // determine which word in kmer it needs to go to
       unsigned int byteId = (bitPos >> 3);
       unsigned int offsetInByte = bitPos & 0x7;  // offset is where the LSB of the char will sit, in bit coordinate.
-      unsigned int maxBytes = std::min(nAllocBytes, (bitPos + numBits + 7) >> 3) - byteId;
+      unsigned int maxBytes = std::min(nWords * bitstream::bytesPerWord, (bitPos + numBits + 7) >> 3) - byteId;
       memcpy(charVal, reinterpret_cast<unsigned char const *>(data) + byteId, maxBytes);	
 	charVal[0] >>= offsetInByte;
 //	 WType const * d = reinterpret_cast<WType const *>(reinterpret_cast<unsigned char const *>(data) + byteId);
