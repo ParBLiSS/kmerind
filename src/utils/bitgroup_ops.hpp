@@ -54,6 +54,10 @@
 #include "bliss-config.hpp"
 #if defined(__AVX2__) || defined(__SSSE3__)
 #include <x86intrin.h>   // all intrinsics.  will be enabled based on compiler flag such as __SSSE3__ internally.
+#if defined __GNUC__ && __GNUC__>=6
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wignored-attributes"
+#endif
 #endif
 
 #if defined __GNUC__ && __GNUC__>=6
@@ -3584,6 +3588,11 @@ template <unsigned int BIT_GROUP_SIZE, bool POW2> const __m256i bitgroup_ops<BIT
   #pragma GCC diagnostic pop
 #endif
 
+#if defined(__AVX2__) || defined(__SSSE3__)
+#if defined __GNUC__ && __GNUC__>=6
+#pragma GCC diagnostic pop
+#endif
+#endif
 
 
 

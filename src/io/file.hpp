@@ -616,6 +616,11 @@ public:
 	  return mapped_data(this->fd, BASE::range_type::intersect(range_bytes, this->file_range_bytes));
 	}
 
+	inline mapped_data map() {
+	  return mapped_data(this->fd, this->file_range_bytes);
+	}
+
+
 	/**
 	 * initializes a file for reading/writing via memmap
 	 * @param _filename 	name of file to open
