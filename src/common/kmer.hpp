@@ -256,71 +256,89 @@ namespace bliss
 
     /// copy constructor  - want result of iterator to be copiable here so no "explicit"
     Kmer(Kmer const& other) {
+#if defined __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
     	if (nWords == 1) this->data[0] = other.data[0];
     	else if (nAllocBytes == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<const uint16_t*>(other.data)[0];
     	else if (nAllocBytes == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<const uint32_t*>(other.data)[0];
     	else if (nAllocBytes == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<const uint64_t*>(other.data)[0];
     	else
     		memcpy(this->data, other.data, nAllocBytes);
+#if defined __GNUC__
 #pragma GCC diagnostic pop
-
+#endif
     };
   
     /// copy assignment operator
     Kmer& operator=(Kmer const &other) {
+#if defined __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
     	if (nWords == 1) this->data[0] = other.data[0];
     	else if (nAllocBytes == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<const uint16_t*>(other.data)[0];
     	else if (nAllocBytes == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<const uint32_t*>(other.data)[0];
     	else if (nAllocBytes == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<const uint64_t*>(other.data)[0];
     	else
     		memcpy(this->data, other.data, nAllocBytes);
+#if defined __GNUC__
 #pragma GCC diagnostic pop
-
+#endif
       return *this;
     }
 
     /// copy constructor  - want result of iterator to be copiable here so no "explicit"
     Kmer(Kmer && other) {
+#if defined __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
     	if (nWords == 1) this->data[0] = other.data[0];
     	else if (nAllocBytes == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<uint16_t*>(other.data)[0];
     	else if (nAllocBytes == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<uint32_t*>(other.data)[0];
     	else if (nAllocBytes == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<uint64_t*>(other.data)[0];
     	else
     		memcpy(this->data, other.data, nAllocBytes);
+#if defined __GNUC__
 #pragma GCC diagnostic pop
+#endif
 
     };
 
     /// copy assignment operator
     Kmer& operator=(Kmer && other) {
+#if defined __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
     	if (nWords == 1) this->data[0] = other.data[0];
     	else if (nAllocBytes == 2) reinterpret_cast<uint16_t*>(this->data)[0] = reinterpret_cast<uint16_t*>(other.data)[0];
     	else if (nAllocBytes == 4) reinterpret_cast<uint32_t*>(this->data)[0] = reinterpret_cast<uint32_t*>(other.data)[0];
     	else if (nAllocBytes == 8) reinterpret_cast<uint64_t*>(this->data)[0] = reinterpret_cast<uint64_t*>(other.data)[0];
     	else
     		memcpy(this->data, other.data, nAllocBytes);
+#if defined __GNUC__
 #pragma GCC diagnostic pop
+#endif
       return *this;
     }
 
     void swap(Kmer & other) {
+#if defined __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
     	if (nWords == 1) std::swap(this->data[0], other.data[0]);
     	else if (nAllocBytes == 2) std::iter_swap(reinterpret_cast<uint16_t*>(this->data), reinterpret_cast<uint16_t*>(other.data));
     	else if (nAllocBytes == 4) std::iter_swap(reinterpret_cast<uint32_t*>(this->data), reinterpret_cast<uint32_t*>(other.data));
     	else if (nAllocBytes == 8) std::iter_swap(reinterpret_cast<uint64_t*>(this->data), reinterpret_cast<uint64_t*>(other.data));
     	else
     		std::swap(this->data, other.data);
+#if defined __GNUC__
 #pragma GCC diagnostic pop
+#endif
     }
     /*
      * TODO:
